@@ -19,7 +19,7 @@ type SessionResource interface {
 
 // entry for handling a single http request/response
 type Session interface {
-	// ---------------------------------------------------------------------------
+	// --------------------------------------------------------------------------
 	// module phase handler
 
 	// Prepare phase, ie any session internal initialization can be placed here,
@@ -39,6 +39,7 @@ type Session interface {
 	// Session is done
 	Done()
 
+	// --------------------------------------------------------------------------
 	// Get the last start binded SessionResource object, if not Start after Done,
 	// then this function can return nil
 	SessionResource() SessionResource
@@ -47,6 +48,8 @@ type Session interface {
 	Service() Service
 }
 
+// SessionList implementation, help upper controller to manage different session
+// object when facing various incomming requests
 type SessionList struct {
 	Idle    []Session
 	MaxSize int

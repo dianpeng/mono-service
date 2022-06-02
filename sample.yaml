@@ -65,7 +65,7 @@ vhost:
             c = 200 - 1 + 1;
           }
 
-          "response" => {
+          response => {
             let proxy_url = $request.header["x-proxy-url"];
             let list_of_url = $split(proxy_url, ';');
             body = $concate_http_body("--- this is header ---", proxy_url, "--- this is footer---");
@@ -82,7 +82,7 @@ vhost:
           c: "dd"
         max_session_size: 500
         policy: |
-          "response" => {
+          response => {
             let proxy_url = $request.header.x_proxy_url;
             let url = proxy_url == "" ? "https://tmall.com" : proxy_url;
             let sub_resp = $http(url, "GET");
