@@ -1,0 +1,95 @@
+vhost:
+  - name: "first"
+    endpoint: ':18080'
+    read_timeout: 10
+    write_timeout: 10
+    max_header_size: 100000
+
+    service_list:
+      - name: "body_sign"
+        tag: "a simple body_sign services"
+        router: "/impl/body-sign/:op/:method"
+        method:
+          - "POST"
+        max_session_size: 500
+        policy: |
+          // sign policy, used for handling signing result
+          sign => {
+            status = 200;
+            header_set = ("x-body-sign-final-result", $sign);
+            header_set = ("x-body-sign-method", $signMethod);
+
+            // notes, we need to use $reqBody, since the original body has been
+            // consumed up
+            body = $reqBody;
+          };
+
+          // policy for handling verification result
+          // reject means the verification failed; pass means the verification
+          // passed
+          reject => {
+            status = 404;
+            header_set  = [
+              ("x-body-sign-result", $sign),
+              ("x-body-sign-expect", $signExpect)
+            ];
+
+            // notes, we need to use $reqBody, since the original body has been
+            // consumed up
+            body = $reqBody;
+          };
+
+          pass => {
+            status = 202;
+            header_set  = [
+              ("x-body-sign-result", $sign),
+              ("x-body-sign-expect", $signExpect)
+            ];
+            body = $reqBody;
+          };
+
+          log => {
+            $echo($logFormat);
+          }
+
+      - name: "null"
+        tag: "url concate"
+        router: "/impl/concate"
+        method:
+          - "GET"
+        max_session_size: 100
+        policy: |
+          global {
+            a = 10;
+            b = 20;
+            c = 200 - 1 + 1;
+          }
+
+          "response" => {
+            let proxy_url = $request.header["x-proxy-url"];
+            let list_of_url = $split(proxy_url, ';');
+            body = $concate_http_body("--- this is header ---", proxy_url, "--- this is footer---");
+            status = @c;
+          }
+
+      - name: "null"
+        tag: "basic proxy"
+        router: "/impl/null"
+        method:
+          - "GET"
+        config:
+          a: "bb"
+          c: "dd"
+        max_session_size: 500
+        policy: |
+          "response" => {
+            let proxy_url = $request.header.x_proxy_url;
+            let url = proxy_url == "" ? "https://tmall.com" : proxy_url;
+            let sub_resp = $http(url, "GET");
+            body = if sub_resp.status == 200 {
+              "xxxx"
+            } else {
+              "the response status code is {{sub_resp.status}} which is not 200";
+            };
+            status = sub_resp.status;
+          };
