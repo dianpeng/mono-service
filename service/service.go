@@ -1,8 +1,8 @@
 package service
 
 import (
-	"github.com/dianpeng/mono-service/config"
 	"fmt"
+	"github.com/dianpeng/mono-service/config"
 )
 
 type Service interface {

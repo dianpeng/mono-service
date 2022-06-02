@@ -2,8 +2,8 @@ package hpl
 
 import (
 	"bytes"
-	"github.com/dianpeng/mono-service/util"
 	"fmt"
+	"github.com/dianpeng/mono-service/util"
 )
 
 type symTable struct {
