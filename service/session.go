@@ -36,7 +36,7 @@ type Session interface {
 	// Invoked after the Accept is done and the server wants to generate access log
 	Log(*alog.SessionLog) error
 
-	// Session is finialized
+	// Session is done
 	Done()
 
 	// Get the last start binded SessionResource object, if not Start after Done,

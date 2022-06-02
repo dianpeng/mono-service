@@ -9,6 +9,7 @@ import (
 	"github.com/dianpeng/mono-service/alog"
 	"github.com/dianpeng/mono-service/config"
 	"github.com/dianpeng/mono-service/hpl"
+	"github.com/dianpeng/mono-service/pl"
 	"github.com/dianpeng/mono-service/service"
 	"github.com/dianpeng/mono-service/util"
 	hrouter "github.com/julienschmidt/httprouter"
@@ -57,7 +58,7 @@ type bodySignService struct {
 	verifyHeaderName string
 	opHeaderName     string
 	methodHeaderName string
-	policy           *hpl.Policy
+	policy           *pl.Policy
 }
 
 type bodySignSession struct {
@@ -107,20 +108,20 @@ func (b *bodySignService) NewSession() (service.Session, error) {
 	return session, nil
 }
 
-func (b *bodySignSession) hplLoadVar(x *hpl.Evaluator, name string) (hpl.Val, error) {
+func (b *bodySignSession) hplLoadVar(x *pl.Evaluator, name string) (pl.Val, error) {
 	switch name {
 	case "signMethod":
-		return hpl.NewValStr(b.method), nil
+		return pl.NewValStr(b.method), nil
 	case "signOp":
-		return hpl.NewValStr(b.op), nil
+		return pl.NewValStr(b.op), nil
 	case "sign":
-		return hpl.NewValStr(b.r.result), nil
+		return pl.NewValStr(b.r.result), nil
 	case "signExpect":
-		return hpl.NewValStr(b.r.sign), nil
+		return pl.NewValStr(b.r.sign), nil
 	case "reqBody":
 		return hpl.NewHplHttpBodyValFromStream(b.r.body), nil
 	default:
-		return hpl.NewValNull(), fmt.Errorf("invalid variable: %s", name)
+		return pl.NewValNull(), fmt.Errorf("invalid variable: %s", name)
 	}
 }
 
@@ -368,7 +369,7 @@ having no problem at all
 }
 
 func (b *bodySignServiceFactory) Create(config *config.Service) (service.Service, error) {
-	p, err := hpl.CompilePolicy(config.Policy)
+	p, err := pl.CompilePolicy(config.Policy)
 	if err != nil {
 		return nil, err
 	}

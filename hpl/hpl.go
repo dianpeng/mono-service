@@ -12,6 +12,7 @@ import (
 
 	// router
 	"github.com/dianpeng/mono-service/alog"
+	"github.com/dianpeng/mono-service/pl"
 	"github.com/dianpeng/mono-service/service"
 	hrouter "github.com/julienschmidt/httprouter"
 
@@ -85,27 +86,27 @@ func (h *HplHttpBody) SetString(data string) {
 	h.Stream = strings.NewReader(h.dupString)
 }
 
-func (h *HplHttpBody) Index(_ interface{}, name Val) (Val, error) {
-	if name.Type != ValStr {
-		return NewValNull(), fmt.Errorf("invalid index, http body field name must be string")
+func (h *HplHttpBody) Index(_ interface{}, name pl.Val) (pl.Val, error) {
+	if name.Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("invalid index, http body field name must be string")
 	}
 
 	switch name.String {
 	case "string":
-		return NewValStr(h.DupString()), nil
+		return pl.NewValStr(h.DupString()), nil
 	case "length":
 		if h.hasDup {
-			return NewValInt(len(h.dupString)), nil
+			return pl.NewValInt(len(h.dupString)), nil
 		} else {
-			return NewValNull(), nil
+			return pl.NewValNull(), nil
 		}
 	default:
-		return NewValNull(), fmt.Errorf("invalid index, unknown name %s", name.String)
+		return pl.NewValNull(), fmt.Errorf("invalid index, unknown name %s", name.String)
 	}
 }
 
-func (h *HplHttpBody) Dot(x interface{}, name string) (Val, error) {
-	return h.Index(x, NewValStr(name))
+func (h *HplHttpBody) Dot(x interface{}, name string) (pl.Val, error) {
+	return h.Index(x, pl.NewValStr(name))
 }
 
 func (h *HplHttpBody) ToString(_ interface{}) (string, error) {
@@ -121,9 +122,9 @@ func (h *HplHttpBody) ToJSON(_ interface{}) (string, error) {
 	return string(blob), nil
 }
 
-func NewHplHttpBodyValFromStream(stream io.Reader) Val {
+func NewHplHttpBodyValFromStream(stream io.Reader) pl.Val {
 	x := HplHttpBodyFromStream(stream)
-	return NewValUsr(
+	return pl.NewValUsr(
 		x,
 		x.Index,
 		x.Dot,
@@ -135,9 +136,9 @@ func NewHplHttpBodyValFromStream(stream io.Reader) Val {
 	)
 }
 
-func NewHplHttpBodyValFromString(data string) Val {
+func NewHplHttpBodyValFromString(data string) pl.Val {
 	x := HplHttpBodyFromString(data)
-	return NewValUsr(
+	return pl.NewValUsr(
 		x,
 		x.Index,
 		x.Dot,
@@ -156,15 +157,15 @@ type HplHttpHeader struct {
 	header http.Header
 }
 
-func (h *HplHttpHeader) Index(_ interface{}, key Val) (Val, error) {
-	if key.Type != ValStr {
-		return NewValNull(), fmt.Errorf("invalid index, header name must be string")
+func (h *HplHttpHeader) Index(_ interface{}, key pl.Val) (pl.Val, error) {
+	if key.Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("invalid index, header name must be string")
 	}
-	return NewValStr(h.header.Get(key.String)), nil
+	return pl.NewValStr(h.header.Get(key.String)), nil
 }
 
-func (h *HplHttpHeader) Dot(x interface{}, key string) (Val, error) {
-	return h.Index(x, NewValStr(key))
+func (h *HplHttpHeader) Dot(x interface{}, key string) (pl.Val, error) {
+	return h.Index(x, pl.NewValStr(key))
 }
 
 func (h *HplHttpHeader) ToString(_ interface{}) (string, error) {
@@ -183,12 +184,12 @@ func (h *HplHttpHeader) ToJSON(_ interface{}) (string, error) {
 	return string(blob), nil
 }
 
-func NewHplHttpHeaderVal(header http.Header) Val {
+func NewHplHttpHeaderVal(header http.Header) pl.Val {
 	x := &HplHttpHeader{
 		header: header,
 	}
 
-	return NewValUsr(
+	return pl.NewValUsr(
 		x,
 		x.Index,
 		x.Dot,
@@ -207,31 +208,31 @@ type HplHttpUrl struct {
 	url *url.URL
 }
 
-func (h *HplHttpUrl) Index(_ interface{}, key Val) (Val, error) {
-	if key.Type != ValStr {
-		return NewValNull(), fmt.Errorf("invalid index, URL name must be string")
+func (h *HplHttpUrl) Index(_ interface{}, key pl.Val) (pl.Val, error) {
+	if key.Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("invalid index, URL name must be string")
 	}
 
 	switch key.String {
 	case "scheme":
-		return NewValStr(h.url.Scheme), nil
+		return pl.NewValStr(h.url.Scheme), nil
 	case "host":
-		return NewValStr(h.url.Host), nil
+		return pl.NewValStr(h.url.Host), nil
 	case "path":
-		return NewValStr(h.url.Path), nil
+		return pl.NewValStr(h.url.Path), nil
 	case "query":
-		return NewValStr(h.url.RawQuery), nil
+		return pl.NewValStr(h.url.RawQuery), nil
 	case "url":
-		return NewValStr(h.url.String()), nil
+		return pl.NewValStr(h.url.String()), nil
 	case "userInfo":
-		return NewValStr(h.url.User.String()), nil
+		return pl.NewValStr(h.url.User.String()), nil
 	default:
-		return NewValNull(), fmt.Errorf("unknown component %s in URL", key.String)
+		return pl.NewValNull(), fmt.Errorf("unknown component %s in URL", key.String)
 	}
 }
 
-func (h *HplHttpUrl) Dot(x interface{}, name string) (Val, error) {
-	return h.Index(x, NewValStr(name))
+func (h *HplHttpUrl) Dot(x interface{}, name string) (pl.Val, error) {
+	return h.Index(x, pl.NewValStr(name))
 }
 
 func (h *HplHttpUrl) ToString(_ interface{}) (string, error) {
@@ -246,11 +247,11 @@ func (h *HplHttpUrl) ToJSON(_ interface{}) (string, error) {
 	return string(blob), nil
 }
 
-func NewHplHttpUrlVal(url *url.URL) Val {
+func NewHplHttpUrlVal(url *url.URL) pl.Val {
 	x := &HplHttpUrl{
 		url: url,
 	}
-	return NewValUsr(
+	return pl.NewValUsr(
 		&x,
 		x.Index,
 		x.Dot,
@@ -266,9 +267,9 @@ func NewHplHttpUrlVal(url *url.URL) Val {
 // * --------------------------------------------------------------------------
 type HplHttpRequest struct {
 	request *http.Request
-	header  Val
-	url     Val
-	body    Val
+	header  pl.Val
+	url     pl.Val
+	body    pl.Val
 }
 
 func (h *HplHttpRequest) isTLS() bool {
@@ -296,66 +297,66 @@ func (h *HplHttpRequest) tlsVersion() string {
 	}
 }
 
-func (h *HplHttpRequest) Index(_ interface{}, key Val) (Val, error) {
-	if key.Type != ValStr {
-		return NewValNull(), fmt.Errorf("invalid index, request's component must be string")
+func (h *HplHttpRequest) Index(_ interface{}, key pl.Val) (pl.Val, error) {
+	if key.Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("invalid index, request's component must be string")
 	}
 
 	switch key.String {
 	case "header":
 		return h.header, nil
 	case "method":
-		return NewValStr(h.request.Method), nil
+		return pl.NewValStr(h.request.Method), nil
 	case "proto":
-		return NewValStr(h.request.Proto), nil
+		return pl.NewValStr(h.request.Proto), nil
 	case "protoMajor":
-		return NewValInt(h.request.ProtoMajor), nil
+		return pl.NewValInt(h.request.ProtoMajor), nil
 	case "protoMinor":
-		return NewValInt(h.request.ProtoMinor), nil
+		return pl.NewValInt(h.request.ProtoMinor), nil
 
 	case "body":
 		return h.body, nil
 
 	// URI related
 	case "requestURI":
-		return NewValStr(h.request.RequestURI), nil
+		return pl.NewValStr(h.request.RequestURI), nil
 	case "url":
 		return h.url, nil
 
 	// request related special information
 	case "host":
-		return NewValStr(h.request.Host), nil
+		return pl.NewValStr(h.request.Host), nil
 	case "remoteAddr":
-		return NewValStr(h.request.RemoteAddr), nil
+		return pl.NewValStr(h.request.RemoteAddr), nil
 
 	// tls information
 	case "isTLS":
-		return NewValBool(h.isTLS()), nil
+		return pl.NewValBool(h.isTLS()), nil
 	case "tlsServerName":
 		if h.isTLS() {
-			return NewValStr(h.request.TLS.ServerName), nil
+			return pl.NewValStr(h.request.TLS.ServerName), nil
 		} else {
-			return NewValNull(), nil
+			return pl.NewValNull(), nil
 		}
 	case "tlsVersion":
 		if h.isTLS() {
-			return NewValStr(h.tlsVersion()), nil
+			return pl.NewValStr(h.tlsVersion()), nil
 		} else {
-			return NewValNull(), nil
+			return pl.NewValNull(), nil
 		}
 	case "tlsProtocol":
 		if h.isTLS() {
-			return NewValStr(h.request.TLS.NegotiatedProtocol), nil
+			return pl.NewValStr(h.request.TLS.NegotiatedProtocol), nil
 		} else {
-			return NewValNull(), nil
+			return pl.NewValNull(), nil
 		}
 
 	// ContentLength or TransferEncoding
 	case "contentLength":
 		if h.request.ContentLength >= 0 {
-			return NewValInt(int(h.request.ContentLength)), nil
+			return pl.NewValInt(int(h.request.ContentLength)), nil
 		} else {
-			return NewValNull(), nil
+			return pl.NewValNull(), nil
 		}
 
 	case "transferEncoding":
@@ -365,16 +366,16 @@ func (h *HplHttpRequest) Index(_ interface{}, key Val) (Val, error) {
 				ck = true
 			}
 		}
-		return NewValBool(ck), nil
+		return pl.NewValBool(ck), nil
 	default:
 		break
 	}
 
-	return NewValNull(), fmt.Errorf("unknown field name %s for request", key.String)
+	return pl.NewValNull(), fmt.Errorf("unknown field name %s for request", key.String)
 }
 
-func (h *HplHttpRequest) Dot(x interface{}, name string) (Val, error) {
-	return h.Index(x, NewValStr(name))
+func (h *HplHttpRequest) Dot(x interface{}, name string) (pl.Val, error) {
+	return h.Index(x, pl.NewValStr(name))
 }
 
 func (h *HplHttpRequest) ToString(_ interface{}) (string, error) {
@@ -397,7 +398,7 @@ func (h *HplHttpRequest) ToJSON(_ interface{}) (string, error) {
 	return string(blob), nil
 }
 
-func NewHplHttpRequestVal(req *http.Request) Val {
+func NewHplHttpRequestVal(req *http.Request) pl.Val {
 	x := &HplHttpRequest{
 		request: req,
 		header:  NewHplHttpHeaderVal(req.Header),
@@ -405,7 +406,7 @@ func NewHplHttpRequestVal(req *http.Request) Val {
 		body:    NewHplHttpBodyValFromStream(req.Body),
 	}
 
-	return NewValUsr(
+	return pl.NewValUsr(
 		x,
 		x.Index,
 		x.Dot,
@@ -421,23 +422,23 @@ func NewHplHttpRequestVal(req *http.Request) Val {
 // * --------------------------------------------------------------------------
 type HplHttpResponse struct {
 	response *http.Response
-	header   Val
-	request  Val
-	body     Val
+	header   pl.Val
+	request  pl.Val
+	body     pl.Val
 }
 
-func (h *HplHttpResponse) Index(_ interface{}, name Val) (Val, error) {
-	if name.Type != ValStr {
-		return NewValNull(), fmt.Errorf("invalid index, name must be string")
+func (h *HplHttpResponse) Index(_ interface{}, name pl.Val) (pl.Val, error) {
+	if name.Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("invalid index, name must be string")
 	}
 
 	switch name.String {
 	case "statusText":
-		return NewValStr(h.response.Status), nil
+		return pl.NewValStr(h.response.Status), nil
 	case "status":
-		return NewValInt(h.response.StatusCode), nil
+		return pl.NewValInt(h.response.StatusCode), nil
 	case "proto":
-		return NewValStr(h.response.Proto), nil
+		return pl.NewValStr(h.response.Proto), nil
 
 	case "header":
 		return h.header, nil
@@ -447,9 +448,9 @@ func (h *HplHttpResponse) Index(_ interface{}, name Val) (Val, error) {
 
 	case "contentLength":
 		if h.response.ContentLength >= 0 {
-			return NewValInt(int(h.response.ContentLength)), nil
+			return pl.NewValInt(int(h.response.ContentLength)), nil
 		} else {
-			return NewValNull(), nil
+			return pl.NewValNull(), nil
 		}
 
 	case "transferEncoding":
@@ -459,10 +460,10 @@ func (h *HplHttpResponse) Index(_ interface{}, name Val) (Val, error) {
 				ck = true
 			}
 		}
-		return NewValBool(ck), nil
+		return pl.NewValBool(ck), nil
 
 	case "uncompressed":
-		return NewValBool(h.response.Uncompressed), nil
+		return pl.NewValBool(h.response.Uncompressed), nil
 
 	case "request":
 		return h.request, nil
@@ -471,11 +472,11 @@ func (h *HplHttpResponse) Index(_ interface{}, name Val) (Val, error) {
 		break
 	}
 
-	return NewValNull(), fmt.Errorf("invalid index, unknown field: %s", name.String)
+	return pl.NewValNull(), fmt.Errorf("invalid index, unknown field: %s", name.String)
 }
 
-func (h *HplHttpResponse) Dot(x interface{}, name string) (Val, error) {
-	return h.Index(x, NewValStr(name))
+func (h *HplHttpResponse) Dot(x interface{}, name string) (pl.Val, error) {
+	return h.Index(x, pl.NewValStr(name))
 }
 
 func (h *HplHttpResponse) ToString(_ interface{}) (string, error) {
@@ -494,12 +495,12 @@ func (h *HplHttpResponse) ToJSON(_ interface{}) (string, error) {
 	return string(blob), nil
 }
 
-func NewHplHttpResponseVal(response *http.Response) Val {
-	var request Val
+func NewHplHttpResponseVal(response *http.Response) pl.Val {
+	var request pl.Val
 	if response.Request != nil {
 		request = NewHplHttpRequestVal(response.Request)
 	} else {
-		request = NewValNull()
+		request = pl.NewValNull()
 	}
 
 	x := &HplHttpResponse{
@@ -509,7 +510,7 @@ func NewHplHttpResponseVal(response *http.Response) Val {
 		body:     NewHplHttpBodyValFromStream(response.Body),
 	}
 
-	return NewValUsr(
+	return pl.NewValUsr(
 		x,
 		x.Index,
 		x.Dot,
@@ -527,16 +528,16 @@ type HplHttpRouterParams struct {
 	params hrouter.Params
 }
 
-func (h *HplHttpRouterParams) Index(_ interface{}, name Val) (Val, error) {
-	if name.Type != ValStr {
-		return NewValNull(), fmt.Errorf("invalid index, http.router's field must be string")
+func (h *HplHttpRouterParams) Index(_ interface{}, name pl.Val) (pl.Val, error) {
+	if name.Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("invalid index, http.router's field must be string")
 	}
 
-	return NewValStr(h.params.ByName(name.String)), nil
+	return pl.NewValStr(h.params.ByName(name.String)), nil
 }
 
-func (h *HplHttpRouterParams) Dot(x interface{}, name string) (Val, error) {
-	return h.Index(x, NewValStr(name))
+func (h *HplHttpRouterParams) Dot(x interface{}, name string) (pl.Val, error) {
+	return h.Index(x, pl.NewValStr(name))
 }
 
 func (h *HplHttpRouterParams) ToString(_ interface{}) (string, error) {
@@ -552,11 +553,11 @@ func (h *HplHttpRouterParams) ToJSON(_ interface{}) (string, error) {
 	return string(blob), nil
 }
 
-func NewHplHttpRouterParamsVal(r hrouter.Params) Val {
+func NewHplHttpRouterParamsVal(r hrouter.Params) pl.Val {
 	x := &HplHttpRouterParams{
 		params: r,
 	}
-	return NewValUsr(
+	return pl.NewValUsr(
 		x,
 		x.Index,
 		x.Dot,
@@ -571,87 +572,87 @@ func NewHplHttpRouterParamsVal(r hrouter.Params) Val {
 // builtin functions/libraries for our internal usage
 
 // {{# Codec Library Functions
-func fnBase64Encode(argument []Val) (Val, error) {
+func fnBase64Encode(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 1 {
-		return NewValNull(), fmt.Errorf("function: b64_encode expect 1 argument")
+		return pl.NewValNull(), fmt.Errorf("function: b64_encode expect 1 argument")
 	}
-	if argument[0].Type != ValStr {
-		return NewValNull(), fmt.Errorf("function: b64_encode's frist argument must be string")
+	if argument[0].Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("function: b64_encode's frist argument must be string")
 	}
 
 	out := base64.StdEncoding.EncodeToString([]byte(argument[0].String))
-	return NewValStr(out), nil
+	return pl.NewValStr(out), nil
 }
 
-func fnBase64Decode(argument []Val) (Val, error) {
+func fnBase64Decode(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 1 {
-		return NewValNull(), fmt.Errorf("function: b64_decode expect 1 argument")
+		return pl.NewValNull(), fmt.Errorf("function: b64_decode expect 1 argument")
 	}
-	if argument[0].Type != ValStr {
-		return NewValNull(), fmt.Errorf("function: b64_decode's frist argument must be string")
+	if argument[0].Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("function: b64_decode's frist argument must be string")
 	}
 
 	out, err := base64.StdEncoding.DecodeString(argument[0].String)
 	if err != nil {
-		return NewValNull(), err
+		return pl.NewValNull(), err
 	} else {
-		return NewValStr(string(out)), nil
+		return pl.NewValStr(string(out)), nil
 	}
 }
 
-func fnURLEncode(argument []Val) (Val, error) {
+func fnURLEncode(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 1 {
-		return NewValNull(), fmt.Errorf("function: url_encode expect 1 argument")
+		return pl.NewValNull(), fmt.Errorf("function: url_encode expect 1 argument")
 	}
-	if argument[0].Type != ValStr {
-		return NewValNull(), fmt.Errorf("function: url_encode's frist argument must be string")
+	if argument[0].Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("function: url_encode's frist argument must be string")
 	}
 
 	out := url.QueryEscape(argument[0].String)
-	return NewValStr(out), nil
+	return pl.NewValStr(out), nil
 }
 
-func fnURLDecode(argument []Val) (Val, error) {
+func fnURLDecode(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 1 {
-		return NewValNull(), fmt.Errorf("function: url_decode expect 1 argument")
+		return pl.NewValNull(), fmt.Errorf("function: url_decode expect 1 argument")
 	}
-	if argument[0].Type != ValStr {
-		return NewValNull(), fmt.Errorf("function: url_decode's frist argument must be string")
+	if argument[0].Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("function: url_decode's frist argument must be string")
 	}
 
 	out, err := url.QueryUnescape(argument[0].String)
 	if err != nil {
-		return NewValNull(), err
+		return pl.NewValNull(), err
 	} else {
-		return NewValStr(out), nil
+		return pl.NewValStr(out), nil
 	}
 }
 
-func fnPathEscape(argument []Val) (Val, error) {
+func fnPathEscape(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 1 {
-		return NewValNull(), fmt.Errorf("function: path_encode expect 1 argument")
+		return pl.NewValNull(), fmt.Errorf("function: path_encode expect 1 argument")
 	}
-	if argument[0].Type != ValStr {
-		return NewValNull(), fmt.Errorf("function: path_encode's frist argument must be string")
+	if argument[0].Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("function: path_encode's frist argument must be string")
 	}
 
 	out := url.PathEscape(argument[0].String)
-	return NewValStr(out), nil
+	return pl.NewValStr(out), nil
 }
 
-func fnPathUnescape(argument []Val) (Val, error) {
+func fnPathUnescape(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 1 {
-		return NewValNull(), fmt.Errorf("function: path_decode expect 1 argument")
+		return pl.NewValNull(), fmt.Errorf("function: path_decode expect 1 argument")
 	}
-	if argument[0].Type != ValStr {
-		return NewValNull(), fmt.Errorf("function: path_decode's frist argument must be string")
+	if argument[0].Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("function: path_decode's frist argument must be string")
 	}
 
 	out, err := url.PathUnescape(argument[0].String)
 	if err != nil {
-		return NewValNull(), err
+		return pl.NewValNull(), err
 	} else {
-		return NewValStr(out), nil
+		return pl.NewValStr(out), nil
 	}
 }
 
@@ -659,44 +660,44 @@ func fnPathUnescape(argument []Val) (Val, error) {
 
 // {{# General Functions
 
-func fnToString(argument []Val) (Val, error) {
+func fnToString(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 1 {
-		return NewValNull(), fmt.Errorf("function: to_string expect 1 argument")
+		return pl.NewValNull(), fmt.Errorf("function: to_string expect 1 argument")
 	}
 	x, err := argument[0].ToString()
 	if err != nil {
-		return NewValNull(), err
+		return pl.NewValNull(), err
 	} else {
-		return NewValStr(x), nil
+		return pl.NewValStr(x), nil
 	}
 }
 
-func fnHttpDate(argument []Val) (Val, error) {
+func fnHttpDate(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 0 {
-		return NewValNull(), fmt.Errorf("function: http_date expect 1 argument")
+		return pl.NewValNull(), fmt.Errorf("function: http_date expect 1 argument")
 	}
 
 	now := time.Now()
-	return NewValStr(now.Format(time.RFC3339)), nil
+	return pl.NewValStr(now.Format(time.RFC3339)), nil
 }
 
-func fnHttpDateNano(argument []Val) (Val, error) {
+func fnHttpDateNano(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 0 {
-		return NewValNull(), fmt.Errorf("function: http_datenano expect 1 argument")
+		return pl.NewValNull(), fmt.Errorf("function: http_datenano expect 1 argument")
 	}
 
 	now := time.Now()
-	return NewValStr(now.Format(time.RFC3339Nano)), nil
+	return pl.NewValStr(now.Format(time.RFC3339Nano)), nil
 }
 
-func fnUUID(argument []Val) (Val, error) {
+func fnUUID(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 0 {
-		return NewValNull(), fmt.Errorf("function: uuid expect 1 argument")
+		return pl.NewValNull(), fmt.Errorf("function: uuid expect 1 argument")
 	}
-	return NewValStr(uuid.NewString()), nil
+	return pl.NewValStr(uuid.NewString()), nil
 }
 
-func fnEcho(argument []Val) (Val, error) {
+func fnEcho(argument []pl.Val) (pl.Val, error) {
 	// printing the input out, regardless what it is and the echo should print it
 	// out always
 	var b []interface{}
@@ -707,11 +708,11 @@ func fnEcho(argument []Val) (Val, error) {
 
 	x, _ := json.MarshalIndent(b, "", "  ")
 	log.Println(string(x))
-	return NewValNull(), nil
+	return pl.NewValNull(), nil
 }
 
 // concate all input to a single stream, which can be represented as http body
-func fnConcateHttpBody(argument []Val) (Val, error) {
+func fnConcateHttpBody(argument []pl.Val) (pl.Val, error) {
 	var input []io.Reader
 	for idx, a := range argument {
 		if a.Id() == "http.body" {
@@ -720,7 +721,7 @@ func fnConcateHttpBody(argument []Val) (Val, error) {
 		} else {
 			str, err := a.ToString()
 			if err != nil {
-				return NewValNull(),
+				return pl.NewValNull(),
 					fmt.Errorf("concate_http_body: the %d argument cannot be converted to string: %s",
 						idx+1, err.Error())
 			}
@@ -735,69 +736,69 @@ func fnConcateHttpBody(argument []Val) (Val, error) {
 
 // {{# String Manipulation Functions
 
-func fnToUpper(argument []Val) (Val, error) {
+func fnToUpper(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 1 {
-		return NewValNull(), fmt.Errorf("function: to_upper expect 1 argument")
+		return pl.NewValNull(), fmt.Errorf("function: to_upper expect 1 argument")
 	}
-	if argument[0].Type != ValStr {
-		return NewValNull(), fmt.Errorf("function: to_upper's frist argument must be string")
+	if argument[0].Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("function: to_upper's frist argument must be string")
 	}
-	return NewValStr(strings.ToUpper(argument[0].String)), nil
+	return pl.NewValStr(strings.ToUpper(argument[0].String)), nil
 }
 
-func fnToLower(argument []Val) (Val, error) {
+func fnToLower(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 1 {
-		return NewValNull(), fmt.Errorf("function: to_lower expect 1 argument")
+		return pl.NewValNull(), fmt.Errorf("function: to_lower expect 1 argument")
 	}
-	if argument[0].Type != ValStr {
-		return NewValNull(), fmt.Errorf("function: to_lower's frist argument must be string")
+	if argument[0].Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("function: to_lower's frist argument must be string")
 	}
-	return NewValStr(strings.ToLower(argument[0].String)), nil
+	return pl.NewValStr(strings.ToLower(argument[0].String)), nil
 }
 
-func fnSplit(argument []Val) (Val, error) {
+func fnSplit(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 2 {
-		return NewValNull(), fmt.Errorf("function: split expect 2 arguments")
+		return pl.NewValNull(), fmt.Errorf("function: split expect 2 arguments")
 	}
-	if argument[0].Type != ValStr && argument[1].Type != ValStr {
-		return NewValNull(), fmt.Errorf("function: split expects 2 string arguments")
+	if argument[0].Type != pl.ValStr && argument[1].Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("function: split expects 2 string arguments")
 	}
 	x := strings.Split(argument[0].String, argument[1].String)
-	ret := NewValList()
+	ret := pl.NewValList()
 	for _, xx := range x {
-		ret.AddList(NewValStr(xx))
+		ret.AddList(pl.NewValStr(xx))
 	}
 	return ret, nil
 }
 
-func fnTrim(argument []Val) (Val, error) {
+func fnTrim(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 2 {
-		return NewValNull(), fmt.Errorf("function: trim expect 2 arguments")
+		return pl.NewValNull(), fmt.Errorf("function: trim expect 2 arguments")
 	}
-	if argument[0].Type != ValStr && argument[1].Type != ValStr {
-		return NewValNull(), fmt.Errorf("function: trim expects 2 string arguments")
+	if argument[0].Type != pl.ValStr && argument[1].Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("function: trim expects 2 string arguments")
 	}
-	return NewValStr(strings.Trim(argument[0].String, argument[1].String)), nil
+	return pl.NewValStr(strings.Trim(argument[0].String, argument[1].String)), nil
 }
 
-func fnLTrim(argument []Val) (Val, error) {
+func fnLTrim(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 2 {
-		return NewValNull(), fmt.Errorf("function: ltrim expect 2 arguments")
+		return pl.NewValNull(), fmt.Errorf("function: ltrim expect 2 arguments")
 	}
-	if argument[0].Type != ValStr && argument[1].Type != ValStr {
-		return NewValNull(), fmt.Errorf("function: ltrim expects 2 string arguments")
+	if argument[0].Type != pl.ValStr && argument[1].Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("function: ltrim expects 2 string arguments")
 	}
-	return NewValStr(strings.TrimLeft(argument[0].String, argument[1].String)), nil
+	return pl.NewValStr(strings.TrimLeft(argument[0].String, argument[1].String)), nil
 }
 
-func fnRTrim(argument []Val) (Val, error) {
+func fnRTrim(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 2 {
-		return NewValNull(), fmt.Errorf("function: rtrim expect 2 arguments")
+		return pl.NewValNull(), fmt.Errorf("function: rtrim expect 2 arguments")
 	}
-	if argument[0].Type != ValStr && argument[1].Type != ValStr {
-		return NewValNull(), fmt.Errorf("function: rtrim expects 2 string arguments")
+	if argument[0].Type != pl.ValStr && argument[1].Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("function: rtrim expects 2 string arguments")
 	}
-	return NewValStr(strings.TrimRight(argument[0].String, argument[1].String)), nil
+	return pl.NewValStr(strings.TrimRight(argument[0].String, argument[1].String)), nil
 }
 
 // #}}
@@ -811,27 +812,27 @@ func fnRTrim(argument []Val) (Val, error) {
 //   [2]: [header](list[string]),
 //   [3]: [body](string)
 // )
-func (h *Hpl) fnHttp(argument []Val) (Val, error) {
+func (h *Hpl) fnHttp(argument []pl.Val) (pl.Val, error) {
 	if len(argument) < 2 {
-		return NewValNull(), fmt.Errorf("function: http expect at least 2 arguments")
+		return pl.NewValNull(), fmt.Errorf("function: http expect at least 2 arguments")
 	}
 	if h.session == nil {
-		return NewValNull(), fmt.Errorf("function: http cannot be executed, session not bound")
+		return pl.NewValNull(), fmt.Errorf("function: http cannot be executed, session not bound")
 	}
 
 	sres := h.session.SessionResource()
 	if sres == nil {
-		return NewValNull(), fmt.Errorf("function: http cannot be executed, session resource empty")
+		return pl.NewValNull(), fmt.Errorf("function: http cannot be executed, session resource empty")
 	}
 
 	url := argument[0]
 	method := argument[1]
-	if url.Type != ValStr || method.Type != ValStr {
-		return NewValNull(), fmt.Errorf("function: http's first 2 arguments must be string")
+	if url.Type != pl.ValStr || method.Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("function: http's first 2 arguments must be string")
 	}
 
 	var body io.Reader
-	if len(argument) == 4 && argument[3].Type == ValStr {
+	if len(argument) == 4 && argument[3].Type == pl.ValStr {
 		body = strings.NewReader(argument[3].String)
 	} else {
 		body = http.NoBody
@@ -839,13 +840,13 @@ func (h *Hpl) fnHttp(argument []Val) (Val, error) {
 
 	req, err := http.NewRequest(method.String, url.String, body)
 	if err != nil {
-		return NewValNull(), err
+		return pl.NewValNull(), err
 	}
 
 	// check header field
-	if len(argument) >= 3 && argument[2].Type == ValList {
+	if len(argument) >= 3 && argument[2].Type == pl.ValList {
 		for _, hdr := range argument[2].List.Data {
-			if hdr.Type == ValPair && hdr.Pair.First.Type == ValStr && hdr.Pair.Second.Type == ValStr {
+			if hdr.Type == pl.ValPair && hdr.Pair.First.Type == pl.ValStr && hdr.Pair.Second.Type == pl.ValStr {
 				req.Header.Add(hdr.Pair.First.String, hdr.Pair.Second.String)
 			}
 		}
@@ -853,12 +854,12 @@ func (h *Hpl) fnHttp(argument []Val) (Val, error) {
 
 	client, err := sres.GetHttpClient(url.String)
 	if err != nil {
-		return NewValNull(), err
+		return pl.NewValNull(), err
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return NewValNull(), err
+		return pl.NewValNull(), err
 	}
 
 	// serialize the response back to the normal object
@@ -866,13 +867,13 @@ func (h *Hpl) fnHttp(argument []Val) (Val, error) {
 }
 
 // header related functions
-func fnHeaderHas(argument []Val) (Val, error) {
+func fnHeaderHas(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 2 {
-		return NewValNull(), fmt.Errorf("function: header_has requires 2 arguments")
+		return pl.NewValNull(), fmt.Errorf("function: header_has requires 2 arguments")
 	}
 
-	if argument[0].Id() != "http.header" || argument[1].Type != ValStr {
-		return NewValNull(), fmt.Errorf("function: header_has's " +
+	if argument[0].Id() != "http.header" || argument[1].Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("function: header_has's " +
 			"first argument must be header and second " +
 			"argument must be string")
 	}
@@ -881,9 +882,9 @@ func fnHeaderHas(argument []Val) (Val, error) {
 	must(ok, "must be http.header")
 
 	if vv := hdr.header.Get(argument[1].String); vv == "" {
-		return NewValBool(false), nil
+		return pl.NewValBool(false), nil
 	} else {
-		return NewValBool(true), nil
+		return pl.NewValBool(true), nil
 	}
 }
 
@@ -924,13 +925,13 @@ func doHeaderDelete(hdr http.Header, key string) int {
 	return cnt
 }
 
-func fnHeaderDelete(argument []Val) (Val, error) {
+func fnHeaderDelete(argument []pl.Val) (pl.Val, error) {
 	if len(argument) != 2 {
-		return NewValNull(), fmt.Errorf("function: header_delete requires 2 arguments")
+		return pl.NewValNull(), fmt.Errorf("function: header_delete requires 2 arguments")
 	}
 
-	if argument[0].Id() != "http.header" || argument[1].Type != ValStr {
-		return NewValNull(), fmt.Errorf("function: header_delete's " +
+	if argument[0].Id() != "http.header" || argument[1].Type != pl.ValStr {
+		return pl.NewValNull(), fmt.Errorf("function: header_delete's " +
 			"first argument must be header and second " +
 			"argument must be string")
 	}
@@ -939,7 +940,7 @@ func fnHeaderDelete(argument []Val) (Val, error) {
 	must(ok, "must be http.header")
 
 	cnt := doHeaderDelete(hdr.header, argument[1].String)
-	return NewValInt(cnt), nil
+	return pl.NewValInt(cnt), nil
 }
 
 // #}}
@@ -992,32 +993,32 @@ func newHplResponseWriter(w http.ResponseWriter) *hplResponseWriter {
 }
 
 type Hpl struct {
-	Eval   *Evaluator
-	Policy *Policy
+	Eval   *pl.Evaluator
+	Policy *pl.Policy
 
-	UserLoadFn EvalLoadVar
-	UserCall   EvalCall
-	UserAction EvalAction
+	UserLoadFn pl.EvalLoadVar
+	UserCall   pl.EvalCall
+	UserAction pl.EvalAction
 
 	// internal status during evaluation context
-	request    Val
+	request    pl.Val
 	respWriter *hplResponseWriter
-	params     Val
+	params     pl.Val
 	session    service.Session
 
 	log       *alog.SessionLog
 	isRunning bool
 }
 
-func foreachHeaderKV(arg Val, fn func(key string, val string)) bool {
-	if arg.Type == ValList {
+func foreachHeaderKV(arg pl.Val, fn func(key string, val string)) bool {
+	if arg.Type == pl.ValList {
 		for _, v := range arg.List.Data {
-			if v.Type == ValPair && v.Pair.First.Type == ValStr && v.Pair.Second.Type == ValStr {
+			if v.Type == pl.ValPair && v.Pair.First.Type == pl.ValStr && v.Pair.Second.Type == pl.ValStr {
 				fn(v.Pair.First.String, v.Pair.Second.String)
 			}
 		}
-	} else if arg.Type == ValPair {
-		if arg.Pair.First.Type == ValStr && arg.Pair.Second.Type == ValStr {
+	} else if arg.Type == pl.ValPair {
+		if arg.Pair.First.Type == pl.ValStr && arg.Pair.Second.Type == pl.ValStr {
 			fn(arg.Pair.First.String, arg.Pair.Second.String)
 		}
 	} else if arg.Id() == "http.header" {
@@ -1035,14 +1036,14 @@ func foreachHeaderKV(arg Val, fn func(key string, val string)) bool {
 	return true
 }
 
-func foreachStr(arg Val, fn func(key string)) bool {
-	if arg.Type == ValList {
+func foreachStr(arg pl.Val, fn func(key string)) bool {
+	if arg.Type == pl.ValList {
 		for _, v := range arg.List.Data {
-			if v.Type == ValStr {
+			if v.Type == pl.ValStr {
 				fn(v.String)
 			}
 		}
-	} else if arg.Type == ValStr {
+	} else if arg.Type == pl.ValStr {
 		fn(arg.String)
 	} else {
 		return false
@@ -1050,11 +1051,11 @@ func foreachStr(arg Val, fn func(key string)) bool {
 	return true
 }
 
-func (p *Hpl) httpEvalAction(x *Evaluator, actionName string, arg Val) error {
+func (p *Hpl) httpEvalAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
 	// http response generation action, ie builting actions
 	switch actionName {
 	case "status":
-		if arg.Type != ValInt {
+		if arg.Type != pl.ValInt {
 			return fmt.Errorf("status action must have a int argument")
 		} else {
 			p.respWriter.statusCode = int(arg.Int)
@@ -1115,7 +1116,7 @@ func (p *Hpl) httpEvalAction(x *Evaluator, actionName string, arg Val) error {
 
 	// body operations
 	case "body":
-		if arg.Type == ValStr {
+		if arg.Type == pl.ValStr {
 			if p.respWriter == nil {
 				panic("WFT???")
 			}
@@ -1141,36 +1142,36 @@ func (p *Hpl) httpEvalAction(x *Evaluator, actionName string, arg Val) error {
 }
 
 // eval related functions
-func (p *Hpl) httpLoadVar(x *Evaluator, n string) (Val, error) {
+func (p *Hpl) httpLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
 	switch n {
 	case "request":
 		return p.request, nil
 	case "params":
 		return p.params, nil
 	case "serviceName":
-		return NewValStr(p.session.Service().Name()), nil
+		return pl.NewValStr(p.session.Service().Name()), nil
 	case "serviceIdl":
-		return NewValStr(p.session.Service().IDL()), nil
+		return pl.NewValStr(p.session.Service().IDL()), nil
 	case "servicePolicy":
-		return NewValStr(p.session.Service().Policy()), nil
+		return pl.NewValStr(p.session.Service().Policy()), nil
 	case "serviceRouter":
-		return NewValStr(p.session.Service().Router()), nil
+		return pl.NewValStr(p.session.Service().Router()), nil
 	case "serviceMethodList":
-		r := NewValList()
+		r := pl.NewValList()
 		for _, v := range p.session.Service().MethodList() {
-			r.AddList(NewValStr(v))
+			r.AddList(pl.NewValStr(v))
 		}
 		return r, nil
 	default:
 		if p.UserLoadFn != nil {
 			return p.UserLoadFn(x, n)
 		} else {
-			return NewValNull(), fmt.Errorf("unknown variable %s", n)
+			return pl.NewValNull(), fmt.Errorf("unknown variable %s", n)
 		}
 	}
 }
 
-func (p *Hpl) httpEvalCall(x *Evaluator, n string, args []Val) (Val, error) {
+func (p *Hpl) httpEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
 	switch n {
 	case "b64_encode":
 		return fnBase64Encode(args)
@@ -1223,35 +1224,35 @@ func (p *Hpl) httpEvalCall(x *Evaluator, n string, args []Val) (Val, error) {
 	if p.UserCall != nil {
 		return p.UserCall(x, n, args)
 	} else {
-		return NewValNull(), fmt.Errorf("function %s is unknown", n)
+		return pl.NewValNull(), fmt.Errorf("function %s is unknown", n)
 	}
 }
 
-func NewHpl(f0 EvalLoadVar, f1 EvalCall, f2 EvalAction) *Hpl {
+func NewHpl(f0 pl.EvalLoadVar, f1 pl.EvalCall, f2 pl.EvalAction) *Hpl {
 	p := &Hpl{
 		UserLoadFn: f0,
 		UserCall:   f1,
 		UserAction: f2,
 	}
 
-	p.Eval = NewEvaluatorSimple()
+	p.Eval = pl.NewEvaluatorSimple()
 	return p
 }
 
-func NewHplWithPolicy(f0 EvalLoadVar, f1 EvalCall, f2 EvalAction, policy *Policy) *Hpl {
+func NewHplWithPolicy(f0 pl.EvalLoadVar, f1 pl.EvalCall, f2 pl.EvalAction, policy *pl.Policy) *Hpl {
 	p := &Hpl{
 		UserLoadFn: f0,
 		UserCall:   f1,
 		UserAction: f2,
 	}
 
-	p.Eval = NewEvaluatorSimple()
+	p.Eval = pl.NewEvaluatorSimple()
 	p.SetPolicy(policy)
 	return p
 }
 
 func (h *Hpl) CompilePolicy(input string) error {
-	p, err := CompilePolicy(input)
+	p, err := pl.CompilePolicy(input)
 	if err != nil {
 		return err
 	}
@@ -1259,26 +1260,26 @@ func (h *Hpl) CompilePolicy(input string) error {
 	return nil
 }
 
-func (h *Hpl) SetPolicy(p *Policy) {
+func (h *Hpl) SetPolicy(p *pl.Policy) {
 	h.Policy = p
 }
 
 // -----------------------------------------------------------------------------
 // prepare phase
-func (h *Hpl) prepareLoadVar(x *Evaluator, n string) (Val, error) {
+func (h *Hpl) prepareLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
 	switch n {
 	case "serviceName":
-		return NewValStr(h.session.Service().Name()), nil
+		return pl.NewValStr(h.session.Service().Name()), nil
 	case "serviceIdl":
-		return NewValStr(h.session.Service().IDL()), nil
+		return pl.NewValStr(h.session.Service().IDL()), nil
 	case "servicePolicy":
-		return NewValStr(h.session.Service().Policy()), nil
+		return pl.NewValStr(h.session.Service().Policy()), nil
 	case "serviceRouter":
-		return NewValStr(h.session.Service().Router()), nil
+		return pl.NewValStr(h.session.Service().Router()), nil
 	case "serviceMethodList":
-		r := NewValList()
+		r := pl.NewValList()
 		for _, v := range h.session.Service().MethodList() {
-			r.AddList(NewValStr(v))
+			r.AddList(pl.NewValStr(v))
 		}
 		return r, nil
 	default:
@@ -1287,15 +1288,15 @@ func (h *Hpl) prepareLoadVar(x *Evaluator, n string) (Val, error) {
 	if h.UserLoadFn != nil {
 		return h.UserLoadFn(x, n)
 	} else {
-		return NewValNull(), fmt.Errorf("unknown variable %s", n)
+		return pl.NewValNull(), fmt.Errorf("unknown variable %s", n)
 	}
 }
 
-func (h *Hpl) prepareEvalCall(x *Evaluator, n string, args []Val) (Val, error) {
+func (h *Hpl) prepareEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
 	return h.httpEvalCall(x, n, args)
 }
 
-func (h *Hpl) prepareActionCall(x *Evaluator, actionName string, arg Val) error {
+func (h *Hpl) prepareActionCall(x *pl.Evaluator, actionName string, arg pl.Val) error {
 	if h.UserAction != nil {
 		return h.UserAction(x, actionName, arg)
 	} else {
@@ -1332,24 +1333,24 @@ func (h *Hpl) OnGlobal(session service.Session) error {
 
 // -----------------------------------------------------------------------------
 // session log phase
-func (h *Hpl) logLoadVar(x *Evaluator, n string) (Val, error) {
+func (h *Hpl) logLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
 	switch n {
 	case "logFormat":
-		return NewValStr(h.log.Format.Raw), nil
+		return pl.NewValStr(h.log.Format.Raw), nil
 	default:
 		break
 	}
 	return h.httpLoadVar(x, n)
 }
 
-func (h *Hpl) logEvalCall(x *Evaluator, n string, args []Val) (Val, error) {
+func (h *Hpl) logEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
 	return h.httpEvalCall(x, n, args)
 }
 
-func (h *Hpl) logActionCall(x *Evaluator, actionName string, arg Val) error {
+func (h *Hpl) logActionCall(x *pl.Evaluator, actionName string, arg pl.Val) error {
 	switch actionName {
 	case "format":
-		if arg.Type != ValStr {
+		if arg.Type != pl.ValStr {
 			return fmt.Errorf("status format must have a string argument")
 		} else {
 			fmt, err := alog.NewSessionLogFormat(arg.String)
@@ -1362,14 +1363,14 @@ func (h *Hpl) logActionCall(x *Evaluator, actionName string, arg Val) error {
 
 	case "appendix":
 		switch arg.Type {
-		case ValStr, ValReal, ValBool, ValNull, ValInt, ValRegexp:
+		case pl.ValStr, pl.ValReal, pl.ValBool, pl.ValNull, pl.ValInt, pl.ValRegexp:
 			str, _ := arg.ToString()
 			h.log.Appendix = append(h.log.Appendix, str)
 			break
 
-		case ValList:
+		case pl.ValList:
 			for _, e := range arg.List.Data {
-				if e.Type == ValStr {
+				if e.Type == pl.ValStr {
 					h.log.Appendix = append(h.log.Appendix, e.String)
 				}
 			}

@@ -7,6 +7,7 @@ import (
 	"github.com/dianpeng/mono-service/alog"
 	"github.com/dianpeng/mono-service/config"
 	"github.com/dianpeng/mono-service/hpl"
+	"github.com/dianpeng/mono-service/pl"
 	"github.com/dianpeng/mono-service/service"
 	"github.com/dianpeng/mono-service/util"
 	hrouter "github.com/julienschmidt/httprouter"
@@ -14,7 +15,7 @@ import (
 
 type nullService struct {
 	config *config.Service
-	policy *hpl.Policy
+	policy *pl.Policy
 }
 
 func (s *nullService) Name() string {
@@ -51,8 +52,8 @@ type nullSession struct {
 	r       service.SessionResource
 }
 
-func (s *nullSession) hplLoadVar(x *hpl.Evaluator, name string) (hpl.Val, error) {
-	return hpl.NewValNull(), fmt.Errorf("unknown variable %s", name)
+func (s *nullSession) hplLoadVar(x *pl.Evaluator, name string) (pl.Val, error) {
+	return pl.NewValNull(), fmt.Errorf("unknown variable %s", name)
 }
 
 func (s *nullSession) Service() service.Service {
@@ -129,7 +130,7 @@ func (n *nullServiceFactory) Create(config *config.Service) (service.Service, er
 		config: config,
 	}
 
-	policy, err := hpl.CompilePolicy(config.Policy)
+	policy, err := pl.CompilePolicy(config.Policy)
 	if err != nil {
 		return nil, err
 	}
