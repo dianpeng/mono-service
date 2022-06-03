@@ -35,6 +35,7 @@ const (
 	tkColon
 	tkSemicolon
 	tkQuest
+  tkSharp
 
 	// unary
 	tkNot
@@ -80,7 +81,7 @@ const (
 	tkTry
 
 	// intrinsic keywords, used for special builtin functionalities
-	tkRender
+	tkTemplate
 
 	tkEof
 	tkError
@@ -149,6 +150,8 @@ func getTokenName(tk int) string {
 		return ";"
 	case tkQuest:
 		return "?"
+  case tkSharp:
+    return "#"
 
 	case tkAdd:
 		return "+"
@@ -198,8 +201,8 @@ func getTokenName(tk int) string {
 	case tkElse:
 		return "else"
 
-	case tkRender:
-		return "render"
+	case tkTemplate:
+		return "template"
 
 	case tkError:
 		return "<error>"
@@ -534,9 +537,9 @@ func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 		t.token = tkElse
 		return tkElse
 
-	case "render":
-		t.token = tkRender
-		return tkRender
+	case "template":
+		t.token = tkTemplate
+		return tkTemplate
 	default:
 		break
 	}
@@ -554,6 +557,21 @@ func (t *lexer) scanComment() {
 			break
 		}
 	}
+}
+
+func (t *lexer) scanCommentBlock() bool {
+  for ; t.cursor < len(t.input); t.cursor++ {
+    c := t.input[t.cursor]
+    if c == '*' && ((t.cursor + 1) < len(t.input)) {
+      nc := t.input[t.cursor+1]
+      if nc == '/' {
+        t.cursor += 2
+        return true
+      }
+    }
+  }
+  t.err("block comment must be closed by */")
+  return false
 }
 
 func (t *lexer) p2(t0, t1 int, lh rune) int {
@@ -657,11 +675,6 @@ func (t *lexer) next() int {
 			t.cursor++
 			continue
 
-		// allow a simple line based comment
-		case '#':
-			t.cursor++
-			t.scanComment()
-			continue
 		case '+':
 			return t.yield(tkAdd, 1)
 		case '-':
@@ -675,7 +688,14 @@ func (t *lexer) next() int {
 					t.cursor += 2
 					t.scanComment()
 					continue
-				}
+				} else if nc == '*' {
+          t.cursor += 2
+          if !t.scanCommentBlock() {
+            return t.token
+          } else {
+            continue
+          }
+        }
 			}
 			return t.yield(tkDiv, 1)
 
@@ -724,6 +744,8 @@ func (t *lexer) next() int {
 			return t.yield(tkDollar, 1)
 		case '?':
 			return t.yield(tkQuest, 1)
+    case '#':
+      return t.yield(tkSharp, 1)
 		case ';':
 			return t.yield(tkSemicolon, 1)
 		case ':':

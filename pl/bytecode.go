@@ -29,9 +29,10 @@ const (
 	bcNewPair = 11
 
 	// string interpolation
-	bcToStr  = 13
-	bcConStr = 14
+	bcToStr  = 12
+	bcConStr = 13
 
+	bcStoreVar   = 14
 	bcLoadVar    = 15
 	bcDot        = 16
 	bcDotSet     = 17
@@ -233,6 +234,15 @@ func (p *program) emit1(opcode int, argument int) {
 	})
 }
 
+func (p *program) popLast() bytecode {
+  must(len(p.bcList) > 0, "not empty")
+  sz := len(p.bcList)
+  last := p.bcList[sz-1]
+  // pop the last instruction
+  p.bcList = p.bcList[:sz-1]
+  return last
+}
+
 // patching
 func (p *program) label() int {
 	return len(p.bcList)
@@ -340,6 +350,8 @@ func getBytecodeName(bc int) string {
 		return "con-str"
 	case bcLoadVar:
 		return "load-var"
+	case bcStoreVar:
+		return "store-var"
 	case bcDot:
 		return "dot"
 	case bcIndex:
@@ -375,9 +387,9 @@ func getBytecodeName(bc int) string {
 	case bcNe:
 		return "ne"
 	case bcRegexpMatch:
-		return "regexp_match"
+		return "regexp-match"
 	case bcRegexpNMatch:
-		return "regexp_nmatch"
+		return "regexp-nmatch"
 	case bcNot:
 		return "not"
 	case bcNegate:
@@ -395,13 +407,13 @@ func getBytecodeName(bc int) string {
 	case bcPop:
 		return "pop"
 	case bcSetSession:
-		return "set_session"
+		return "set-session"
 	case bcLoadSession:
-		return "load_session"
+		return "load-session"
 	case bcStoreSession:
-		return "store_session"
+		return "store-session"
 	case bcLoadRegexp:
-		return "load_regexp"
+		return "load-regexp"
 
 	// special functions
 	case bcTemplate:

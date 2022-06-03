@@ -105,9 +105,9 @@ func TestParser1(t *testing.T) {
 
 
 policy1(
-  act_int = 10,
-  act_real = 20.0,
-  act_null = null,
+  act_int => 10,
+  act_real => 20.0,
+  act_null => null,
   act_bool = true,
   act_list = [1, 10, true, null],
   act_map = {

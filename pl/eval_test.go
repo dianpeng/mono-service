@@ -162,18 +162,18 @@ func TestEval1(t *testing.T) {
 		policy, err := CompilePolicy(
 			`
 policy(
-  act_int = 10,
-  act_real = 10.0,
-  act_true = true,
-  act_false = false,
-  act_null = null,
-  act_list_empty = [],
-  act_map_empty = {},
-  act_func = abs(-1),
-  act_var = a,
+  act_int => 10,
+  act_real => 10.0,
+  act_true => true,
+  act_false => false,
+  act_null => null,
+  act_list_empty => [],
+  act_map_empty => {},
+  act_func => abs(-1),
+  act_var => a,
 
-  act_map1 = {'a': a},
-  act_list1= [1, true, 3.0, a, false, null, []]
+  act_map1 => {'a': a},
+  act_list1 => [1, true, 3.0, a, false, null, []]
 
 );`)
 
@@ -281,20 +281,20 @@ policy(
 		policy, err := CompilePolicy(
 			`
 policy(
-  empty_list = [],
-  list1 = [1],
-  list2 = [1, true],
-  list3 = [1, a, [1]],
+  empty_list => [],
+  list1 => [1],
+  list2 => [1, true],
+  list3 => [1, a, [1]],
   
-  empty_map = {},
-  map1 = {
+  empty_map => {},
+  map1 => {
     'a' : {}
   },
-  map2 = {
+  map2 => {
     'a' : 1,
     'b' : true
   },
-  map3 = {
+  map3 => {
     'a' : {
       'b' : { 
         'c' : 1
@@ -426,13 +426,13 @@ func TestStrInterpo(t *testing.T) {
 
 		policy, err := CompilePolicy(
 			`
-## whatever policy
+// whatever policy
 "policy" => {
   let var1 = 10;
   let var2 = 'xxxx';
 
-  v1 = "aa{{var1}}bb";
-  v2 = "aa{{var2}},{{a}},{{abs(-100)}}";
+  v1 => "aa{{var1}}bb";
+  v2 => "aa{{var2}},{{a}},{{abs(-100)}}";
 }`)
 		if err != nil {
 			fmt.Printf(":policy %s", err.Error())
@@ -477,7 +477,7 @@ func TestLocal(t *testing.T) {
 
 		policy, err := CompilePolicy(
 			`
-## whatever policy
+// whatever policy
 "policy" => {
   let var1 = 10;
   let var2 = true;
@@ -485,12 +485,12 @@ func TestLocal(t *testing.T) {
   let var4 = [1, 2, {'a': [10, 20]}, 3];
   let var5 = a;
   let var6 = abs(-100);
-  v1 = var1;
-  v2 = var2;
-  v3 = var3;
-  v4 = var4[2].a[1];
-  v5 = var5;
-  v6 = var6;
+  v1 => var1;
+  v2 => var2;
+  v3 => var3;
+  v4 => var4[2].a[1];
+  v5 => var5;
+  v6 => var6;
 }`)
 
 		if err != nil {
@@ -513,7 +513,7 @@ func TestLocal(t *testing.T) {
 }
 
 // a simple testing frameworking which is designed for testing the basic
-// expression of the policy. It assumes user will write return = as return
+// expression of the policy. It assumes user will write output => as return
 // action
 func test(code string) (Val, bool) {
 	rr := NewValNull()
@@ -537,7 +537,7 @@ func test(code string) (Val, bool) {
 		},
 
 		func(_ *Evaluator, aname string, aval Val) error {
-			if aname == "return" {
+			if aname == "output" {
 				*ret = aval
 			}
 			return nil
@@ -671,7 +671,7 @@ func TestArith1(t *testing.T) {
 	assert.True(testInt(
 		`
 test{
-  return = 200 - 1 + 1;
+  output => 200 - 1 + 1;
 };
 `, 200))
 
@@ -679,70 +679,70 @@ test{
 	assert.True(testInt(
 		`
 test{
-  return = 1 + 2;
+  output => 1 + 2;
 };
 `, 3))
 
 	assert.True(testInt(
 		`
 test{
-  return = 1 + 2 * 3;
+  output => 1 + 2 * 3;
 };
 `, 1+2*3))
 
 	assert.True(testInt(
 		`
 test{
-  return = 2 + 2 / 2;
+  output => 2 + 2 / 2;
 };
 `, 3))
 
 	assert.True(testInt(
 		`
 test{
-  return = 2 ** 3 + 1
+  output => 2 ** 3 + 1
 };
 `, 9))
 
 	assert.True(testInt(
 		`
 test{
-  return = 2 * (1+2)
+  output => 2 * (1+2)
 };
 `, 6))
 
 	assert.True(testInt(
 		`
 test{
-  return = 1 - 2;
+  output => 1 - 2;
 };
 `, -1))
 
 	assert.True(testInt(
 		`
 test{
-  return = 1 - 2 * 3;
+  output => 1 - 2 * 3;
 };
 `, 1-2*3))
 
 	assert.True(testInt(
 		`
 test{
-  return = 2 - 2 / 2;
+  output => 2 - 2 / 2;
 };
 `, 1))
 
 	assert.True(testInt(
 		`
 test{
-  return = 2 ** 3 - 1
+  output => 2 ** 3 - 1
 };
 `, 7))
 
 	assert.True(testInt(
 		`
 test{
-  return = 2 * (1-2)
+  output => 2 * (1-2)
 };
 `, -2))
 
@@ -750,70 +750,70 @@ test{
 	assert.True(testReal(
 		`
 test{
-  return = 1.0 + 2.0;
+  output => 1.0 + 2.0;
 };
 `, 3.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 1.0 + 2.0 * 3.0;
+  output => 1.0 + 2.0 * 3.0;
 };
 `, 7.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 2.0 + 2.0 / 2.0;
+  output => 2.0 + 2.0 / 2.0;
 };
 `, 3.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 2.0 ** 3.0 + 1.0;
+  output => 2.0 ** 3.0 + 1.0;
 };
 `, 9.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 2.0 * (1.0+2.0)
+  output => 2.0 * (1.0+2.0)
 };
 `, 6.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 1.0 - 2.0;
+  output => 1.0 - 2.0;
 };
 `, -1.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 1.0 - 2.0 * 3.0;
+  output => 1.0 - 2.0 * 3.0;
 };
 `, 1.0-2.0*3.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 2.0 - 2.0 / 2.0;
+  output => 2.0 - 2.0 / 2.0;
 };
 `, 1.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 2.0 ** 3.0 - 1.0;
+  output => 2.0 ** 3.0 - 1.0;
 };
 `, 7.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 2.0 * (1.0-2.0)
+  output => 2.0 * (1.0-2.0)
 };
 `, -2.0))
 
@@ -821,70 +821,70 @@ test{
 	assert.True(testReal(
 		`
 test{
-  return = 1.0 + 2;
+  output => 1.0 + 2;
 };
 `, 3.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 1 + 2.0 * 3.0;
+  output => 1 + 2.0 * 3.0;
 };
 `, 7.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 2 + 2.0 / 2.0;
+  output => 2 + 2.0 / 2.0;
 };
 `, 3.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 2.0 ** 3 + 1;
+  output => 2.0 ** 3 + 1;
 };
 `, 9.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 2.0 * (1.0+2)
+  output => 2.0 * (1.0+2)
 };
 `, 6.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 1.0 - 2;
+  output => 1.0 - 2;
 };
 `, -1.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 1.0 - 2.0 * 3;
+  output => 1.0 - 2.0 * 3;
 };
 `, 1.0-2.0*3.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 2.0 - 2.0 / 2;
+  output => 2.0 - 2.0 / 2;
 };
 `, 1.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 2.0 ** 3.0 - 1;
+  output => 2.0 ** 3.0 - 1;
 };
 `, 7.0))
 
 	assert.True(testReal(
 		`
 test{
-  return = 2.0 * (1.0-2)
+  output => 2.0 * (1.0-2)
 };
 `, -2.0))
 
@@ -892,35 +892,35 @@ test{
 	assert.True(testString(
 		`
 test {
-  return = 'a' + 'b'
+  output => 'a' + 'b'
 }
 `, "ab"))
 
 	assert.True(testString(
 		`
 test {
-  return = '' + 'b'
+  output => '' + 'b'
 }
 `, "b"))
 
 	assert.True(testString(
 		`
 test {
-  return = 'a' + ''
+  output => 'a' + ''
 }
 `, "a"))
 
 	assert.True(testString(
 		`
 test {
-  return = 'a' + 1
+  output => 'a' + 1
 }
 `, "a1"))
 
 	assert.True(testString(
 		`
 test {
-  return = 'a' + true 
+  output => 'a' + true 
 }
 `, "atrue"))
 
@@ -933,42 +933,42 @@ func TestComp1(t *testing.T) {
 	assert.True(testBool(
 		`
 test{
-  return = 1 < 2
+  output => 1 < 2
 };
 `, true))
 
 	assert.True(testBool(
 		`
 test{
-  return = 1 <= 2
+  output => 1 <= 2
 };
 `, true))
 
 	assert.True(testBool(
 		`
 test{
-  return = 1 > 2
+  output => 1 > 2
 };
 `, false))
 
 	assert.True(testBool(
 		`
 test{
-  return = 1 >= 2
+  output => 1 >= 2
 };
 `, false))
 
 	assert.True(testBool(
 		`
 test{
-  return = 1 != 2
+  output => 1 != 2
 };
 `, true))
 
 	assert.True(testBool(
 		`
 test{
-  return = 1 == 2
+  output => 1 == 2
 };
 `, false))
 
@@ -976,42 +976,42 @@ test{
 	assert.True(testBool(
 		`
 test{
-  return = 1.0 < 2.0
+  output => 1.0 < 2.0
 };
 `, true))
 
 	assert.True(testBool(
 		`
 test{
-  return = 1.0 <= 2.0
+  output => 1.0 <= 2.0
 };
 `, true))
 
 	assert.True(testBool(
 		`
 test{
-  return = 1.0 > 2.0
+  output => 1.0 > 2.0
 };
 `, false))
 
 	assert.True(testBool(
 		`
 test{
-  return = 1.0 >= 2.0
+  output => 1.0 >= 2.0
 };
 `, false))
 
 	assert.True(testBool(
 		`
 test{
-  return = 1.0 != 2.0
+  output => 1.0 != 2.0
 };
 `, true))
 
 	assert.True(testBool(
 		`
 test{
-  return = 1.0 == 2.0
+  output => 1.0 == 2.0
 };
 `, false))
 
@@ -1019,42 +1019,42 @@ test{
 	assert.True(testBool(
 		`
 test{
-  return = 1 < 2.0
+  output => 1 < 2.0
 };
 `, true))
 
 	assert.True(testBool(
 		`
 test{
-  return = 1.0 <= 2
+  output => 1.0 <= 2
 };
 `, true))
 
 	assert.True(testBool(
 		`
 test{
-  return = 1 > 2.0
+  output => 1 > 2.0
 };
 `, false))
 
 	assert.True(testBool(
 		`
 test{
-  return = 1.0 >= 2
+  output => 1.0 >= 2
 };
 `, false))
 
 	assert.True(testBool(
 		`
 test{
-  return = 1.0 != 2
+  output => 1.0 != 2
 };
 `, true))
 
 	assert.True(testBool(
 		`
 test{
-  return = 1 == 2.0
+  output => 1 == 2.0
 };
 `, false))
 
@@ -1062,42 +1062,42 @@ test{
 	assert.True(testBool(
 		`
 test{
-  return = 'a' < 'b'
+  output => 'a' < 'b'
 };
 `, true))
 
 	assert.True(testBool(
 		`
 test{
-  return = 'a' <= 'b'
+  output => 'a' <= 'b'
 };
 `, true))
 
 	assert.True(testBool(
 		`
 test{
-  return = 'a' > 'b'
+  output => 'a' > 'b'
 };
 `, false))
 
 	assert.True(testBool(
 		`
 test{
-  return = 'a' >= 'b'
+  output => 'a' >= 'b'
 };
 `, false))
 
 	assert.True(testBool(
 		`
 test{
-  return = 'a' != 'b'
+  output => 'a' != 'b'
 };
 `, true))
 
 	assert.True(testBool(
 		`
 test{
-  return = 'a' == 'b'
+  output => 'a' == 'b'
 };
 `, false))
 
@@ -1109,54 +1109,54 @@ func TestLogic1(t *testing.T) {
 	assert.True(testCond(
 		`
 test{
-  return = 11 || not_existed()
+  output => 11 || not_existed()
 };
 `, true))
 	assert.True(testInt(
 		`
 test{
-  return = 11 || not_existed()
+  output => 11 || not_existed()
 };
 `, 11))
 
 	assert.True(testCond(
 		`
 test{
-  return = false && not_existed()
+  output => false && not_existed()
 };
 `, false))
 	assert.True(testBool(
 		`
 test{
-  return = false && not_existed()
+  output => false && not_existed()
 };
 `, false))
 
 	assert.True(testCond(
 		`
 test{
-  return = false || 0 || "" || "Hello World"
+  output => false || 0 || "" || "Hello World"
 };
 `, true))
 
 	assert.True(testString(
 		`
 test{
-  return = false || 0 || "" || "Hello World"
+  output => false || 0 || "" || "Hello World"
 };
 `, "Hello World"))
 
 	assert.True(testCond(
 		`
 test{
-  return = true && 1 && "H" && null;
+  output => true && 1 && "H" && null;
 };
 `, true))
 
 	assert.True(testString(
 		`
 test{
-  return = true && 1 && "H" && ""
+  output => true && 1 && "H" && ""
 };
 `, ""))
 
@@ -1168,21 +1168,21 @@ func TestTernary1(t *testing.T) {
 	assert.True(testInt(
 		`
 test{
-  return = true ? 1 : 2;
+  output => true ? 1 : 2;
 };
 `, 1))
 
 	assert.True(testInt(
 		`
 test{
-  return = false ? 1 : 2;
+  output => false ? 1 : 2;
 };
 `, 2))
 
 	assert.True(testInt(
 		`
 test{
-  return = false ? 1 : (false ? 3 : (false ? 4 : 2))
+  output => false ? 1 : (false ? 3 : (false ? 4 : 2))
 };
 `, 2))
 
@@ -1194,42 +1194,42 @@ func TestIf(t *testing.T) {
 	assert.True(testInt(
 		`
 test{
-  return = if true { 10 };
+  output => if true { 10 };
 };
 `, 10))
 
 	assert.True(testInt(
 		`
 test{
-  return = if false { 10 } else { 1 };
+  output => if false { 10 } else { 1 };
 };
 `, 1))
 
 	assert.True(testInt(
 		`
 test{
-  return = if false { 10 } elif true { 1 };
+  output => if false { 10 } elif true { 1 };
 };
 `, 1))
 
 	assert.True(testInt(
 		`
 test{
-  return = if false { 10 } elif false { "" } elif false { "X" } else { 1 };
+  output => if false { 10 } elif false { "" } elif false { "X" } else { 1 };
 };
 `, 1))
 
 	assert.True(testNull(
 		`
 test{
-  return = if false { 10 };
+  output => if false { 10 };
 };
 `))
 
 	assert.True(testNull(
 		`
 test{
-  return = if false { 10 } elif false { "XX" };
+  output => if false { 10 } elif false { "XX" };
 };
 `))
 
@@ -1246,7 +1246,7 @@ test{
   } else {
     20;
   }
-  return = "1000";
+  output => "1000";
 };
 `, "1000"))
 
@@ -1257,28 +1257,28 @@ func TestMatch(t *testing.T) {
 	assert.True(testNull(
 		`
 not_matched{
-  return = true;
+  output => true;
 };
 `))
 
 	assert.True(testBool(
 		`
 [my_policy] when $  == "test" {
-  return = true;
+  output => true;
 };
 `, true))
 
 	assert.True(testNull(
 		`
 not_matched => {
-  return = true;
+  output => true;
 };
 `))
 
 	assert.True(testBool(
 		`
 "my_policy" when ($  == "test") => {
-  return = true;
+  output => true;
 };
 `, true))
 
@@ -1289,14 +1289,14 @@ func TestRegex(t *testing.T) {
 	assert.True(testBool(
 		`
 test{
-  return = "aa" ~ R"aa";
+  output => "aa" ~ R"aa";
 };
 `, true))
 
 	assert.True(testBool(
 		`
 test{
-  return = "aa" ~ R"ab";
+  output => "aa" ~ R"ab";
 };
 `, false))
 
@@ -1307,7 +1307,7 @@ func TestTemplate(t *testing.T) {
 	assert.True(testString(
 		`
 test{
-  return = render "go", {
+  output => template "go", {
     'a' : 10,
     'b' : 20,
     'c' : "Hello World",
@@ -1317,7 +1317,7 @@ test{
 	assert.True(testString(
 		`
 test{
-  return = render "go[]", {
+  output => template "go[]", {
     'a' : 10,
     'b' : 20,
     'c' : "Hello World",
@@ -1327,7 +1327,7 @@ test{
 	assert.True(testString(
 		`
 test{
-  return = render "go[a=10, b=20.0, c=true, d='', e=false, f=null]", {
+  output => template "go[a=10, b=20.0, c=true, d='', e=false, f=null]", {
     'a' : 10,
     'b' : 20,
     'c' : "Hello World",

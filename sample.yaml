@@ -15,41 +15,41 @@ vhost:
         policy: |
           // sign policy, used for handling signing result
           sign => {
-            status = 200;
-            header_set = ("x-body-sign-final-result", sign);
-            header_set = ("x-body-sign-method", signMethod);
+            status => 200;
+            header_set => ("x-body-sign-final-result", sign);
+            header_set => ("x-body-sign-method", signMethod);
 
             // notes, we need to use reqBody, since the original body has been
             // consumed up
-            body = reqBody;
+            body => reqBody;
           };
 
           // policy for handling verification result
           // reject means the verification failed; pass means the verification
           // passed
           reject => {
-            status = 404;
-            header_set  = [
+            status => 404;
+            header_set  => [
               ("x-body-sign-result", sign),
               ("x-body-sign-expect", signExpect)
             ];
 
             // notes, we need to use reqBody, since the original body has been
             // consumed up
-            body = reqBody;
+            body => reqBody;
           };
 
           pass => {
-            status = 202;
-            header_set  = [
+            status => 202;
+            header_set => [
               ("x-body-sign-result", sign),
               ("x-body-sign-expect", signExpect)
             ];
-            body = reqBody;
+            body => reqBody;
           };
 
           log => {
-            $echo(logFormat);
+            echo(logFormat);
           }
 
       - name: "null"
@@ -68,8 +68,8 @@ vhost:
           response => {
             let proxy_url = request.header["x-proxy-url"];
             let list_of_url = split(proxy_url, ';');
-            body = 10:to_string();
-            status = @c;
+            body => 10#to_string();
+            status => @c;
           }
 
       - name: "null"
@@ -86,10 +86,10 @@ vhost:
             let proxy_url = request.header.x_proxy_url;
             let url = proxy_url == "" ? "https://tmall.com" : proxy_url;
             let sub_resp = http(url, "GET");
-            body = if sub_resp.status == 200 {
+            body => if sub_resp.status == 200 {
               sub_resp.body;
             } else {
               "the response status code is {{sub_resp.status}} which is not 200";
             };
-            status = sub_resp.status;
+            status => sub_resp.status;
           };

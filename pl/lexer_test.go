@@ -8,21 +8,19 @@ import (
 func TextLexerComment(t *testing.T) {
 	assert := assert.New(t)
 	{
-		l := newLexer("#abcd")
+		l := newLexer("/* abcd */")
 		assert.Equal(l.next(), tkEof, "c1")
 	}
 	{
-		l := newLexer("#abcd\na")
-		assert.Equal(l.next(), tkId, "c2.1")
+		l := newLexer("/* abcd\na */")
 		assert.Equal(l.next(), tkEof, "c2.2")
 	}
 	{
-		l := newLexer("a#abcd")
-		assert.Equal(l.next(), tkId, "c3.1")
+		l := newLexer("/* // abcd */")
 		assert.Equal(l.next(), tkEof, "c3.2")
 	}
 	{
-		l := newLexer("a\n#abcd")
+		l := newLexer("/*a\n#abcd */")
 		assert.Equal(l.next(), tkId, "c4.1")
 		assert.Equal(l.next(), tkEof, "c4.2")
 	}
@@ -88,12 +86,12 @@ func TestLexerBasic(t *testing.T) {
 func TestLexerBasic2(t *testing.T) {
 	assert := assert.New(t)
 	{
-		l := newLexer("+-*/**>>=<<=!==== || &&")
+		l := newLexer("+-***/>>=<<=!==== || &&")
 		assert.True(l.next() == tkAdd)
 		assert.True(l.next() == tkSub)
+		assert.True(l.next() == tkPow)
 		assert.True(l.next() == tkMul)
 		assert.True(l.next() == tkDiv)
-		assert.True(l.next() == tkPow)
 		assert.True(l.next() == tkGt)
 		assert.True(l.next() == tkGe)
 		assert.True(l.next() == tkLt)
