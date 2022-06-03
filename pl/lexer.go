@@ -75,10 +75,15 @@ const (
 	tkSession
 	tkLet
 	tkWhen
+  tkImport
 	tkIf
 	tkElif
 	tkElse
 	tkTry
+  tkReturn
+  tkContinue
+  tkBreak
+  tkNext
 
 	// intrinsic keywords, used for special builtin functionalities
 	tkTemplate
@@ -192,6 +197,8 @@ func getTokenName(tk int) string {
 		return "session"
 	case tkWhen:
 		return "when"
+  case tkImport:
+    return "import"
 	case tkTry:
 		return "try"
 	case tkIf:
@@ -200,6 +207,15 @@ func getTokenName(tk int) string {
 		return "elif"
 	case tkElse:
 		return "else"
+
+  case tkContinue:
+    return "continue"
+  case tkBreak:
+    return "break"
+  case tkNext:
+    return "next"
+  case tkReturn:
+    return "return"
 
 	case tkTemplate:
 		return "template"
@@ -524,6 +540,9 @@ func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 	case "when":
 		t.token = tkWhen
 		return tkWhen
+  case "import":
+    t.token = tkImport
+    return tkImport
 	case "try":
 		t.token = tkTry
 		return tkTry
@@ -536,10 +555,24 @@ func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 	case "else":
 		t.token = tkElse
 		return tkElse
+  case "continue":
+    t.token = tkContinue
+    return tkContinue
+  case "break":
+    t.token = tkBreak
+    return tkBreak
+  case "next":
+    t.token = tkNext
+    return tkNext
+  case "return":
+    t.token = tkReturn
+    return tkReturn
 
+  // intrinsic
 	case "template":
 		t.token = tkTemplate
 		return tkTemplate
+
 	default:
 		break
 	}
