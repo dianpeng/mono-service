@@ -28,18 +28,16 @@ const (
 	// new pair
 	bcNewPair = 11
 
-	// call function
-	bcCall = 12
-
 	// string interpolation
 	bcToStr  = 13
 	bcConStr = 14
 
-	// dexpression
 	bcLoadVar    = 15
 	bcDot        = 16
-	bcIndex      = 17
-	bcLoadDollar = 18
+	bcDotSet     = 17
+	bcIndex      = 18
+	bcIndexSet   = 19
+	bcLoadDollar = 20
 
 	// local variable, we use seperate stack to load and store local variables
 	// notes, the local variable is been identified without $
@@ -81,11 +79,15 @@ const (
 	bcPop = 70
 
 	// this instruction can only be generated during the global scope
-	bcSetGlobal = 71
+	bcSetSession = 71
 
 	// this 2 instructions are used during normal policy execution
-	bcLoadGlobal  = 72
-	bcStoreGlobal = 73
+	bcLoadSession  = 72
+	bcStoreSession = 73
+
+	// call
+	bcCall  = 81
+	bcMCall = 82
 
 	// special functions
 	// render template
@@ -281,6 +283,7 @@ func (p *program) dump() string {
 		case bcAddList,
 			bcAddMap,
 			bcCall,
+			bcMCall,
 			bcConStr,
 			bcLoadLocal,
 			bcStoreLocal,
@@ -329,6 +332,8 @@ func getBytecodeName(bc int) string {
 		return "new-pair"
 	case bcCall:
 		return "call"
+	case bcMCall:
+		return "mcall"
 	case bcToStr:
 		return "to-str"
 	case bcConStr:
@@ -389,12 +394,12 @@ func getBytecodeName(bc int) string {
 		return "ternary"
 	case bcPop:
 		return "pop"
-	case bcSetGlobal:
-		return "set_global"
-	case bcLoadGlobal:
-		return "load_global"
-	case bcStoreGlobal:
-		return "store_global"
+	case bcSetSession:
+		return "set_session"
+	case bcLoadSession:
+		return "load_session"
+	case bcStoreSession:
+		return "store_session"
 	case bcLoadRegexp:
 		return "load_regexp"
 

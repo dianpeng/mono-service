@@ -71,7 +71,7 @@ const (
 	tkTrue
 	tkFalse
 	tkNull
-	tkGlobal
+	tkSession
 	tkLet
 	tkWhen
 	tkIf
@@ -185,8 +185,8 @@ func getTokenName(tk int) string {
 		return "null"
 	case tkLet:
 		return "let"
-	case tkGlobal:
-		return "global"
+	case tkSession:
+		return "session"
 	case tkWhen:
 		return "when"
 	case tkTry:
@@ -515,9 +515,9 @@ func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 	case "let":
 		t.token = tkLet
 		return tkLet
-	case "global":
-		t.token = tkGlobal
-		return tkGlobal
+	case "session":
+		t.token = tkSession
+		return tkSession
 	case "when":
 		t.token = tkWhen
 		return tkWhen

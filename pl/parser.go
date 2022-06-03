@@ -41,16 +41,48 @@ func (s *symTable) add(x string) int {
 }
 
 type parser struct {
-	l    *lexer
-	pmap []*program
-	stbl *symTable
-	glb  []string
+	l       *lexer
+	pmap    []*program
+	stbl    *symTable
+	sessVar []string
 }
 
 func newParser(input string) *parser {
 	return &parser{
 		l: newLexer(input),
 	}
+}
+
+const (
+	symSession = iota
+	symLocal
+	symDynamic
+)
+
+func (p *parser) findSessionIdx(x string) int {
+	for idx, n := range p.sessVar {
+		if n == x {
+			return idx
+		}
+	}
+	return -1
+}
+
+func (p *parser) resolveSymbol(xx string) (int, int) {
+	// local symbol table
+	local := p.stbl.find(xx)
+	if local != -1 {
+		return symLocal, local
+	}
+
+	// session symbol table
+	sessVar := p.findSessionIdx(xx)
+	if sessVar != -1 {
+		return symSession, sessVar
+	}
+
+	// lastly, it must be dynamic variable. Notes, we don't have closure for now
+	return symDynamic, -1
 }
 
 func (p *parser) err(xx string) error {
@@ -64,10 +96,10 @@ func (p *parser) err(xx string) error {
 func (p *parser) parse() ([]*program, error) {
 	p.l.next()
 
-	// only the first statement can be global and it MUST be defined before any
+	// only the first statement can be session and it MUST be defined before any
 	// other statement
-	if p.l.token == tkGlobal {
-		if prog, err := p.parseGlobalScope(); err != nil {
+	if p.l.token == tkSession {
+		if prog, err := p.parseSessionScope(); err != nil {
 			return nil, err
 		} else {
 			p.pmap = append(p.pmap, prog)
@@ -77,7 +109,7 @@ func (p *parser) parse() ([]*program, error) {
 	for {
 		tk := p.l.token
 		if tk == tkId || tk == tkStr || tk == tkLSqr {
-			prog, err := p.parseProg()
+			prog, err := p.parseRule()
 			if err != nil {
 				return nil, err
 			}
@@ -94,21 +126,12 @@ func (p *parser) parse() ([]*program, error) {
 	return p.pmap, nil
 }
 
-func (p *parser) findGlobalIdx(x string) int {
-	for idx, n := range p.glb {
-		if n == x {
-			return idx
-		}
-	}
-	return -1
-}
-
-func (p *parser) parseGlobalSet(prog *program) error {
+func (p *parser) parseSessionSet(prog *program) error {
 	must(p.l.token == tkGId, "must be gid")
 	gname := p.l.valueText
-	idx := p.findGlobalIdx(gname)
+	idx := p.findSessionIdx(gname)
 	if idx == -1 {
-		return p.err(fmt.Sprintf("unknown global %s", gname))
+		return p.err(fmt.Sprintf("unknown session %s", gname))
 	}
 	if !p.l.expect(tkAssign) {
 		return p.l.toError()
@@ -117,41 +140,41 @@ func (p *parser) parseGlobalSet(prog *program) error {
 	if err := p.parseExpr(prog); err != nil {
 		return err
 	}
-	prog.emit1(bcStoreGlobal, idx)
+	prog.emit1(bcStoreSession, idx)
 	return nil
 }
 
-func (p *parser) parseGlobalLoad(prog *program) error {
+func (p *parser) parseSessionLoad(prog *program) error {
 	must(p.l.token == tkGId, "must be gid")
 	gname := p.l.valueText
-	idx := p.findGlobalIdx(gname)
+	idx := p.findSessionIdx(gname)
 	if idx == -1 {
-		return p.err(fmt.Sprintf("unknown global %s", gname))
+		return p.err(fmt.Sprintf("unknown session %s", gname))
 	}
 	p.l.next()
-	prog.emit1(bcLoadGlobal, idx)
+	prog.emit1(bcLoadSession, idx)
 	return p.parseSuffix(prog)
 }
 
-func (p *parser) parseGlobalScope() (*program, error) {
+func (p *parser) parseSessionScope() (*program, error) {
 	if !p.l.expect(tkLBra) {
 		return nil, p.l.toError()
 	}
 	p.l.next()
 
-	prog := newProgram("@global")
+	prog := newProgram("@session")
 
 	if p.l.token != tkRBra {
-		// all the statement resides inside of it will be treated as global statement
-		// and will be allocated into a symbol table globally shared
+		// all the statement resides inside of it will be treated as session statement
+		// and will be allocated into a symbol table session shared
 		for {
 			if p.l.token != tkGId && p.l.token != tkId {
-				return nil, p.err("expect a symbol to serve as global variable name")
+				return nil, p.err("expect a symbol to serve as session variable name")
 			}
 			gname := p.l.valueText
 
 			if !p.l.expect(tkAssign) {
-				return nil, p.err("expect a '=' to represent global variable assignment")
+				return nil, p.err("expect a '=' to represent session variable assignment")
 			}
 			p.l.next()
 
@@ -159,8 +182,8 @@ func (p *parser) parseGlobalScope() (*program, error) {
 				return nil, err
 			}
 
-			p.glb = append(p.glb, gname)
-			prog.emit0(bcSetGlobal)
+			p.sessVar = append(p.sessVar, gname)
+			prog.emit0(bcSetSession)
 
 			if p.l.token == tkSemicolon {
 				p.l.next()
@@ -178,7 +201,7 @@ func (p *parser) parseGlobalScope() (*program, error) {
 	return prog, nil
 }
 
-func (p *parser) parseProg() (*program, error) {
+func (p *parser) parseRule() (*program, error) {
 	p.stbl = newSymTable()
 
 	var name string
@@ -241,7 +264,7 @@ func (p *parser) parseProg() (*program, error) {
 		return nil, p.err("expect a '(' or '{' to start an policy")
 	}
 
-	err := p.parseParaList(name, prog)
+	err := p.parseStmt(name, prog)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +280,15 @@ func (p *parser) parseProg() (*program, error) {
 	return prog, nil
 }
 
-func (p *parser) parseParaList(name string, prog *program) error {
+/*
+// parse id prefixed statement, ie could be a function call or an assignment.
+// assignment is slightly more complicated than we thought since we need to
+// perform assignment on dot/index referenced sub-component if applicable
+func (p *parser) parseIdPrefixStmt(prog *program) error {
+}
+*/
+
+func (p *parser) parseStmt(name string, prog *program) error {
 	usePar := p.l.token == tkLPar
 	ntk := p.l.next()
 
@@ -289,7 +320,7 @@ func (p *parser) parseParaList(name string, prog *program) error {
 				break
 
 			case tkGId:
-				if err := p.parseGlobalSet(prog); err != nil {
+				if err := p.parseSessionSet(prog); err != nil {
 					return err
 				}
 				break
@@ -333,7 +364,7 @@ func (p *parser) parseParaList(name string, prog *program) error {
 				name := p.l.valueText
 				p.l.next()
 
-				if err := p.parseCall(prog, name); err != nil {
+				if err := p.parseNCall(prog, name); err != nil {
 					return err
 				}
 
@@ -364,8 +395,7 @@ func (p *parser) parseParaList(name string, prog *program) error {
 	}
 }
 
-// expression parsing, using simple precedence climbing style way
-
+// Expression parsing, using simple precedence climbing style way
 func (p *parser) parseExpr(prog *program) error {
 	switch p.l.token {
 	case tkIf:
@@ -751,22 +781,28 @@ func (p *parser) parseAtomic(prog *program) error {
 		break
 
 	case tkLPar:
-		return p.parsePairOrSubexpr(prog)
+    if err := p.parsePairOrSubexpr(prog); err != nil {
+      return err
+    }
+    break
 
 	case tkLSqr:
-		return p.parseList(prog)
+    if err := p.parseList(prog); err != nil {
+      return err
+    }
+    break
 
 	case tkLBra:
-		return p.parseMap(prog)
+    if err := p.parseMap(prog); err != nil {
+      return err
+    }
+    break
 
-	case tkDollar:
-		return p.parseDExpr(prog)
-
-	case tkId:
-		return p.parseLocal(prog)
-
-	case tkGId:
-		return p.parseGlobalLoad(prog)
+	case tkDollar, tkId, tkGId:
+    if err := p.parsePExpr(prog); err != nil {
+      return err
+    }
+    break
 
 	// intrinsic related expressions
 	case tkRender:
@@ -776,7 +812,7 @@ func (p *parser) parseAtomic(prog *program) error {
 		return p.err("unexpected token during expression parsing")
 	}
 
-	return nil
+	return p.parseSuffix(prog)
 }
 
 func (p *parser) parsePairOrSubexpr(prog *program) error {
@@ -814,8 +850,7 @@ func (p *parser) parsePairOrSubexpr(prog *program) error {
 	}
 }
 
-// dollar expression, ie dExpr
-func (p *parser) parseCall(prog *program, name string) error {
+func (p *parser) parseCall(prog *program, name string, bc int) error {
 	must(p.l.token == tkLPar, "expect '(' for function call")
 
 	// function invocation ----------------------------------------------------
@@ -848,8 +883,16 @@ func (p *parser) parseCall(prog *program, name string) error {
 	}
 
 	p.l.next()
-	prog.emit1(bcCall, pcnt)
+	prog.emit1(bc, pcnt)
 	return nil
+}
+
+func (p *parser) parseNCall(prog *program, name string) error {
+	return p.parseCall(prog, name, bcCall)
+}
+
+func (p *parser) parseMCall(prog *program, name string) error {
+	return p.parseCall(prog, name, bcMCall)
 }
 
 func (p *parser) parseSuffix(prog *program) error {
@@ -879,6 +922,23 @@ SUFFIX:
 			}
 			p.l.next()
 			break
+
+		case tkColon:
+			// method invocation
+			if !p.l.expect(tkId) {
+				return p.l.toError()
+			}
+
+			methodName := p.l.valueText
+			if !p.l.expect(tkLPar) {
+				return p.l.toError()
+			}
+
+			if err := p.parseMCall(prog, methodName); err != nil {
+				return err
+			}
+			break
+
 		default:
 			break SUFFIX
 		}
@@ -886,39 +946,77 @@ SUFFIX:
 	return nil
 }
 
-func (p *parser) parseLocal(prog *program) error {
-	must(p.l.token == tkId, "expect a identifier")
-	idx := p.stbl.find(p.l.valueText)
-	if idx == -1 {
-		return p.err(fmt.Sprintf("unknown local %s", p.l.valueText))
-	}
-	prog.emit1(bcLoadLocal, idx)
-	p.l.next()
-	return p.parseSuffix(prog)
-}
+// any types of expression which is prefixed with an "ID" token
+// foo()
+// foo.bar
+// foo["bar"]
+// foo:bar()
+func (p *parser) parsePExpr(prog *program) error {
+	must(p.l.token == tkId ||
+		p.l.token == tkDollar ||
+		p.l.token == tkGId, "must be a id or rdollar or global variable id")
 
-func (p *parser) parseDExpr(prog *program) error {
-	must(p.l.token == tkDollar, "expect a $")
-	tk := p.l.next()
-
-	if tk == tkId {
+	switch p.l.token {
+	case tkId:
+		// identifier name
 		name := p.l.valueText
-		ntk := p.l.next()
-		if ntk == tkLPar {
-			if err := p.parseCall(prog, name); err != nil {
+		p.l.next()
+
+		// check whether we have a native function call, ie global function call
+		if p.l.token == tkLPar {
+			if err := p.parseNCall(prog, name); err != nil {
 				return err
 			}
 		} else {
-			// still a suffix value, potentially, we should generate a variable
-			// load bytecode on the stack
-			idx := prog.addStr(name)
-			prog.emit1(bcLoadVar, idx)
+			// Resolve the identifier here, notes the symbol can be following types
+			// 1. session variable
+			// 2. local variable
+			// 3. dynmaic variable
+			symT, symIdx := p.resolveSymbol(name)
+			switch symT {
+			case symSession:
+				prog.emit1(bcLoadSession, symIdx)
+				break
+
+			case symLocal:
+				prog.emit1(bcLoadLocal, symIdx)
+				break
+
+			default:
+				prog.emit1(bcLoadVar, prog.addStr(name))
+				break
+			}
 		}
-	} else {
-		// loading the dollar variable into the expression stack
+
+		// check whether we have suffix experssion
+		switch p.l.token {
+		case tkDot, tkLSqr, tkColon:
+			break
+
+		default:
+			return nil
+		}
+		break
+
+	case tkDollar:
+		p.l.next()
 		prog.emit0(bcLoadDollar)
+		break
+
+	default:
+		gname := p.l.valueText
+
+		// session symbol table
+		idx := p.findSessionIdx(gname)
+		if idx == -1 {
+			return p.err(fmt.Sprintf("global variable %s is unknown", gname))
+		}
+		prog.emit1(bcLoadSession, idx)
+		p.l.next()
+		break
 	}
-	return p.parseSuffix(prog)
+
+  return nil
 }
 
 // list literal

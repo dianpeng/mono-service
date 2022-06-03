@@ -158,7 +158,7 @@ func (b *bodySignSession) getParam(req *http.Request, p hrouter.Params) (string,
 
 func (b *bodySignSession) Start(r service.SessionResource) error {
 	b.res = r
-	return b.hpl.OnGlobal(b)
+	return b.hpl.OnSession(b)
 }
 
 func (b *bodySignSession) Done() {

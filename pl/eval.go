@@ -5,420 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"regexp"
 )
-
-// sum type of the evaluator
-const (
-	ValInt = iota
-	ValReal
-	ValStr
-	ValBool
-	ValNull
-	ValPair
-	ValList
-	ValMap
-	ValRegexp
-
-	// special one, cannot be interpreted unless user allows us to do so
-	ValUsr
-)
-
-type UValIndex func(interface{}, Val) (Val, error)
-type UValDot func(interface{}, string) (Val, error)
-type UValToString func(interface{}) (string, error)
-type UValToJSON func(interface{}) (string, error)
-
-// returns an unique id to represent the type of the user defined type
-type UValId func(interface{}) string
-
-type UVal struct {
-	Context    interface{}
-	IndexFn    UValIndex
-	DotFn      UValDot
-	ToStringFn UValToString
-	ToJSONFn   UValToJSON
-	IdFn       UValId
-}
-
-type List struct {
-	Data []Val
-}
-
-func NewList() *List {
-	return &List{
-		Data: make([]Val, 0, 0),
-	}
-}
-
-type Map struct {
-	Data map[string]Val
-}
-
-func NewMap() *Map {
-	return &Map{
-		Data: make(map[string]Val),
-	}
-}
-
-type Pair struct {
-	First  Val
-	Second Val
-}
-
-type Val struct {
-	Type   int
-	Int    int64
-	Real   float64
-	Bool   bool
-	String string
-	Regexp *regexp.Regexp
-	Pair   *Pair
-	List   *List
-	Map    *Map
-	Usr    *UVal
-}
-
-func NewValNull() Val {
-	return Val{
-		Type: ValNull,
-	}
-}
-
-func NewValInt64(i int64) Val {
-	return Val{
-		Type: ValInt,
-		Int:  i,
-	}
-}
-
-func NewValInt(i int) Val {
-	return Val{
-		Type: ValInt,
-		Int:  int64(i),
-	}
-}
-
-func NewValStr(s string) Val {
-	return Val{
-		Type:   ValStr,
-		String: s,
-	}
-}
-
-func NewValReal(d float64) Val {
-	return Val{
-		Type: ValReal,
-		Real: d,
-	}
-}
-
-func NewValBool(b bool) Val {
-	return Val{
-		Type: ValBool,
-		Bool: b,
-	}
-}
-
-func NewValPair(f Val, s Val) Val {
-	return Val{
-		Type: ValPair,
-		Pair: &Pair{
-			First:  f,
-			Second: s,
-		},
-	}
-}
-
-func NewValRegexp(r *regexp.Regexp) Val {
-	return Val{
-		Type:   ValRegexp,
-		Regexp: r,
-	}
-}
-
-func NewValList() Val {
-	return Val{
-		Type: ValList,
-		List: NewList(),
-	}
-}
-
-func NewValMap() Val {
-	return Val{
-		Type: ValMap,
-		Map:  NewMap(),
-	}
-}
-
-func NewValUsr(
-	c interface{},
-	f0 UValIndex,
-	f1 UValDot,
-	f2 UValToString,
-	f3 UValToJSON,
-	f4 UValId) Val {
-	return Val{
-		Type: ValUsr,
-		Usr: &UVal{
-			Context:    c,
-			IndexFn:    f0,
-			DotFn:      f1,
-			ToStringFn: f2,
-			ToJSONFn:   f3,
-			IdFn:       f4,
-		},
-	}
-}
-
-func (v *Val) IsNumber() bool {
-	switch v.Type {
-	case ValInt, ValReal:
-		return true
-	default:
-		return false
-	}
-}
-
-func (v *Val) AddList(vv Val) {
-	must(v.Type == ValList, "AddList: must be list")
-	v.List.Data = append(v.List.Data, vv)
-}
-
-func (v *Val) AddMap(key string, val Val) {
-	must(v.Type == ValMap, "AddMap: must be map")
-	v.Map.Data[key] = val
-}
-
-// never failed
-func (v *Val) ToBoolean() bool {
-	switch v.Type {
-	case ValInt:
-		return v.Int != 0
-	case ValReal:
-		return v.Real != 0
-	case ValStr:
-		return len(v.String) != 0
-	case ValBool:
-		return v.Bool
-	case ValNull:
-		return true
-	case ValList:
-		return len(v.List.Data) != 0
-	case ValMap:
-		return len(v.Map.Data) != 0
-	default:
-		return false
-	}
-}
-
-// convert whatever hold in boxed value back to native go type to be used in
-// external go envronment. Notes, for user type we just do nothing for now,
-// ie just returns a string.
-func (v *Val) ToNative() interface{} {
-	switch v.Type {
-	case ValInt:
-		return v.Int
-	case ValReal:
-		return v.Real
-	case ValStr:
-		return v.String
-	case ValBool:
-		return v.Bool
-	case ValNull:
-		return nil
-	case ValList:
-		var x []interface{}
-		for _, xx := range v.List.Data {
-			x = append(x, xx.ToNative())
-		}
-		return x
-	case ValMap:
-		x := make(map[string]interface{})
-		for key, val := range v.Map.Data {
-			x[key] = val.ToNative()
-		}
-		return x
-	case ValPair:
-		return [2]interface{}{
-			v.Pair.First.ToNative(),
-			v.Pair.Second.ToNative(),
-		}
-	case ValRegexp:
-		return fmt.Sprintf("[Regexp: %s]", v.Regexp.String())
-
-	default:
-		return fmt.Sprintf("[User: %s]", v.Id())
-	}
-}
-
-func (v *Val) ToIndex() (int, error) {
-	switch v.Type {
-	case ValInt:
-		if v.Int >= 0 {
-			return int(v.Int), nil
-		}
-		return 0, fmt.Errorf("negative value cannot be index")
-
-	default:
-		return 0, fmt.Errorf("none integer type cannot be index")
-	}
-}
-
-func (v *Val) ToString() (string, error) {
-	switch v.Type {
-	case ValInt:
-		return fmt.Sprintf("%d", v.Int), nil
-	case ValReal:
-		return fmt.Sprintf("%f", v.Real), nil
-	case ValBool:
-		if v.Bool {
-			return "true", nil
-		} else {
-			return "false", nil
-		}
-	case ValNull:
-		return "", fmt.Errorf("cannot convert Null to string")
-	case ValStr:
-		return v.String, nil
-
-	case ValRegexp:
-		return v.Regexp.String(), nil
-
-	case ValList, ValMap, ValPair:
-		return "", fmt.Errorf("cannot convert List/Map/Pair to string")
-
-	default:
-		return v.Usr.ToStringFn(v.Usr.Context)
-	}
-	return "", nil
-}
-
-func (v *Val) Index(idx Val) (Val, error) {
-	switch v.Type {
-	case ValInt, ValReal, ValBool, ValNull:
-		return NewValNull(), fmt.Errorf("cannot index primitive type")
-
-	case ValRegexp:
-		return NewValNull(), fmt.Errorf("cannot index regexp")
-
-	case ValStr:
-		i, err := idx.ToIndex()
-		if err != nil {
-			return NewValNull(), err
-		}
-		if i >= len(v.String) {
-			return NewValNull(), fmt.Errorf("index out of range")
-		}
-		return NewValStr(v.String[i : i+1]), nil
-
-	case ValPair:
-		i, err := idx.ToIndex()
-		if err != nil {
-			return NewValNull(), err
-		}
-		if i == 0 {
-			return v.Pair.First, nil
-		}
-		if i == 1 {
-			return v.Pair.Second, nil
-		}
-
-		return NewValNull(), fmt.Errorf("invalid index, 0 or 1 is allowed on Pair")
-
-	case ValList:
-		i, err := idx.ToIndex()
-		if err != nil {
-			return NewValNull(), err
-		}
-		if i >= len(v.List.Data) {
-			return NewValNull(), fmt.Errorf("index out of range")
-		}
-		return v.List.Data[i], nil
-
-	case ValMap:
-		i, err := idx.ToString()
-		if err != nil {
-			return NewValNull(), err
-		}
-		if vv, ok := v.Map.Data[i]; !ok {
-			return NewValNull(), fmt.Errorf("%s key not found", i)
-		} else {
-			return vv, nil
-		}
-
-	default:
-		// User
-		return v.Usr.IndexFn(v.Usr.Context, idx)
-	}
-}
-
-func (v *Val) Dot(idx Val) (Val, error) {
-	switch v.Type {
-	case ValInt, ValReal, ValBool, ValNull, ValStr, ValList:
-		return NewValNull(), fmt.Errorf("cannot apply dot operator on none Map or User type")
-
-	case ValRegexp:
-		return NewValNull(), fmt.Errorf("cannot apply dot operator on regexp")
-
-	case ValMap:
-		i, err := idx.ToString()
-		if err != nil {
-			return NewValNull(), err
-		}
-		if vv, ok := v.Map.Data[i]; !ok {
-			return NewValNull(), fmt.Errorf("%s key not found", i)
-		} else {
-			return vv, nil
-		}
-
-	case ValPair:
-		i, err := idx.ToString()
-		if err != nil {
-			return NewValNull(), err
-		}
-		if i == "first" {
-			return v.Pair.First, nil
-		}
-		if i == "second" {
-			return v.Pair.Second, nil
-		}
-
-		return NewValNull(), fmt.Errorf("invalid field name, 'first'/'second' is allowed on Pair")
-
-	default:
-		i, err := idx.ToString()
-		if err != nil {
-			return NewValNull(), err
-		}
-		return v.Usr.DotFn(v.Usr.Context, i)
-	}
-}
-
-func (v *Val) Id() string {
-	switch v.Type {
-	case ValInt:
-		return "int"
-	case ValReal:
-		return "real"
-	case ValBool:
-		return "bool"
-	case ValNull:
-		return "null"
-	case ValStr:
-		return "str"
-	case ValList:
-		return "list"
-	case ValMap:
-		return "map"
-	case ValPair:
-		return "pair"
-	case ValRegexp:
-		return "regexp"
-	default:
-		return v.Usr.IdFn(v.Usr.Context)
-	}
-}
 
 type Policy struct {
 	// can be null
@@ -454,10 +41,10 @@ func CompilePolicy(policy string) (*Policy, error) {
 
 	var glb *program
 
-	// find out the global
+	// find out the session variable
 	if len(pp) > 0 {
 		p0 := pp[0]
-		if p0.name == "@global" {
+		if p0.name == "@session" {
 			glb = p0
 			pp = pp[1:]
 		}
@@ -476,7 +63,7 @@ type EvalAction func(*Evaluator, string, Val) error
 
 type Evaluator struct {
 	Stack     []Val
-	Global    []Val
+	Session   []Val
 	Local     []Val
 	LoadVarFn EvalLoadVar
 	CallFn    EvalCall
@@ -494,7 +81,7 @@ func NewEvaluator(
 
 	return &Evaluator{
 		Stack:     nil,
-		Global:    nil,
+		Session:   nil,
 		LoadVarFn: f0,
 		CallFn:    f1,
 		ActionFn:  f2,
@@ -1024,6 +611,27 @@ VM:
 				e.push(r)
 				break
 
+			case bcMCall:
+				paramSize := bc.argument
+				methodName := e.topN(paramSize)
+				must(methodName.Type == ValStr,
+					fmt.Sprintf("method name must be string but %s", methodName.Id()))
+
+				// prepare argument list slice
+				argStart := len(e.Stack) - paramSize
+				argEnd := len(e.Stack)
+				arg := e.Stack[argStart:argEnd]
+
+				recv := e.topN(paramSize + 1)
+				ret, err := recv.Method(methodName.String, arg)
+				if err != nil {
+					return err
+				}
+
+				e.popN(paramSize + 2)
+				e.push(ret)
+				break
+
 			case bcToStr:
 				top := e.top0()
 				str, err := top.ToString()
@@ -1106,26 +714,26 @@ VM:
 				e.push(NewValStr(data))
 				break
 
-			// globals
-			case bcSetGlobal:
+			// session
+			case bcSetSession:
 				ctx := e.top0()
 				e.pop()
-				e.Global = append(e.Global, ctx)
+				e.Session = append(e.Session, ctx)
 				break
 
-			case bcLoadGlobal:
-				if len(e.Global) <= bc.argument {
-					return fmt.Errorf("@global is not executed, or not initialized")
+			case bcLoadSession:
+				if len(e.Session) <= bc.argument {
+					return fmt.Errorf("@session is not executed, or not initialized")
 				} else {
-					e.push(e.Global[bc.argument])
+					e.push(e.Session[bc.argument])
 				}
 				break
 
-			case bcStoreGlobal:
-				if len(e.Global) <= bc.argument {
-					return fmt.Errorf("@global is not executed, or not initialized")
+			case bcStoreSession:
+				if len(e.Session) <= bc.argument {
+					return fmt.Errorf("@session is not executed, or not initialized")
 				} else {
-					e.Global[bc.argument] = e.top0()
+					e.Session[bc.argument] = e.top0()
 					e.pop()
 				}
 				break
@@ -1151,13 +759,13 @@ VM:
 	return nil
 }
 
-func (e *Evaluator) EvalGlobal(p *Policy) error {
+func (e *Evaluator) EvalSession(p *Policy) error {
 	if p.g == nil {
 		return nil
 	}
 	glb := []*program{p.g}
-	e.Global = nil
-	return e.doEval("@global", glb)
+	e.Session = nil
+	return e.doEval("@session", glb)
 }
 
 func (e *Evaluator) Eval(event string, p *Policy) error {

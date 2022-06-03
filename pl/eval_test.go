@@ -169,11 +169,11 @@ policy(
   act_null = null,
   act_list_empty = [],
   act_map_empty = {},
-  act_func = $abs(-1),
-  act_var = $a,
+  act_func = abs(-1),
+  act_var = a,
 
-  act_map1 = {'a': $a},
-  act_list1= [1, true, 3.0, $a, false, null, []]
+  act_map1 = {'a': a},
+  act_list1= [1, true, 3.0, a, false, null, []]
 
 );`)
 
@@ -284,7 +284,7 @@ policy(
   empty_list = [],
   list1 = [1],
   list2 = [1, true],
-  list3 = [1, $a, [1]],
+  list3 = [1, a, [1]],
   
   empty_map = {},
   map1 = {
@@ -432,7 +432,7 @@ func TestStrInterpo(t *testing.T) {
   let var2 = 'xxxx';
 
   v1 = "aa{{var1}}bb";
-  v2 = "aa{{var2}},{{$a}},{{$abs(-100)}}";
+  v2 = "aa{{var2}},{{a}},{{abs(-100)}}";
 }`)
 		if err != nil {
 			fmt.Printf(":policy %s", err.Error())
@@ -483,8 +483,8 @@ func TestLocal(t *testing.T) {
   let var2 = true;
   let var3 = false;
   let var4 = [1, 2, {'a': [10, 20]}, 3];
-  let var5 = $a;
-  let var6 = $abs(-100);
+  let var5 = a;
+  let var6 = abs(-100);
   v1 = var1;
   v2 = var2;
   v3 = var3;
@@ -1109,26 +1109,26 @@ func TestLogic1(t *testing.T) {
 	assert.True(testCond(
 		`
 test{
-  return = 11 || $not_existed()
+  return = 11 || not_existed()
 };
 `, true))
 	assert.True(testInt(
 		`
 test{
-  return = 11 || $not_existed()
+  return = 11 || not_existed()
 };
 `, 11))
 
 	assert.True(testCond(
 		`
 test{
-  return = false && $not_existed()
+  return = false && not_existed()
 };
 `, false))
 	assert.True(testBool(
 		`
 test{
-  return = false && $not_existed()
+  return = false && not_existed()
 };
 `, false))
 

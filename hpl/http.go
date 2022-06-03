@@ -102,31 +102,45 @@ func (h *HplHttpBody) ToJSON(_ interface{}) (string, error) {
 	return string(blob), nil
 }
 
+func (h *HplHttpBody) method(_ interface{}, name string, _ []pl.Val) (pl.Val, error) {
+	return pl.NewValNull(), fmt.Errorf("method: http.body:%s is unknown", name)
+}
+
+func (h *HplHttpBody) info(_ interface{}) string {
+	return "http.body"
+}
+
 func NewHplHttpBodyValFromStream(stream io.Reader) pl.Val {
 	x := HplHttpBodyFromStream(stream)
-	return pl.NewValUsr(
+	return pl.NewValUsrImmutable(
 		x,
 		x.Index,
 		x.Dot,
+		x.method,
 		x.ToString,
 		x.ToJSON,
 		func(_ interface{}) string {
 			return "http.body"
 		},
+		x.info,
+		nil,
 	)
 }
 
 func NewHplHttpBodyValFromString(data string) pl.Val {
 	x := HplHttpBodyFromString(data)
-	return pl.NewValUsr(
+	return pl.NewValUsrImmutable(
 		x,
 		x.Index,
 		x.Dot,
+		x.method,
 		x.ToString,
 		x.ToJSON,
 		func(_ interface{}) string {
 			return "http.body"
 		},
+		x.info,
+		nil,
 	)
 }
 
@@ -164,20 +178,32 @@ func (h *HplHttpHeader) ToJSON(_ interface{}) (string, error) {
 	return string(blob), nil
 }
 
+func (h *HplHttpHeader) method(_ interface{}, name string, _ []pl.Val) (pl.Val, error) {
+	return pl.NewValNull(), fmt.Errorf("method: http.header:%s is unknown", name)
+}
+
+func (h *HplHttpHeader) info(_ interface{}) string {
+	return "http.header"
+}
+
 func NewHplHttpHeaderVal(header http.Header) pl.Val {
 	x := &HplHttpHeader{
 		header: header,
 	}
 
-	return pl.NewValUsr(
+	return pl.NewValUsrImmutable(
 		x,
 		x.Index,
 		x.Dot,
+		x.method,
 		x.ToString,
 		x.ToJSON,
 		func(_ interface{}) string {
 			return "http.header"
-		})
+		},
+		x.info,
+		nil,
+	)
 }
 
 // * --------------------------------------------------------------------------
@@ -227,19 +253,31 @@ func (h *HplHttpUrl) ToJSON(_ interface{}) (string, error) {
 	return string(blob), nil
 }
 
+func (h *HplHttpUrl) method(_ interface{}, name string, _ []pl.Val) (pl.Val, error) {
+	return pl.NewValNull(), fmt.Errorf("method: http.url:%s is unknown", name)
+}
+
+func (h *HplHttpUrl) info(_ interface{}) string {
+	return "http.url"
+}
+
 func NewHplHttpUrlVal(url *url.URL) pl.Val {
 	x := &HplHttpUrl{
 		url: url,
 	}
-	return pl.NewValUsr(
+	return pl.NewValUsrImmutable(
 		&x,
 		x.Index,
 		x.Dot,
+		x.method,
 		x.ToString,
 		x.ToJSON,
 		func(_ interface{}) string {
 			return "http.url"
-		})
+		},
+		x.info,
+		nil,
+	)
 }
 
 // * --------------------------------------------------------------------------
@@ -378,6 +416,14 @@ func (h *HplHttpRequest) ToJSON(_ interface{}) (string, error) {
 	return string(blob), nil
 }
 
+func (h *HplHttpRequest) method(_ interface{}, name string, _ []pl.Val) (pl.Val, error) {
+	return pl.NewValNull(), fmt.Errorf("method: http.request:%s is unknown", name)
+}
+
+func (h *HplHttpRequest) info(_ interface{}) string {
+	return "http.request"
+}
+
 func NewHplHttpRequestVal(req *http.Request) pl.Val {
 	x := &HplHttpRequest{
 		request: req,
@@ -386,15 +432,19 @@ func NewHplHttpRequestVal(req *http.Request) pl.Val {
 		body:    NewHplHttpBodyValFromStream(req.Body),
 	}
 
-	return pl.NewValUsr(
+	return pl.NewValUsrImmutable(
 		x,
 		x.Index,
 		x.Dot,
+		x.method,
 		x.ToString,
 		x.ToJSON,
 		func(_ interface{}) string {
 			return "http.request"
-		})
+		},
+		x.info,
+		nil,
+	)
 }
 
 // * --------------------------------------------------------------------------
@@ -475,6 +525,14 @@ func (h *HplHttpResponse) ToJSON(_ interface{}) (string, error) {
 	return string(blob), nil
 }
 
+func (h *HplHttpResponse) method(_ interface{}, name string, _ []pl.Val) (pl.Val, error) {
+	return pl.NewValNull(), fmt.Errorf("method: http.response:%s is unknown", name)
+}
+
+func (h *HplHttpResponse) info(_ interface{}) string {
+	return "http.response"
+}
+
 func NewHplHttpResponseVal(response *http.Response) pl.Val {
 	var request pl.Val
 	if response.Request != nil {
@@ -490,15 +548,19 @@ func NewHplHttpResponseVal(response *http.Response) pl.Val {
 		body:     NewHplHttpBodyValFromStream(response.Body),
 	}
 
-	return pl.NewValUsr(
+	return pl.NewValUsrImmutable(
 		x,
 		x.Index,
 		x.Dot,
+		x.method,
 		x.ToString,
 		x.ToJSON,
 		func(_ interface{}) string {
 			return "http.request"
-		})
+		},
+		x.info,
+		nil,
+	)
 }
 
 // * --------------------------------------------------------------------------
@@ -533,17 +595,29 @@ func (h *HplHttpRouterParams) ToJSON(_ interface{}) (string, error) {
 	return string(blob), nil
 }
 
+func (h *HplHttpRouterParams) method(_ interface{}, name string, _ []pl.Val) (pl.Val, error) {
+	return pl.NewValNull(), fmt.Errorf("method: http.router.params:%s is unknown", name)
+}
+
+func (h *HplHttpRouterParams) info(_ interface{}) string {
+	return "http.router.params"
+}
+
 func NewHplHttpRouterParamsVal(r hrouter.Params) pl.Val {
 	x := &HplHttpRouterParams{
 		params: r,
 	}
-	return pl.NewValUsr(
+	return pl.NewValUsrImmutable(
 		x,
 		x.Index,
 		x.Dot,
+		x.method,
 		x.ToString,
 		x.ToJSON,
 		func(_ interface{}) string {
 			return "http.router.params"
-		})
+		},
+		x.info,
+		nil,
+	)
 }

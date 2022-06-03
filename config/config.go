@@ -34,7 +34,7 @@ type VHost struct {
 	ErrorBody     string        `yaml:"error_body"`
 	RejectStatus  int           `yaml:"reject_status"`
 	RejectBody    string        `yaml:"reject_body"`
-	ServiceList   []*Service    `yaml:"service_list"`
+	ServiceList   []*Service    `yaml:"service"`
 	Resource      VHostResource `yaml:"resource"`
 }
 

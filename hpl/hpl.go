@@ -395,7 +395,7 @@ func (h *Hpl) prepareActionCall(x *pl.Evaluator, actionName string, arg pl.Val) 
 	}
 }
 
-func (h *Hpl) OnGlobal(session service.Session) error {
+func (h *Hpl) OnSession(session service.Session) error {
 	if h.Policy == nil {
 		return fmt.Errorf("the Hpl engine does not have any policy binded")
 	}
@@ -419,7 +419,7 @@ func (h *Hpl) OnGlobal(session service.Session) error {
 		h.session = nil
 	}()
 
-	return h.Eval.EvalGlobal(h.Policy)
+	return h.Eval.EvalSession(h.Policy)
 }
 
 // -----------------------------------------------------------------------------

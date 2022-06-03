@@ -13,7 +13,7 @@ func fatal(xx string) {
 }
 
 func ErrorRequest(w http.ResponseWriter, e error) {
-	w.WriteHeader(404)
+	w.WriteHeader(500)
 	w.Write([]byte(fmt.Sprintf("HPL execution error: %s", e.Error())))
 }
 

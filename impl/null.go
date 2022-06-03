@@ -62,7 +62,7 @@ func (s *nullSession) Service() service.Service {
 
 func (s *nullSession) Start(r service.SessionResource) error {
 	s.r = r
-	return s.hpl.OnGlobal(s)
+	return s.hpl.OnSession(s)
 }
 
 func (s *nullSession) Done() {

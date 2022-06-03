@@ -114,7 +114,7 @@ policy1(
     'a' : 100,
     'b' : 200
   },
-  act_func = $xx(10, 20),
+  act_func = xx(10, 20),
   act_var = $.a.b[2].c
 );
 
@@ -151,11 +151,11 @@ policy_call(
 	{
 		p := newParser(`
 policy_call(
-  s1 = $a5,
-  s2 = $a5[1],
-  s3 = $a5.a[1],
-  s4 = $a5.a[2].a,
-  s5 = $a5[1][2][3]
+  s1 = a5,
+  s2 = a5[1],
+  s3 = a5.a[1],
+  s4 = a5.a[2].a,
+  s5 = a5[1][2][3]
 );
 `)
 
@@ -171,11 +171,11 @@ policy_call(
 	{
 		p := newParser(`
 policy_call(
-  call0 = $c(), 
-  call1 = $c1(10),
-  call2 = $c2(10, [], {}, 'aaaa', "Asdasdsa"),
-  call3 = $c3($c4(), $c5.a[1].c.d, $),
-  call4 = $c4($c10($c11(), 10)).a[1].cc
+  call0 = c(), 
+  call1 = c1(10),
+  call2 = c2(10, [], {}, 'aaaa', "Asdasdsa"),
+  call3 = c3(c4(), c5.a[1].c.d, $),
+  call4 = c4(c10(c11(), 10)).a[1].cc
 );
 `)
 
@@ -197,9 +197,9 @@ policy1(
   str2 = 'abcd',
   str3 = 'aabc{{$}}accc',
   str4 = 'abbccdd{{$.a.b.c}}accc',
-  str5 = 'aabbcccd{{$eval().a[1]}}',
-  str6 = '{{$eval($a, 10)}}',
-  str7 = '{{$eval($a, 10)}}xxxx'
+  str5 = 'aabbcccd{{eval().a[1]}}',
+  str6 = '{{eval(a, 10)}}',
+  str7 = '{{eval(a, 10)}}xxxx'
 );
 `)
 

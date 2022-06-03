@@ -5,7 +5,7 @@ vhost:
     write_timeout: 10
     max_header_size: 100000
 
-    service_list:
+    service:
       - name: "body_sign"
         tag: "a simple body_sign services"
         router: "/impl/body-sign/:op/:method"
@@ -16,12 +16,12 @@ vhost:
           // sign policy, used for handling signing result
           sign => {
             status = 200;
-            header_set = ("x-body-sign-final-result", $sign);
-            header_set = ("x-body-sign-method", $signMethod);
+            header_set = ("x-body-sign-final-result", sign);
+            header_set = ("x-body-sign-method", signMethod);
 
-            // notes, we need to use $reqBody, since the original body has been
+            // notes, we need to use reqBody, since the original body has been
             // consumed up
-            body = $reqBody;
+            body = reqBody;
           };
 
           // policy for handling verification result
@@ -30,26 +30,26 @@ vhost:
           reject => {
             status = 404;
             header_set  = [
-              ("x-body-sign-result", $sign),
-              ("x-body-sign-expect", $signExpect)
+              ("x-body-sign-result", sign),
+              ("x-body-sign-expect", signExpect)
             ];
 
-            // notes, we need to use $reqBody, since the original body has been
+            // notes, we need to use reqBody, since the original body has been
             // consumed up
-            body = $reqBody;
+            body = reqBody;
           };
 
           pass => {
             status = 202;
             header_set  = [
-              ("x-body-sign-result", $sign),
-              ("x-body-sign-expect", $signExpect)
+              ("x-body-sign-result", sign),
+              ("x-body-sign-expect", signExpect)
             ];
-            body = $reqBody;
+            body = reqBody;
           };
 
           log => {
-            $echo($logFormat);
+            $echo(logFormat);
           }
 
       - name: "null"
@@ -59,16 +59,16 @@ vhost:
           - "GET"
         max_session_size: 100
         policy: |
-          global {
+          session {
             a = 10;
             b = 20;
             c = 200 - 1 + 1;
           }
 
           response => {
-            let proxy_url = $request.header["x-proxy-url"];
-            let list_of_url = $split(proxy_url, ';');
-            body = $concate_http_body("--- this is header ---", proxy_url, "--- this is footer---");
+            let proxy_url = request.header["x-proxy-url"];
+            let list_of_url = split(proxy_url, ';');
+            body = 10:to_string();
             status = @c;
           }
 
@@ -83,11 +83,11 @@ vhost:
         max_session_size: 500
         policy: |
           response => {
-            let proxy_url = $request.header.x_proxy_url;
+            let proxy_url = request.header.x_proxy_url;
             let url = proxy_url == "" ? "https://tmall.com" : proxy_url;
-            let sub_resp = $http(url, "GET");
+            let sub_resp = http(url, "GET");
             body = if sub_resp.status == 200 {
-              "xxxx"
+              sub_resp.body;
             } else {
               "the response status code is {{sub_resp.status}} which is not 200";
             };
