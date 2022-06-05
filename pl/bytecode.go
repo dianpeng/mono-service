@@ -235,12 +235,12 @@ func (p *program) emit1(opcode int, argument int) {
 }
 
 func (p *program) popLast() bytecode {
-  must(len(p.bcList) > 0, "not empty")
-  sz := len(p.bcList)
-  last := p.bcList[sz-1]
-  // pop the last instruction
-  p.bcList = p.bcList[:sz-1]
-  return last
+	must(len(p.bcList) > 0, "not empty")
+	sz := len(p.bcList)
+	last := p.bcList[sz-1]
+	// pop the last instruction
+	p.bcList = p.bcList[:sz-1]
+	return last
 }
 
 // patching

@@ -33,9 +33,10 @@ const (
 	tkComma
 	tkAssign
 	tkColon
+	tkScope
 	tkSemicolon
 	tkQuest
-  tkSharp
+	tkSharp
 
 	// unary
 	tkNot
@@ -75,15 +76,15 @@ const (
 	tkSession
 	tkLet
 	tkWhen
-  tkImport
+	tkImport
 	tkIf
 	tkElif
 	tkElse
 	tkTry
-  tkReturn
-  tkContinue
-  tkBreak
-  tkNext
+	tkReturn
+	tkContinue
+	tkBreak
+	tkNext
 
 	// intrinsic keywords, used for special builtin functionalities
 	tkTemplate
@@ -151,12 +152,14 @@ func getTokenName(tk int) string {
 		return "=>"
 	case tkColon:
 		return ":"
+	case tkScope:
+		return "::"
 	case tkSemicolon:
 		return ";"
 	case tkQuest:
 		return "?"
-  case tkSharp:
-    return "#"
+	case tkSharp:
+		return "#"
 
 	case tkAdd:
 		return "+"
@@ -197,8 +200,8 @@ func getTokenName(tk int) string {
 		return "session"
 	case tkWhen:
 		return "when"
-  case tkImport:
-    return "import"
+	case tkImport:
+		return "import"
 	case tkTry:
 		return "try"
 	case tkIf:
@@ -208,14 +211,14 @@ func getTokenName(tk int) string {
 	case tkElse:
 		return "else"
 
-  case tkContinue:
-    return "continue"
-  case tkBreak:
-    return "break"
-  case tkNext:
-    return "next"
-  case tkReturn:
-    return "return"
+	case tkContinue:
+		return "continue"
+	case tkBreak:
+		return "break"
+	case tkNext:
+		return "next"
+	case tkReturn:
+		return "return"
 
 	case tkTemplate:
 		return "template"
@@ -540,9 +543,9 @@ func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 	case "when":
 		t.token = tkWhen
 		return tkWhen
-  case "import":
-    t.token = tkImport
-    return tkImport
+	case "import":
+		t.token = tkImport
+		return tkImport
 	case "try":
 		t.token = tkTry
 		return tkTry
@@ -555,20 +558,20 @@ func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 	case "else":
 		t.token = tkElse
 		return tkElse
-  case "continue":
-    t.token = tkContinue
-    return tkContinue
-  case "break":
-    t.token = tkBreak
-    return tkBreak
-  case "next":
-    t.token = tkNext
-    return tkNext
-  case "return":
-    t.token = tkReturn
-    return tkReturn
+	case "continue":
+		t.token = tkContinue
+		return tkContinue
+	case "break":
+		t.token = tkBreak
+		return tkBreak
+	case "next":
+		t.token = tkNext
+		return tkNext
+	case "return":
+		t.token = tkReturn
+		return tkReturn
 
-  // intrinsic
+		// intrinsic
 	case "template":
 		t.token = tkTemplate
 		return tkTemplate
@@ -593,18 +596,18 @@ func (t *lexer) scanComment() {
 }
 
 func (t *lexer) scanCommentBlock() bool {
-  for ; t.cursor < len(t.input); t.cursor++ {
-    c := t.input[t.cursor]
-    if c == '*' && ((t.cursor + 1) < len(t.input)) {
-      nc := t.input[t.cursor+1]
-      if nc == '/' {
-        t.cursor += 2
-        return true
-      }
-    }
-  }
-  t.err("block comment must be closed by */")
-  return false
+	for ; t.cursor < len(t.input); t.cursor++ {
+		c := t.input[t.cursor]
+		if c == '*' && ((t.cursor + 1) < len(t.input)) {
+			nc := t.input[t.cursor+1]
+			if nc == '/' {
+				t.cursor += 2
+				return true
+			}
+		}
+	}
+	t.err("block comment must be closed by */")
+	return false
 }
 
 func (t *lexer) p2(t0, t1 int, lh rune) int {
@@ -722,13 +725,13 @@ func (t *lexer) next() int {
 					t.scanComment()
 					continue
 				} else if nc == '*' {
-          t.cursor += 2
-          if !t.scanCommentBlock() {
-            return t.token
-          } else {
-            continue
-          }
-        }
+					t.cursor += 2
+					if !t.scanCommentBlock() {
+						return t.token
+					} else {
+						continue
+					}
+				}
 			}
 			return t.yield(tkDiv, 1)
 
@@ -777,12 +780,12 @@ func (t *lexer) next() int {
 			return t.yield(tkDollar, 1)
 		case '?':
 			return t.yield(tkQuest, 1)
-    case '#':
-      return t.yield(tkSharp, 1)
+		case '#':
+			return t.yield(tkSharp, 1)
 		case ';':
 			return t.yield(tkSemicolon, 1)
 		case ':':
-			return t.yield(tkColon, 1)
+			return t.p2(tkColon, tkScope, ':')
 		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 			return t.scanNum()
 		case '"', '\'':

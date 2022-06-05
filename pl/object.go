@@ -3,6 +3,7 @@ package pl
 import (
 	"fmt"
 	"math"
+	"reflect"
 	"regexp"
 	"strings"
 )
@@ -88,6 +89,12 @@ func NewMap() *Map {
 type Pair struct {
 	First  Val
 	Second Val
+}
+
+// used for bridging between reflect and pl.Pair
+type ValuePair struct {
+	First  reflect.Value
+	Second reflect.Value
 }
 
 type Val struct {
@@ -811,6 +818,81 @@ func (v *Val) Id() string {
 	case ValRegexp:
 		return "regexp"
 	default:
-		return v.Usr.IdFn(v.Usr.Context)
+		if v.Usr.IdFn != nil {
+			return v.Usr.IdFn(v.Usr.Context)
+		} else {
+			return "user"
+		}
+	}
+}
+
+func (v *Val) Info() string {
+	switch v.Type {
+	case ValInt:
+		return fmt.Sprintf("[int: %d]", v.Int)
+	case ValReal:
+		return fmt.Sprintf("[real: %f]", v.Real)
+	case ValBool:
+		if v.Bool {
+			return "[bool: true]"
+		} else {
+			return "[bool: false]"
+		}
+	case ValNull:
+		return "[null]"
+	case ValStr:
+		return fmt.Sprintf("[string: %s]", v.String)
+	case ValList:
+		return fmt.Sprintf("[list: %d]", len(v.List.Data))
+	case ValMap:
+		return fmt.Sprintf("[map: %d]", len(v.Map.Data))
+	case ValPair:
+		return fmt.Sprintf("[pair: %s=>%s]", v.Pair.First.Info(), v.Pair.Second.Info())
+	case ValRegexp:
+		return fmt.Sprintf("[regexp: %s]", v.Regexp.String())
+	default:
+		if v.Usr.InfoFn != nil {
+			return v.Usr.InfoFn(v.Usr.Context)
+		} else {
+			return fmt.Sprintf("[user: %s]", v.Id())
+		}
+	}
+}
+
+// bridge between script Val and go.Reflect.Value
+func (v *Val) ToReflect() reflect.Value {
+	switch v.Type {
+	case ValInt:
+		return reflect.ValueOf(v.Int)
+	case ValReal:
+		return reflect.ValueOf(v.Real)
+	case ValBool:
+		return reflect.ValueOf(v.Bool)
+	case ValStr:
+		return reflect.ValueOf(v.String)
+	case ValNull:
+		return reflect.ValueOf(nil)
+	case ValList:
+		// list will be converted into a slice of value
+		var l []reflect.Value
+		for _, e := range v.List.Data {
+			l = append(l, e.ToReflect())
+		}
+		return reflect.ValueOf(l)
+	case ValMap:
+		m := make(map[string]reflect.Value)
+		for key, val := range v.Map.Data {
+			m[key] = val.ToReflect()
+		}
+		return reflect.ValueOf(m)
+	case ValPair:
+		return reflect.ValueOf(ValuePair{
+			First:  v.Pair.First.ToReflect(),
+			Second: v.Pair.Second.ToReflect(),
+		})
+	case ValRegexp:
+		return reflect.ValueOf(v.Regexp)
+	default:
+		return reflect.ValueOf(v.Usr.Context)
 	}
 }

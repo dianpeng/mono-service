@@ -315,15 +315,15 @@ func (p *parser) parseBasicStmt(prog *program) error {
 	switch p.l.token {
 	case tkArrow:
 
-    p.l.next()
-    if err := p.parseExpr(prog); err != nil {
-      return err
-    }
+		p.l.next()
+		if err := p.parseExpr(prog); err != nil {
+			return err
+		}
 		if lexeme.token != tkId {
 			return p.err("action rule's lhs must be an identifier")
 		}
 		prog.emit1(bcAction, prog.addStr(lexeme.sval))
-    return nil
+		return nil
 
 	case tkAssign:
 		switch lexeme.token {
@@ -345,7 +345,7 @@ func (p *parser) parseBasicStmt(prog *program) error {
 				prog.emit1(bcStoreVar, prog.addStr(lexeme.sval))
 				break
 			}
-      break
+			break
 
 		case tkGId:
 			p.l.next()
@@ -359,63 +359,63 @@ func (p *parser) parseBasicStmt(prog *program) error {
 				return p.err(fmt.Sprintf("session variable %s is not existed", lexeme.sval))
 			}
 			prog.emit1(bcStoreSession, sessVar)
-      break
+			break
 
 		default:
 			return p.err("assignment's lhs must be identifier or a session identifier")
 		}
-    return nil
+		return nil
 
 	default:
 		break
 	}
 
-  // now try to generate the previous saved lexeme and it could be anything
+	// now try to generate the previous saved lexeme and it could be anything
 	if err := p.parsePrimary(prog, lexeme); err != nil {
 		return err
 	}
 
-  // then try to parse any suffix expression if applicable
-  var st int
-  if err := p.parseSuffixImpl(prog, &st); err != nil {
-    return err
-  }
+	// then try to parse any suffix expression if applicable
+	var st int
+	if err := p.parseSuffixImpl(prog, &st); err != nil {
+		return err
+	}
 
-  // handle the dangling assignment if needed. The assignment operation is been
-  // handled by parser via patching the last bytecode been emitted
-  if p.l.token == tkAssign {
-    p.l.next()
+	// handle the dangling assignment if needed. The assignment operation is been
+	// handled by parser via patching the last bytecode been emitted
+	if p.l.token == tkAssign {
+		p.l.next()
 
-    // generate assignment
-    switch st {
-    case suffixDot:
-      lastIns := prog.popLast()
-      must(lastIns.opcode == bcDot, "must be dot")
+		// generate assignment
+		switch st {
+		case suffixDot:
+			lastIns := prog.popLast()
+			must(lastIns.opcode == bcDot, "must be dot")
 
-      if err := p.parseExpr(prog); err != nil {
-        return err
-      }
+			if err := p.parseExpr(prog); err != nil {
+				return err
+			}
 
-      prog.emit1(bcDotSet, lastIns.argument)
-      break
+			prog.emit1(bcDotSet, lastIns.argument)
+			break
 
-    case suffixIndex:
-      lastIns := prog.popLast()
-      must(lastIns.opcode == bcDot, "must be index")
+		case suffixIndex:
+			lastIns := prog.popLast()
+			must(lastIns.opcode == bcDot, "must be index")
 
-      if err := p.parseExpr(prog); err != nil {
-        return err
-      }
-      prog.emit0(bcIndexSet)
-      break
+			if err := p.parseExpr(prog); err != nil {
+				return err
+			}
+			prog.emit0(bcIndexSet)
+			break
 
-    default:
-      return p.err("invalid assignment expression, the component assignment " +
-                   "can only apply to [] or '.' operators")
-    }
-  }
+		default:
+			return p.err("invalid assignment expression, the component assignment " +
+				"can only apply to [] or '.' operators")
+		}
+	}
 
-  return nil
+	return nil
 }
 
 func (p *parser) parseStmt(name string, prog *program) error {
@@ -463,10 +463,10 @@ func (p *parser) parseStmt(name string, prog *program) error {
 				break
 
 			default:
-        if err := p.parseBasicStmt(prog); err != nil {
-          return err
-        }
-        break
+				if err := p.parseBasicStmt(prog); err != nil {
+					return err
+				}
+				break
 			}
 
 			if p.l.token == tkComma || p.l.token == tkSemicolon {
@@ -632,9 +632,9 @@ func (p *parser) parseTernary(prog *program) error {
 			return err
 		}
 
-    // notes we need to use comma instead of colon, since clone is already used
-    // as method call, otherwise the parser has ambigiuty which needs extra
-    // rules to resolve
+		// notes we need to use comma instead of colon, since clone is already used
+		// as method call, otherwise the parser has ambigiuty which needs extra
+		// rules to resolve
 		if !p.l.expectCurrent(tkColon) {
 			return p.l.toError()
 		}
@@ -904,8 +904,8 @@ func (p *parser) parsePrimary(prog *program, l lexeme) error {
 }
 
 func (p *parser) parseAtomic(prog *program) error {
-  l := p.lexeme()
-  p.l.next()
+	l := p.lexeme()
+	p.l.next()
 	if err := p.parsePrimary(prog, l); err != nil {
 		return err
 	}
@@ -1064,14 +1064,30 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 
 	switch tk {
 	case tkId:
-		// identifier name
-
-		// check whether we have a native function call, ie global function call
-		if p.l.token == tkLPar {
+		// identifier leading types
+		switch p.l.token {
+		case tkLPar:
 			if err := p.parseNCall(prog, name); err != nil {
 				return err
 			}
-		} else {
+			break
+
+		case tkScope:
+			// module call, mod::function_name(....)
+			modName := name
+			if !p.l.expect(tkId) {
+				return p.l.toError()
+			}
+			funcName := p.l.valueText
+			if !p.l.expect(tkLPar) {
+				return p.l.toError()
+			}
+			if err := p.parseNCall(prog, modFuncName(modName, funcName)); err != nil {
+				return err
+			}
+			break
+
+		default:
 			// Resolve the identifier here, notes the symbol can be following types
 			// 1. session variable
 			// 2. local variable
@@ -1090,6 +1106,7 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 				prog.emit1(bcLoadVar, prog.addStr(name))
 				break
 			}
+			break
 		}
 
 		// check whether we have suffix experssion
@@ -1107,7 +1124,9 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 		break
 
 	default:
-    gname := name
+		must(tk == tkGId, "must be GId")
+
+		gname := name
 
 		// session symbol table
 		idx := p.findSessionIdx(gname)

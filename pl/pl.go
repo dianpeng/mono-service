@@ -9,3 +9,8 @@ func must(cond bool, msg string) {
 }
 
 func unreachable(msg string) { panic(fmt.Sprintf("unreachable: %s", msg)) }
+
+// module function name
+func modFuncName(m string, f string) string {
+	return fmt.Sprintf("%s$%s", m, f)
+}
