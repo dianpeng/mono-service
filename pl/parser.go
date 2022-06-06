@@ -945,17 +945,8 @@ func (p *parser) parsePairOrSubexpr(prog *program) error {
 	}
 }
 
-func (p *parser) parseCall(prog *program, name string, bc int) error {
+func (p *parser) parseCallArgs(prog *program) (int, error) {
 	must(p.l.token == tkLPar, "expect '(' for function call")
-
-	// function invocation ----------------------------------------------------
-	// the calling convention is as following, we push function name into the
-	// stack at the top of the stack and then we push all the function argument
-	// on to the stack. Lastly a call instruction is emitted with argument size
-	{
-		idx := prog.addStr(name)
-		prog.emit1(bcLoadStr, idx)
-	}
 
 	p.l.next()
 
@@ -964,7 +955,7 @@ func (p *parser) parseCall(prog *program, name string, bc int) error {
 	if p.l.token != tkRPar {
 		for {
 			if err := p.parseExpr(prog); err != nil {
-				return nil
+				return -1, nil
 			}
 			pcnt++
 			if p.l.token == tkComma {
@@ -972,18 +963,49 @@ func (p *parser) parseCall(prog *program, name string, bc int) error {
 			} else if p.l.token == tkRPar {
 				break
 			} else {
-				return p.err("invalid token, expect ',' or ')' in function argument list")
+				return -1, p.err("invalid token, expect ',' or ')' in function argument list")
 			}
 		}
 	}
-
 	p.l.next()
+	return pcnt, nil
+}
+
+func (p *parser) parseCall(prog *program, name string, bc int) error {
+	{
+		idx := prog.addStr(name)
+		prog.emit1(bcLoadStr, idx)
+	}
+
+	pcnt, err := p.parseCallArgs(prog)
+	if err != nil {
+		return err
+	}
 	prog.emit1(bc, pcnt)
 	return nil
 }
 
+func (p *parser) parseICall(prog *program, index int) error {
+	{
+		idx := prog.addInt(int64(index))
+		prog.emit1(bcLoadInt, idx)
+	}
+
+	pcnt, err := p.parseCallArgs(prog)
+	if err != nil {
+		return err
+	}
+	prog.emit1(bcICall, pcnt)
+	return nil
+}
+
 func (p *parser) parseNCall(prog *program, name string) error {
-	return p.parseCall(prog, name, bcCall)
+	intrinsicIdx := indexIntrinsic(name)
+	if intrinsicIdx != -1 {
+		return p.parseICall(prog, intrinsicIdx)
+	} else {
+		return p.parseCall(prog, name, bcCall)
+	}
 }
 
 func (p *parser) parseMCall(prog *program, name string) error {

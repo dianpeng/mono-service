@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"time"
 )
 
 type actionOutput map[string]Val
@@ -558,6 +559,25 @@ func test(code string) (Val, bool) {
 		return NewValNull(), false
 	}
 	return *ret, true
+}
+
+func testInt64(code string, expect int64) bool {
+	val, ok := test(code)
+	if !ok {
+		return false
+	}
+
+	if val.Type != ValInt {
+		fmt.Printf(":return invalid type %s\n", val.Id())
+		return false
+	}
+
+	if val.Int != expect {
+		fmt.Printf(":return invalid value %d\n", val.Int)
+		return false
+	}
+
+	return true
 }
 
 func testInt(code string, expect int) bool {
@@ -1300,6 +1320,18 @@ test{
 };
 `, false))
 
+}
+
+func TestICall(t *testing.T) {
+	assert := assert.New(t)
+	now := time.Now().Unix()
+
+	assert.True(testInt64(
+		`
+test{
+  output => time::unix();
+};
+`, now))
 }
 
 func TestTemplate(t *testing.T) {

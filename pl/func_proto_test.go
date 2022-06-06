@@ -62,7 +62,7 @@ func TestParse0(t *testing.T) {
 		assert.False(a.d[0].varlen)
 		assert.True(len(a.d[0].d) == 1)
 		assert.True(len(a.d[0].d[0].or) == 1)
-		assert.True(a.d[0].d[0].or[0].opcode == t)
+		assert.True(a.d[0].d[0].or[0].opcode == opc(t))
 		assert.True(a.d[0].d[0].or[0].tname == n)
 	}
 
@@ -171,7 +171,7 @@ func TestParse1(t *testing.T) {
 		assert.True(a.d[0].varlen == varlen)
 		assert.True(len(a.d[0].d) == 1)
 		assert.True(len(a.d[0].d[0].or) == 1)
-		assert.True(a.d[0].d[0].or[0].opcode == t)
+		assert.True(a.d[0].d[0].or[0].opcode == opc(t))
 		assert.True(a.d[0].d[0].or[0].tname == n)
 	}
 

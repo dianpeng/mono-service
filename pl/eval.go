@@ -611,6 +611,30 @@ VM:
 				e.push(r)
 				break
 
+			case bcICall:
+				paramSize := bc.argument
+
+				// prepare argument list slice
+				argStart := len(e.Stack) - paramSize
+				argEnd := len(e.Stack)
+				arg := e.Stack[argStart:argEnd]
+
+				funcIndex := e.topN(paramSize)
+				must(funcIndex.Type == ValInt,
+					fmt.Sprintf("function indext must be indext but %s", funcIndex.Id()))
+
+				must(funcIndex.Int >= 0,
+					fmt.Sprintf("function index must be none negative"))
+
+				fentry := intrinsicFunc[funcIndex.Int]
+				r, err := fentry.entry(e, "$intrinsic$", arg)
+				if err != nil {
+					return err
+				}
+				e.popN(paramSize + 1)
+				e.push(r)
+				break
+
 			case bcMCall:
 				paramSize := bc.argument
 				methodName := e.topN(paramSize)

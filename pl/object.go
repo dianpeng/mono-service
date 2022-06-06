@@ -3,10 +3,14 @@ package pl
 import (
 	"fmt"
 	"math"
-	"reflect"
 	"regexp"
 	"strings"
 )
+
+// sadly go does not have a good sumtype, or at least does not expose it as
+// builtin types except using interface{}. Currently our implementation is
+// really bad but simple to use, at the cost of memory overhead. We will revisit
+// it when we have time
 
 const (
 	ValInt = iota
@@ -18,8 +22,6 @@ const (
 	ValList
 	ValMap
 	ValRegexp
-
-	// special one, cannot be interpreted unless user allows us to do so
 	ValUsr
 )
 
@@ -89,12 +91,6 @@ func NewMap() *Map {
 type Pair struct {
 	First  Val
 	Second Val
-}
-
-// used for bridging between reflect and pl.Pair
-type ValuePair struct {
-	First  reflect.Value
-	Second reflect.Value
 }
 
 type Val struct {
@@ -189,6 +185,22 @@ func NewValMap() Val {
 		Type: ValMap,
 		Map:  NewMap(),
 	}
+}
+
+func NewValStrList(s []string) Val {
+	r := NewValList()
+	for _, vv := range s {
+		r.AddList(NewValStr(vv))
+	}
+	return r
+}
+
+func NewValIntList(s []int) Val {
+	r := NewValList()
+	for _, vv := range s {
+		r.AddList(NewValInt(vv))
+	}
+	return r
 }
 
 func NewValUsr(
@@ -856,43 +868,5 @@ func (v *Val) Info() string {
 		} else {
 			return fmt.Sprintf("[user: %s]", v.Id())
 		}
-	}
-}
-
-// bridge between script Val and go.Reflect.Value
-func (v *Val) ToReflect() reflect.Value {
-	switch v.Type {
-	case ValInt:
-		return reflect.ValueOf(v.Int)
-	case ValReal:
-		return reflect.ValueOf(v.Real)
-	case ValBool:
-		return reflect.ValueOf(v.Bool)
-	case ValStr:
-		return reflect.ValueOf(v.String)
-	case ValNull:
-		return reflect.ValueOf(nil)
-	case ValList:
-		// list will be converted into a slice of value
-		var l []reflect.Value
-		for _, e := range v.List.Data {
-			l = append(l, e.ToReflect())
-		}
-		return reflect.ValueOf(l)
-	case ValMap:
-		m := make(map[string]reflect.Value)
-		for key, val := range v.Map.Data {
-			m[key] = val.ToReflect()
-		}
-		return reflect.ValueOf(m)
-	case ValPair:
-		return reflect.ValueOf(ValuePair{
-			First:  v.Pair.First.ToReflect(),
-			Second: v.Pair.Second.ToReflect(),
-		})
-	case ValRegexp:
-		return reflect.ValueOf(v.Regexp)
-	default:
-		return reflect.ValueOf(v.Usr.Context)
 	}
 }

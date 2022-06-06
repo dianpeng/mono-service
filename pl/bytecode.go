@@ -89,6 +89,7 @@ const (
 	// call
 	bcCall  = 81
 	bcMCall = 82
+	bcICall = 83
 
 	// special functions
 	// render template
@@ -293,6 +294,7 @@ func (p *program) dump() string {
 		case bcAddList,
 			bcAddMap,
 			bcCall,
+			bcICall,
 			bcMCall,
 			bcConStr,
 			bcLoadLocal,
@@ -342,6 +344,8 @@ func getBytecodeName(bc int) string {
 		return "new-pair"
 	case bcCall:
 		return "call"
+	case bcICall:
+		return "icall"
 	case bcMCall:
 		return "mcall"
 	case bcToStr:

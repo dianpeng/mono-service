@@ -90,6 +90,58 @@ const (
 	PNone
 )
 
+func mapToObjType(ptype int) int {
+	switch ptype {
+	case PInt, PI8, PI16, PI32, PI64, PUInt, PUI8, PUI16, PUI32, PUI64:
+		return ValInt
+	case PReal, PR32, PR64, PUReal, PUR32, PUR64:
+		return ValReal
+	case PString, PNEString:
+		return ValStr
+	case PBool, PTrue, PFalse:
+		return ValBool
+	case PNull:
+		return ValNull
+	case PMap:
+		return ValMap
+	case PList:
+		return ValList
+	case PPair:
+		return ValPair
+	case PRegexp:
+		return ValRegexp
+	case PUsr:
+		return ValUsr
+	default:
+		return -1
+	}
+}
+
+func mapFromObjType(otype int) opc {
+	switch otype {
+	case ValInt:
+		return opc(PInt)
+	case ValReal:
+		return opc(PReal)
+	case ValStr:
+		return opc(PString)
+	case ValBool:
+		return opc(PBool)
+	case ValNull:
+		return opc(PNull)
+	case ValPair:
+		return opc(PPair)
+	case ValList:
+		return opc(PList)
+	case ValMap:
+		return opc(PMap)
+	case ValRegexp:
+		return opc(PRegexp)
+	default:
+		return opc(PUsr)
+	}
+}
+
 type opc int
 
 func (o *opc) isInt() bool {
@@ -319,7 +371,7 @@ func (f *FuncProto) compT(rList []rune, cursor int, vlen *bool) (int, protoelem,
 	var tname string
 
 	switch nc {
-	case 'd':
+	case 'd', 'i':
 		opcode = PInt
 		break
 	case 'u':
@@ -575,7 +627,16 @@ func (f *FuncProto) compile(d string) error {
 	return nil
 }
 
-func (f *FuncProto) check0(exp protoelem, got Val) bool {
+type convoneval func(Val, opc)
+type convsliceval func(*reflect.Value)
+
+func (f *FuncProto) check0(exp protoelem, got Val, c convoneval) (the_return bool) {
+	defer func() {
+		if c != nil && the_return {
+			c(got, exp.opcode)
+		}
+	}()
+
 	if exp.opcode == PAny {
 		return true
 	}
@@ -658,9 +719,9 @@ func (f *FuncProto) check0(exp protoelem, got Val) bool {
 	return false
 }
 
-func (f *FuncProto) check1(index int, exp *argp, got Val) error {
+func (f *FuncProto) check1(index int, exp *argp, got Val, conv convoneval) error {
 	for _, c := range exp.or {
-		if f.check0(c, got) {
+		if f.check0(c, got, conv) {
 			return nil
 		}
 	}
@@ -670,24 +731,61 @@ func (f *FuncProto) check1(index int, exp *argp, got Val) error {
 		index+1, got.Info(), exp.str())
 }
 
-func (f *FuncProto) doCheck(d *argpcase, args []Val) (int, error) {
+func (f *FuncProto) doCheck(d *argpcase, args []Val, conv convsliceval) (int, error) {
 	alen := len(args)
 	elen := len(d.d)
 
 	if alen < elen {
-		prefix := ""
-		if d.varlen {
-			prefix = " at least "
+		if d.varlen && alen == elen-1 {
+			// this is the special case, ie
+			// %s%a* allows at least 1 argument to represent the first string, and
+			// the second %a is an optional, ie we can have zero optional arguments
+			// example like format function
+		} else {
+			prefix := ""
+			if d.varlen {
+				prefix = " at least "
+			}
+			return alen, fmt.Errorf("function(method) call: %s expects%s%d arguments, "+
+				"but got %d arguments", f.Name, prefix, elen, alen)
 		}
-		return alen, fmt.Errorf("function(method) call: %s expects%s%d arguments, "+
-			"but got %d arguments", f.Name, prefix, elen, alen)
 	}
 
 	// checking variable type one by one
-	for idx, a := range d.d {
-		arg := args[idx]
-		if err := f.check1(idx, &a, arg); err != nil {
-			return alen, err
+	if conv != nil {
+		for idx, a := range d.d {
+			if idx == alen {
+				break
+			}
+
+			arg := args[idx]
+			var out *reflect.Value
+			outp := &out
+
+			if err := f.check1(idx, &a, arg, func(v Val, t opc) {
+				*outp = f.pack(v, t)
+			}); err != nil {
+				return alen, err
+			}
+
+			if out == nil {
+				return alen, fmt.Errorf("function(method) call: %s, %dth argument "+
+					"is invalid during reflection conversion",
+					f.Name, idx)
+			} else {
+				conv(out)
+			}
+		}
+	} else {
+		for idx, a := range d.d {
+			if idx == alen {
+				break
+			}
+
+			arg := args[idx]
+			if err := f.check1(idx, &a, arg, nil); err != nil {
+				return alen, err
+			}
 		}
 	}
 
@@ -698,9 +796,31 @@ func (f *FuncProto) doCheck(d *argpcase, args []Val) (int, error) {
 				"but got %d", f.Name, elen, alen)
 		}
 		danglingE := &d.d[elen-1]
-		for i := elen; i < alen; i++ {
-			if err := f.check1(i, danglingE, args[i]); err != nil {
-				return alen, err
+
+		if conv != nil {
+			for i := elen; i < alen; i++ {
+				var out *reflect.Value
+				outp := &out
+
+				if err := f.check1(i, danglingE, args[i], func(v Val, t opc) {
+					*outp = f.pack(v, t)
+				}); err != nil {
+					return alen, err
+				}
+
+				if out == nil {
+					return alen, fmt.Errorf("function(method) call: %s, %dth argument "+
+						"is invalid during reflection conversion",
+						f.Name, i+1)
+				} else {
+					conv(out)
+				}
+			}
+		} else {
+			for i := elen; i < alen; i++ {
+				if err := f.check1(i, danglingE, args[i], nil); err != nil {
+					return alen, err
+				}
 			}
 		}
 	}
@@ -729,7 +849,7 @@ func (f *FuncProto) Check(args []Val) (int, error) {
 	for _, c := range f.d {
 		sz := len(c.d)
 		if sz == alen || (sz < alen && c.varlen) {
-			_, err = f.doCheck(c, args)
+			_, err = f.doCheck(c, args, nil)
 			if err == nil {
 				found = true
 				break
@@ -745,8 +865,142 @@ func (f *FuncProto) Check(args []Val) (int, error) {
 	}
 }
 
+// return nil when we cannot convert Val into reflect.Value (ie not supported)
+func (f *FuncProto) pack(v Val, t opc) *reflect.Value {
+	var rv reflect.Value
+	switch int(t) {
+	case PInt:
+		rv = reflect.ValueOf(int(v.Int))
+		break
+
+	case PI8:
+		rv = reflect.ValueOf(int8(v.Int))
+		break
+
+	case PI16:
+		rv = reflect.ValueOf(int16(v.Int))
+		break
+
+	case PI32:
+		rv = reflect.ValueOf(int32(v.Int))
+		break
+
+	case PI64:
+		rv = reflect.ValueOf(int64(v.Int))
+		break
+
+	case PUInt:
+		rv = reflect.ValueOf(uint(v.Int))
+		break
+
+	case PUI8:
+		rv = reflect.ValueOf(uint8(v.Int))
+		break
+
+	case PUI16:
+		rv = reflect.ValueOf(uint16(v.Int))
+		break
+
+	case PUI32:
+		rv = reflect.ValueOf(uint32(v.Int))
+		break
+
+	case PUI64:
+		rv = reflect.ValueOf(uint64(v.Int))
+		break
+
+	case PReal, PUReal:
+		rv = reflect.ValueOf(v.Real)
+		break
+
+	case PR32, PUR32:
+		rv = reflect.ValueOf(float32(v.Real))
+		break
+
+	case PR64, PUR64:
+		rv = reflect.ValueOf(float64(v.Real))
+		break
+
+	case PString, PNEString:
+		rv = reflect.ValueOf(v.String)
+		break
+
+	case PBool, PTrue, PFalse:
+		rv = reflect.ValueOf(v.Bool)
+		break
+
+	case PNull:
+		rv = reflect.ValueOf(nil)
+		break
+
+	case PMap, PPair, PList:
+		return nil
+
+	case PUsr:
+		rv = reflect.ValueOf(v.Usr.Context)
+		break
+
+	case PRegexp:
+		rv = reflect.ValueOf(v.Regexp)
+		break
+
+	case PAny:
+		return f.pack(v, mapFromObjType(v.Type))
+
+	default:
+		return nil
+	}
+
+	return &rv
+}
+
 // conversion from Val to reflect.Value.
-func (f *FuncProto) pack(args []Val, argp *argpcase) ([]reflect.Value, error) {
+func (f *FuncProto) Pack(args []Val) ([]reflect.Value, error) {
+	alen := len(args)
+
+	if f.alwayspass {
+		var output []reflect.Value
+		for _, a := range args {
+			output = append(output, *f.pack(a, PAny))
+		}
+		return output, nil
+	}
+
+	if f.noarg {
+		if alen == 0 {
+			return nil, nil
+		} else {
+			return nil,
+				fmt.Errorf("function(method) call: %s expects no argument, "+
+					"but got %d arguments", f.Name, alen)
+		}
+	}
+
+	var err error
+	var output []reflect.Value
+	found := false
+
+	for _, c := range f.d {
+		sz := len(c.d)
+		if sz == alen || (sz < alen && c.varlen) {
+			var oput []reflect.Value
+
+			if _, err = f.doCheck(c, args, func(o *reflect.Value) {
+				oput = append(output, *o)
+			}); err == nil {
+				found = true
+				output = oput
+				break
+			}
+		}
+	}
+
+	if found {
+		return output, err
+	} else {
+		return nil, fmt.Errorf("function(method) call: %s invalid arguments, "+
+			"no matching argument type can be found", f.Name)
+	}
 }
 
 func NewFuncProto(name string, descriptor string) (*FuncProto, error) {
