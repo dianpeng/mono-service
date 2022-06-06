@@ -986,7 +986,7 @@ func (f *FuncProto) Pack(args []Val) ([]reflect.Value, error) {
 			var oput []reflect.Value
 
 			if _, err = f.doCheck(c, args, func(o *reflect.Value) {
-				oput = append(output, *o)
+				oput = append(oput, *o)
 			}); err == nil {
 				found = true
 				output = oput

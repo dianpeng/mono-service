@@ -1,9 +1,10 @@
 package pl
 
 import (
-	"encoding/json"
+  "fmt"
 	"log"
 	"strconv"
+  "bytes"
 )
 
 // all the builtin basic functions
@@ -13,12 +14,13 @@ func initModBasic() {
 		"",
 		"%a*",
 		func(info *intrinsicinfo, _ *Evaluator, _ string, args []Val) (Val, error) {
-			var b []interface{}
+      buf := new(bytes.Buffer)
 			for _, x := range args {
-				b = append(b, x.ToNative())
+        native := x.ToNative()
+        buf.WriteString(fmt.Sprintf("%T=>%+v", native, native))
+        buf.WriteRune(';')
 			}
-			x, _ := json.MarshalIndent(b, "", "  ")
-			log.Println(string(x))
+			log.Println(buf.String())
 			return NewValNull(), nil
 		},
 	)

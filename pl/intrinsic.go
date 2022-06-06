@@ -23,11 +23,24 @@ type intrinsicinfo struct {
 
 var intrinsicFunc []*intrinsicinfo
 
+func visnil(i reflect.Value) bool {
+	switch i.Kind() {
+	case reflect.Func,
+		reflect.Chan,
+		reflect.Interface,
+		reflect.Map,
+		reflect.Pointer,
+		reflect.Slice:
+		return i.IsNil()
+	default:
+		return false
+	}
+}
+
 // special helper function to unpack reflection call's return argument into
 // acceptable format (Val, error). Notes, we paniced when the return value
 // of function is not acceptable. The allowed native format of a call's return
 // must be (any, error) or any
-
 func unpack(i reflect.Value) (Val, error) {
 	switch i.Kind() {
 	case reflect.Int,
@@ -54,7 +67,7 @@ func unpack(i reflect.Value) (Val, error) {
 		return NewValBool(i.Bool()), nil
 
 	default:
-		if i.IsNil() {
+		if visnil(i) {
 			return NewValNull(), nil
 		}
 
@@ -145,7 +158,7 @@ func unpackReturn(r []reflect.Value) (Val, error) {
 func funcWrapper(
 	info *intrinsicinfo, // info
 	args []Val, // function arguments from script side
-) (Val, error) {
+) (the_value Val, the_error error) {
 	must(info.funcvalue != nil, "the reflection entry should be initialized")
 
 	// okay, we will have to recover from the panic of the reflect.Call since it
@@ -156,6 +169,13 @@ func funcWrapper(
 	if err != nil {
 		return NewValNull(), err
 	}
+
+	defer func() {
+		if err := recover(); err != nil {
+			// we should recover the error
+			the_error = fmt.Errorf("call %s is incorrect %+v", info.cname, err)
+		}
+	}()
 
 	retwrapper := info.funcvalue.Call(argswrapper)
 
