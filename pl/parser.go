@@ -127,7 +127,7 @@ func (p *parser) parse() ([]*program, error) {
 }
 
 func (p *parser) parseSessionSet(prog *program) error {
-	must(p.l.token == tkGId, "must be gid")
+	must(p.l.token == tkColon, "must be : to lead to global variable")
 	gname := p.l.valueText
 	idx := p.findSessionIdx(gname)
 	if idx == -1 {
@@ -145,7 +145,7 @@ func (p *parser) parseSessionSet(prog *program) error {
 }
 
 func (p *parser) parseSessionLoad(prog *program) error {
-	must(p.l.token == tkGId, "must be gid")
+	must(p.l.token == tkColon, "must be : to lead to global variable")
 	gname := p.l.valueText
 	idx := p.findSessionIdx(gname)
 	if idx == -1 {
@@ -168,7 +168,7 @@ func (p *parser) parseSessionScope() (*program, error) {
 		// all the statement resides inside of it will be treated as session statement
 		// and will be allocated into a symbol table session shared
 		for {
-			if p.l.token != tkGId && p.l.token != tkId {
+			if p.l.token != tkId {
 				return nil, p.err("expect a symbol to serve as session variable name")
 			}
 			gname := p.l.valueText
@@ -287,7 +287,7 @@ func (p *parser) parseRule() (*program, error) {
 // 3) a suffix expression
 // 4) an assignment
 // 5) an action
-// 6) a global variable suffix expression (starting with special GId token)
+// 6) a global variable suffix expression
 
 type lexeme struct {
 	token int
@@ -347,18 +347,34 @@ func (p *parser) parseBasicStmt(prog *program) error {
 			}
 			break
 
-		case tkGId:
+		case tkColon:
+			if !p.l.expectCurrent(tkId) {
+				return p.l.toError()
+			}
+			name := p.l.valueText
 			p.l.next()
+
 			if err := p.parseExpr(prog); err != nil {
 				return err
 			}
 
 			// session symbol table
-			sessVar := p.findSessionIdx(lexeme.sval)
+			sessVar := p.findSessionIdx(name)
 			if sessVar != -1 {
-				return p.err(fmt.Sprintf("session variable %s is not existed", lexeme.sval))
+				return p.err(fmt.Sprintf("session variable %s is not existed", name))
 			}
 			prog.emit1(bcStoreSession, sessVar)
+			break
+
+		case tkScope:
+			if !p.l.expectCurrent(tkId) {
+				return p.l.toError()
+			}
+			name := p.l.valueText
+			p.l.next()
+
+			idx := prog.addStr(name)
+			prog.emit1(bcLoadVar, idx)
 			break
 
 		default:
@@ -887,7 +903,7 @@ func (p *parser) parsePrimary(prog *program, l lexeme) error {
 		}
 		break
 
-	case tkDollar, tkId, tkGId:
+	case tkDollar, tkId, tkScope, tkColon:
 		if err := p.parsePExpr(prog, tk, l.sval); err != nil {
 			return err
 		}
@@ -1145,10 +1161,13 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 		prog.emit0(bcLoadDollar)
 		break
 
-	default:
-		must(tk == tkGId, "must be GId")
+	case tkColon:
+		if !p.l.expectCurrent(tkId) {
+			return p.l.toError()
+		}
+		gname := p.l.valueText
 
-		gname := name
+		p.l.next()
 
 		// session symbol table
 		idx := p.findSessionIdx(gname)
@@ -1156,6 +1175,18 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 			return p.err(fmt.Sprintf("global variable %s is unknown", gname))
 		}
 		prog.emit1(bcLoadSession, idx)
+		break
+
+	default:
+		if !p.l.expectCurrent(tkId) {
+			return p.l.toError()
+		}
+		gname := p.l.valueText
+
+		p.l.next()
+
+		idx := prog.addStr(gname)
+		prog.emit1(bcLoadVar, idx)
 		break
 	}
 

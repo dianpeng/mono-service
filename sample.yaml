@@ -66,10 +66,10 @@ vhost:
           }
 
           response => {
-            let proxy_url = request.header["x-proxy-url"];
+            let proxy_url = ::request.header["x-proxy-url"];
             let list_of_url = split(proxy_url, ';');
-            body => 10#to_string();
-            status => @c;
+            body => :c#to_string() + "\n" + proxy_url + "<>";
+            status => :c;
           }
 
       - name: "null"
