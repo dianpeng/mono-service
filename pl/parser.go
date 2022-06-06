@@ -127,7 +127,7 @@ func (p *parser) parse() ([]*program, error) {
 }
 
 func (p *parser) parseSessionSet(prog *program) error {
-	must(p.l.token == tkColon, "must be : to lead to global variable")
+	must(p.l.token == tkColon, "must be : to lead to session variable")
 	gname := p.l.valueText
 	idx := p.findSessionIdx(gname)
 	if idx == -1 {
@@ -140,19 +140,19 @@ func (p *parser) parseSessionSet(prog *program) error {
 	if err := p.parseExpr(prog); err != nil {
 		return err
 	}
-	prog.emit1(bcStoreSession, idx)
+	prog.emit1(p.l, bcStoreSession, idx)
 	return nil
 }
 
 func (p *parser) parseSessionLoad(prog *program) error {
-	must(p.l.token == tkColon, "must be : to lead to global variable")
+	must(p.l.token == tkColon, "must be : to lead to session variable")
 	gname := p.l.valueText
 	idx := p.findSessionIdx(gname)
 	if idx == -1 {
 		return p.err(fmt.Sprintf("unknown session %s", gname))
 	}
 	p.l.next()
-	prog.emit1(bcLoadSession, idx)
+	prog.emit1(p.l, bcLoadSession, idx)
 	return p.parseSuffix(prog)
 }
 
@@ -183,7 +183,7 @@ func (p *parser) parseSessionScope() (*program, error) {
 			}
 
 			p.sessVar = append(p.sessVar, gname)
-			prog.emit0(bcSetSession)
+			prog.emit0(p.l, bcSetSession)
 
 			if p.l.token == tkSemicolon {
 				p.l.next()
@@ -195,7 +195,7 @@ func (p *parser) parseSessionScope() (*program, error) {
 	}
 
 	// lastly halt the whole execution
-	prog.emit0(bcHalt)
+	prog.emit0(p.l, bcHalt)
 
 	p.l.next()
 	return prog, nil
@@ -242,15 +242,15 @@ func (p *parser) parseRule() (*program, error) {
 		if err != nil {
 			return nil, err
 		}
-		prog.emit0(bcMatch)
+		prog.emit0(p.l, bcMatch)
 	} else {
 		// bytecode for compare current event to be the same as the policy name
 		// essentially is when event == "policy_name"
-		prog.emit0(bcLoadDollar)
+		prog.emit0(p.l, bcLoadDollar)
 		idx := prog.addStr(name)
-		prog.emit1(bcLoadStr, idx)
-		prog.emit0(bcEq)
-		prog.emit0(bcMatch)
+		prog.emit1(p.l, bcLoadStr, idx)
+		prog.emit0(p.l, bcEq)
+		prog.emit0(p.l, bcMatch)
 	}
 
 	// allow an optional arrow to indicate this is a policy, this is the preferred
@@ -274,7 +274,7 @@ func (p *parser) parseRule() (*program, error) {
 	}
 
 	// add a halt regardlessly
-	prog.emit0(bcHalt)
+	prog.emit0(p.l, bcHalt)
 	prog.localSize = p.stbl.localSize()
 	p.stbl = nil
 	return prog, nil
@@ -287,7 +287,7 @@ func (p *parser) parseRule() (*program, error) {
 // 3) a suffix expression
 // 4) an assignment
 // 5) an action
-// 6) a global variable suffix expression
+// 6) a session variable suffix expression
 
 type lexeme struct {
 	token int
@@ -322,7 +322,7 @@ func (p *parser) parseBasicStmt(prog *program) error {
 		if lexeme.token != tkId {
 			return p.err("action rule's lhs must be an identifier")
 		}
-		prog.emit1(bcAction, prog.addStr(lexeme.sval))
+		prog.emit1(p.l, bcAction, prog.addStr(lexeme.sval))
 		return nil
 
 	case tkAssign:
@@ -336,13 +336,13 @@ func (p *parser) parseBasicStmt(prog *program) error {
 			sym, idx := p.resolveSymbol(lexeme.sval)
 			switch sym {
 			case symSession:
-				prog.emit1(bcStoreSession, idx)
+				prog.emit1(p.l, bcStoreSession, idx)
 				break
 			case symLocal:
-				prog.emit1(bcStoreLocal, idx)
+				prog.emit1(p.l, bcStoreLocal, idx)
 				break
 			default:
-				prog.emit1(bcStoreVar, prog.addStr(lexeme.sval))
+				prog.emit1(p.l, bcStoreVar, prog.addStr(lexeme.sval))
 				break
 			}
 			break
@@ -363,7 +363,7 @@ func (p *parser) parseBasicStmt(prog *program) error {
 			if sessVar != -1 {
 				return p.err(fmt.Sprintf("session variable %s is not existed", name))
 			}
-			prog.emit1(bcStoreSession, sessVar)
+			prog.emit1(p.l, bcStoreSession, sessVar)
 			break
 
 		case tkScope:
@@ -374,7 +374,7 @@ func (p *parser) parseBasicStmt(prog *program) error {
 			p.l.next()
 
 			idx := prog.addStr(name)
-			prog.emit1(bcStoreVar, idx)
+			prog.emit1(p.l, bcStoreVar, idx)
 			break
 
 		default:
@@ -412,7 +412,7 @@ func (p *parser) parseBasicStmt(prog *program) error {
 				return err
 			}
 
-			prog.emit1(bcDotSet, lastIns.argument)
+			prog.emit1(p.l, bcDotSet, lastIns.argument)
 			break
 
 		case suffixIndex:
@@ -422,7 +422,7 @@ func (p *parser) parseBasicStmt(prog *program) error {
 			if err := p.parseExpr(prog); err != nil {
 				return err
 			}
-			prog.emit0(bcIndexSet)
+			prog.emit0(p.l, bcIndexSet)
 			break
 
 		default:
@@ -463,14 +463,14 @@ func (p *parser) parseStmt(name string, prog *program) error {
 					return err
 				}
 
-				prog.emit1(bcStoreLocal, idx)
+				prog.emit1(p.l, bcStoreLocal, idx)
 				break
 
 			case tkIf:
 				if err := p.parseBranch(prog); err != nil {
 					return err
 				}
-				prog.emit0(bcPop)
+				prog.emit0(p.l, bcPop)
 
 				// allow if to not have a trailing semiclon afterwards, this is really
 				// just a hacky way to parse it since we just want to reuse the if
@@ -554,7 +554,7 @@ func (p *parser) parseBranchBody(prog *program) error {
 
 		// it must follow an expression, so we should just pop the previous
 		// generated expression here
-		prog.emit0(bcPop)
+		prog.emit0(p.l, bcPop)
 
 		if err := p.parseExpr(prog); err != nil {
 			return err
@@ -583,11 +583,11 @@ func (p *parser) parseBranch(prog *program) error {
 	if err := p.parseTernary(prog); err != nil {
 		return err
 	}
-	prev_jmp = prog.patch()
+	prev_jmp = prog.patch(p.l)
 	if err := p.parseBranchBody(prog); err != nil {
 		return err
 	}
-	jump_out = append(jump_out, prog.patch())
+	jump_out = append(jump_out, prog.patch(p.l))
 
 	// (1) Elif
 	for {
@@ -597,38 +597,38 @@ func (p *parser) parseBranch(prog *program) error {
 		p.l.next()
 
 		// previous condition failure target position
-		prog.emit1At(prev_jmp, bcJfalse, prog.label())
+		prog.emit1At(p.l, prev_jmp, bcJfalse, prog.label())
 
 		if err := p.parseExpr(prog); err != nil {
 			return err
 		}
 
-		prev_jmp = prog.patch()
+		prev_jmp = prog.patch(p.l)
 
 		if err := p.parseBranchBody(prog); err != nil {
 			return err
 		}
 
-		jump_out = append(jump_out, prog.patch())
+		jump_out = append(jump_out, prog.patch(p.l))
 	}
 
 	// (2) Dangling else
 	//     notes if there's no else, the else branch can be assumed to return a
 	//     null
 
-	prog.emit1At(prev_jmp, bcJfalse, prog.label())
+	prog.emit1At(p.l, prev_jmp, bcJfalse, prog.label())
 	if p.l.token == tkElse {
 		p.l.next()
 		if err := p.parseBranchBody(prog); err != nil {
 			return err
 		}
 	} else {
-		prog.emit0(bcLoadNull)
+		prog.emit0(p.l, bcLoadNull)
 	}
 
 	// lastly, patch all the jump
-	for _, p := range jump_out {
-		prog.emit1At(p, bcJump, prog.label())
+	for _, pos := range jump_out {
+		prog.emit1At(p.l, pos, bcJump, prog.label())
 	}
 
 	return nil
@@ -641,7 +641,7 @@ func (p *parser) parseTernary(prog *program) error {
 	ntk := p.l.token
 
 	if ntk == tkQuest {
-		patch_point := prog.patch()
+		patch_point := prog.patch(p.l)
 		p.l.next()
 
 		if err := p.parseBin(prog); err != nil {
@@ -656,17 +656,17 @@ func (p *parser) parseTernary(prog *program) error {
 		}
 		p.l.next()
 
-		jump_out := prog.patch()
+		jump_out := prog.patch(p.l)
 
 		// ternary operator, jump when false
-		prog.emit1At(patch_point, bcTernary, prog.label())
+		prog.emit1At(p.l, patch_point, bcTernary, prog.label())
 
 		if err := p.parseBin(prog); err != nil {
 			return err
 		}
 
 		// lastly, patch jump out to here
-		prog.emit1At(jump_out, bcJump, prog.label())
+		prog.emit1At(p.l, jump_out, bcJump, prog.label())
 		return nil
 	} else {
 		return nil
@@ -729,7 +729,7 @@ func (p *parser) parseBinary(prog *program, prec int) error {
 
 		switch tk {
 		case tkAnd, tkOr:
-			jump_pos = prog.patch()
+			jump_pos = prog.patch(p.l)
 		default:
 			break
 		}
@@ -744,69 +744,69 @@ func (p *parser) parseBinary(prog *program, prec int) error {
 		// based on the token, generate bytecode
 		switch tk {
 		case tkAdd:
-			prog.emit0(bcAdd)
+			prog.emit0(p.l, bcAdd)
 			break
 
 		case tkSub:
-			prog.emit0(bcSub)
+			prog.emit0(p.l, bcSub)
 			break
 
 		case tkMul:
-			prog.emit0(bcMul)
+			prog.emit0(p.l, bcMul)
 			break
 
 		case tkDiv:
-			prog.emit0(bcDiv)
+			prog.emit0(p.l, bcDiv)
 			break
 
 		case tkMod:
-			prog.emit0(bcMod)
+			prog.emit0(p.l, bcMod)
 			break
 
 		case tkPow:
-			prog.emit0(bcPow)
+			prog.emit0(p.l, bcPow)
 			break
 
 		case tkLt:
-			prog.emit0(bcLt)
+			prog.emit0(p.l, bcLt)
 			break
 
 		case tkLe:
-			prog.emit0(bcLe)
+			prog.emit0(p.l, bcLe)
 			break
 
 		case tkGt:
-			prog.emit0(bcGt)
+			prog.emit0(p.l, bcGt)
 			break
 
 		case tkGe:
-			prog.emit0(bcGe)
+			prog.emit0(p.l, bcGe)
 			break
 
 		case tkEq:
-			prog.emit0(bcEq)
+			prog.emit0(p.l, bcEq)
 			break
 
 		case tkNe:
-			prog.emit0(bcNe)
+			prog.emit0(p.l, bcNe)
 			break
 
 		case tkRegexpMatch:
-			prog.emit0(bcRegexpMatch)
+			prog.emit0(p.l, bcRegexpMatch)
 			break
 
 		case tkRegexpNMatch:
-			prog.emit0(bcRegexpNMatch)
+			prog.emit0(p.l, bcRegexpNMatch)
 			break
 
 		case tkAnd:
 			must(jump_pos >= 0, "and")
-			prog.emit1At(jump_pos, bcAnd, prog.label())
+			prog.emit1At(p.l, jump_pos, bcAnd, prog.label())
 			break
 
 		case tkOr:
 			must(jump_pos >= 0, "or")
-			prog.emit1At(jump_pos, bcOr, prog.label())
+			prog.emit1At(p.l, jump_pos, bcOr, prog.label())
 			break
 
 		default:
@@ -834,11 +834,11 @@ func (p *parser) parseUnary(prog *program) error {
 
 	switch tk {
 	case tkSub:
-		prog.emit0(bcNegate)
+		prog.emit0(p.l, bcNegate)
 		break
 
 	case tkNot:
-		prog.emit0(bcNot)
+		prog.emit0(p.l, bcNot)
 		break
 
 	default:
@@ -853,12 +853,12 @@ func (p *parser) parsePrimary(prog *program, l lexeme) error {
 	switch tk {
 	case tkInt:
 		idx := prog.addInt(l.ival)
-		prog.emit1(bcLoadInt, idx)
+		prog.emit1(p.l, bcLoadInt, idx)
 		break
 
 	case tkReal:
 		idx := prog.addReal(l.rval)
-		prog.emit1(bcLoadReal, idx)
+		prog.emit1(p.l, bcLoadReal, idx)
 		break
 
 	case tkStr, tkMStr:
@@ -866,15 +866,15 @@ func (p *parser) parsePrimary(prog *program, l lexeme) error {
 		return p.parseStrInterpolation(prog, strV)
 
 	case tkTrue:
-		prog.emit0(bcLoadTrue)
+		prog.emit0(p.l, bcLoadTrue)
 		break
 
 	case tkFalse:
-		prog.emit0(bcLoadFalse)
+		prog.emit0(p.l, bcLoadFalse)
 		break
 
 	case tkNull:
-		prog.emit0(bcLoadNull)
+		prog.emit0(p.l, bcLoadNull)
 		break
 
 	case tkRegex:
@@ -882,7 +882,7 @@ func (p *parser) parsePrimary(prog *program, l lexeme) error {
 		if err != nil {
 			return err
 		}
-		prog.emit1(bcLoadRegexp, idx)
+		prog.emit1(p.l, bcLoadRegexp, idx)
 		break
 
 	case tkLPar:
@@ -948,7 +948,7 @@ func (p *parser) parsePairOrSubexpr(prog *program) error {
 		}
 		p.l.next()
 
-		prog.emit0(bcNewPair)
+		prog.emit0(p.l, bcNewPair)
 		return nil
 
 	case tkRPar:
@@ -990,28 +990,28 @@ func (p *parser) parseCallArgs(prog *program) (int, error) {
 func (p *parser) parseCall(prog *program, name string, bc int) error {
 	{
 		idx := prog.addStr(name)
-		prog.emit1(bcLoadStr, idx)
+		prog.emit1(p.l, bcLoadStr, idx)
 	}
 
 	pcnt, err := p.parseCallArgs(prog)
 	if err != nil {
 		return err
 	}
-	prog.emit1(bc, pcnt)
+	prog.emit1(p.l, bc, pcnt)
 	return nil
 }
 
 func (p *parser) parseICall(prog *program, index int) error {
 	{
 		idx := prog.addInt(int64(index))
-		prog.emit1(bcLoadInt, idx)
+		prog.emit1(p.l, bcLoadInt, idx)
 	}
 
 	pcnt, err := p.parseCallArgs(prog)
 	if err != nil {
 		return err
 	}
-	prog.emit1(bcICall, pcnt)
+	prog.emit1(p.l, bcICall, pcnt)
 	return nil
 }
 
@@ -1044,7 +1044,7 @@ SUFFIX:
 			ntk := p.l.next()
 			if ntk == tkId || ntk == tkStr {
 				idx := prog.addStr(p.l.valueText)
-				prog.emit1(bcDot, idx)
+				prog.emit1(p.l, bcDot, idx)
 				p.l.next()
 			} else {
 				return p.err("invalid expresion, expect id or string after '.'")
@@ -1057,7 +1057,7 @@ SUFFIX:
 			if err := p.parseExpr(prog); err != nil {
 				return err
 			}
-			prog.emit0(bcIndex)
+			prog.emit0(p.l, bcIndex)
 			if p.l.token != tkRSqr {
 				return p.err("invalid expression, expect ] to close index")
 			}
@@ -1133,15 +1133,15 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 			symT, symIdx := p.resolveSymbol(name)
 			switch symT {
 			case symSession:
-				prog.emit1(bcLoadSession, symIdx)
+				prog.emit1(p.l, bcLoadSession, symIdx)
 				break
 
 			case symLocal:
-				prog.emit1(bcLoadLocal, symIdx)
+				prog.emit1(p.l, bcLoadLocal, symIdx)
 				break
 
 			default:
-				prog.emit1(bcLoadVar, prog.addStr(name))
+				prog.emit1(p.l, bcLoadVar, prog.addStr(name))
 				break
 			}
 			break
@@ -1158,7 +1158,7 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 		break
 
 	case tkDollar:
-		prog.emit0(bcLoadDollar)
+		prog.emit0(p.l, bcLoadDollar)
 		break
 
 	case tkColon:
@@ -1172,9 +1172,9 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 		// session symbol table
 		idx := p.findSessionIdx(gname)
 		if idx == -1 {
-			return p.err(fmt.Sprintf("global variable %s is unknown", gname))
+			return p.err(fmt.Sprintf("session variable %s is unknown", gname))
 		}
-		prog.emit1(bcLoadSession, idx)
+		prog.emit1(p.l, bcLoadSession, idx)
 		break
 
 	default:
@@ -1186,7 +1186,7 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 		p.l.next()
 
 		idx := prog.addStr(gname)
-		prog.emit1(bcLoadVar, idx)
+		prog.emit1(p.l, bcLoadVar, idx)
 		break
 	}
 
@@ -1195,7 +1195,7 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 
 // list literal
 func (p *parser) parseList(prog *program) error {
-	prog.emit0(bcNewList)
+	prog.emit0(p.l, bcNewList)
 	if p.l.token == tkRSqr {
 		p.l.next()
 		return nil
@@ -1215,7 +1215,7 @@ func (p *parser) parseList(prog *program) error {
 				return p.err("unexpected token, expect ',' or ']' to close a list literal")
 			}
 		}
-		prog.emit1(bcAddList, cnt)
+		prog.emit1(p.l, bcAddList, cnt)
 		return nil
 	}
 }
@@ -1351,13 +1351,13 @@ func (p *parser) parseTemplate(prog *program) error {
 			return err
 		}
 
-		prog.emit1(bcTemplate, idx)
+		prog.emit1(p.l, bcTemplate, idx)
 		return nil
 	}
 }
 
 func (p *parser) parseMap(prog *program) error {
-	prog.emit0(bcNewMap)
+	prog.emit0(p.l, bcNewMap)
 	if p.l.token == tkRBra {
 		p.l.next()
 	} else {
@@ -1367,7 +1367,7 @@ func (p *parser) parseMap(prog *program) error {
 
 			if p.l.token == tkStr || p.l.token == tkId {
 				idx := prog.addStr(p.l.valueText)
-				prog.emit1(bcLoadStr, idx)
+				prog.emit1(p.l, bcLoadStr, idx)
 			} else {
 				return p.err("unexpected token, expect a quoted string or identifier as map key")
 			}
@@ -1392,7 +1392,7 @@ func (p *parser) parseMap(prog *program) error {
 			}
 		}
 
-		prog.emit1(bcAddMap, cnt)
+		prog.emit1(p.l, bcAddMap, cnt)
 	}
 	return nil
 }
@@ -1445,7 +1445,7 @@ func (p *parser) parseStrInterpolation(prog *program, strV string) error {
 	if len(strV) == 0 {
 		// empty string
 		idx := prog.addStr("")
-		prog.emit1(bcLoadStr, idx)
+		prog.emit1(p.l, bcLoadStr, idx)
 		return nil
 	}
 
@@ -1472,7 +1472,7 @@ func (p *parser) parseStrInterpolation(prog *program, strV string) error {
 			}
 
 			// lastly, convert whatever on the evaluation stack to be valid string
-			prog.emit0(bcToStr)
+			prog.emit0(p.l, bcToStr)
 			strCnt++
 			idx = newPos - 1
 			st = sInter0
@@ -1493,7 +1493,7 @@ func (p *parser) parseStrInterpolation(prog *program, strV string) error {
 				b.Reset()
 				if piece != "" {
 					sidx := prog.addStr(piece)
-					prog.emit1(bcLoadStr, sidx)
+					prog.emit1(p.l, bcLoadStr, sidx)
 					strCnt++
 				}
 
@@ -1524,12 +1524,12 @@ func (p *parser) parseStrInterpolation(prog *program, strV string) error {
 
 	if xx := b.String(); xx != "" {
 		sidx := prog.addStr(xx)
-		prog.emit1(bcLoadStr, sidx)
+		prog.emit1(p.l, bcLoadStr, sidx)
 		strCnt++
 	}
 
 	if strCnt > 1 {
-		prog.emit1(bcConStr, strCnt)
+		prog.emit1(p.l, bcConStr, strCnt)
 	}
 
 	return nil

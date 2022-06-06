@@ -287,6 +287,7 @@ func indexIntrinsic(name string) int {
 }
 
 func init() {
+	initModBasic()
 	initModTime()
 	initModCodec()
 	initModStr()

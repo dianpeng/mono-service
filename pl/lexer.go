@@ -236,6 +236,17 @@ func (t *lexer) yield(tk int, offset int) int {
 	return tk
 }
 
+// generate a source location field for debugging reporting purpose
+func (t *lexer) dbg() sourceloc {
+	line, column := t.pos()
+	return sourceloc{
+		source: string(t.input),
+		offset: t.cursor,
+		line:   line,
+		column: column,
+	}
+}
+
 func (t *lexer) pos() (int, int) {
 	l := 1
 	c := 1

@@ -264,45 +264,10 @@ func (h *Hpl) fnHttp(args []pl.Val) (pl.Val, error) {
 
 func (p *Hpl) httpEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
 	switch n {
-	case "b64_encode":
-		return fnBase64Encode(args)
-	case "b64_decode":
-		return fnBase64Decode(args)
-	case "url_encode":
-		return fnURLEncode(args)
-	case "url_decode":
-		return fnURLDecode(args)
-	case "path_escape":
-		return fnPathEscape(args)
-	case "path_unescape":
-		return fnPathUnescape(args)
-	case "to_string":
-		return fnToString(args)
-	case "http_date":
-		return fnHttpDate(args)
-	case "http_datenano":
-		return fnHttpDateNano(args)
-	case "uuid":
-		return fnUUID(args)
-	case "concate_http_body":
-		return fnConcateHttpBody(args)
-	case "echo":
-		return fnEcho(args)
-	case "to_upper":
-		return fnToUpper(args)
-	case "to_lower":
-		return fnToLower(args)
-	case "split":
-		return fnSplit(args)
-	case "trim":
-		return fnTrim(args)
-	case "ltrim":
-		return fnLTrim(args)
-	case "rtrim":
-		return fnRTrim(args)
-	// networking
 	case "http":
 		return p.fnHttp(args)
+	case "concate_http_body":
+		return fnConcateHttpBody(args)
 	case "header_has":
 		return fnHeaderHas(args)
 	case "header_delete":

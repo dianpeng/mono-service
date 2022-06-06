@@ -2,6 +2,7 @@ package pl
 
 import (
 	"bytes"
+	"github.com/google/uuid"
 	"math/rand"
 )
 
@@ -38,5 +39,13 @@ func initModRandom() {
 			}
 			return b.String()
 		},
+	)
+
+	addrefMF(
+		"rand",
+		"uuid",
+		"",
+		"%0",
+		uuid.NewString,
 	)
 }

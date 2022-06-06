@@ -108,7 +108,32 @@ type bytecode struct {
 	argument int
 }
 
+type sourceloc struct {
+	source string
+	offset int
+	line   int
+	column int
+}
+
+func (s *sourceloc) where() string {
+	var start, end int
+	if s.offset >= 32 {
+		start = s.offset - 32
+	} else {
+		start = 0
+	}
+
+	if s.offset+32 < len(s.source) {
+		end = s.offset + 32
+	} else {
+		end = len(s.source)
+	}
+
+	return fmt.Sprintf("around (%d, %d)@(---\n%s\n---)", s.line, s.column, s.source[start:end])
+}
+
 type bytecodeList []bytecode
+type sourcelocList []sourceloc
 
 type program struct {
 	name       string
@@ -120,7 +145,8 @@ type program struct {
 	tbRegexp   []*regexp.Regexp
 
 	// used for actual interpretation
-	bcList bytecodeList
+	bcList  bytecodeList
+	dbgList sourcelocList
 }
 
 func newProgram(n string) *program {
@@ -222,17 +248,19 @@ func (p *program) addRegexp(r string) (int, error) {
 	return idx, nil
 }
 
-func (p *program) emit0(opcode int) {
+func (p *program) emit0(l *lexer, opcode int) {
 	p.bcList = append(p.bcList, bytecode{
 		opcode: opcode,
 	})
+	p.dbgList = append(p.dbgList, l.dbg())
 }
 
-func (p *program) emit1(opcode int, argument int) {
+func (p *program) emit1(l *lexer, opcode int, argument int) {
 	p.bcList = append(p.bcList, bytecode{
 		opcode:   opcode,
 		argument: argument,
 	})
+	p.dbgList = append(p.dbgList, l.dbg())
 }
 
 func (p *program) popLast() bytecode {
@@ -241,6 +269,8 @@ func (p *program) popLast() bytecode {
 	last := p.bcList[sz-1]
 	// pop the last instruction
 	p.bcList = p.bcList[:sz-1]
+	p.dbgList = p.dbgList[:sz-1]
+
 	return last
 }
 
@@ -249,23 +279,26 @@ func (p *program) label() int {
 	return len(p.bcList)
 }
 
-func (p *program) patch() int {
+func (p *program) patch(l *lexer) int {
 	idx := len(p.bcList)
 	p.bcList = append(p.bcList, bytecode{})
+	p.dbgList = append(p.dbgList, l.dbg())
 	return idx
 }
 
-func (p *program) emit0At(idx int, opcode int) {
+func (p *program) emit0At(l *lexer, idx int, opcode int) {
 	p.bcList[idx] = bytecode{
 		opcode: opcode,
 	}
+	p.dbgList = append(p.dbgList, l.dbg())
 }
 
-func (p *program) emit1At(idx int, opcode int, argument int) {
+func (p *program) emit1At(l *lexer, idx int, opcode int, argument int) {
 	p.bcList[idx] = bytecode{
 		opcode:   opcode,
 		argument: argument,
 	}
+	p.dbgList = append(p.dbgList, l.dbg())
 }
 
 func (p *program) dump() string {

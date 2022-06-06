@@ -377,45 +377,15 @@ func (e *Evaluator) doNegate(v Val) (Val, error) {
 	}
 }
 
-func (e *Evaluator) builtinCallRegexpMatch(args []Val) (Val, error) {
-	if len(args) != 2 {
-		return NewValNull(), fmt.Errorf("regexp_match's argument must be 2")
-	}
-	if args[0].Type != ValStr || args[1].Type != ValRegexp {
-		return NewValNull(), fmt.Errorf("regexp_match's argument's type invalid")
-	}
-
-	r := args[1].Regexp.Match([]byte(args[0].String))
-	return NewValBool(r), nil
+func (e *Evaluator) doErrf(p *program, pc int, format string, a ...interface{}) error {
+	dbg := p.dbgList[pc]
+	msg := fmt.Sprintf(format, a...)
+	return fmt.Errorf("policy(%s), %s has error: %s", p.name, dbg.where(), msg)
 }
 
-func (e *Evaluator) builtinCallRegexpContain(args []Val) (Val, error) {
-	if len(args) != 2 {
-		return NewValNull(), fmt.Errorf("regexp_contain's argument must be 2")
-	}
-	if args[0].Type != ValStr || args[1].Type != ValRegexp {
-		return NewValNull(), fmt.Errorf("regexp_contain's argument's type invalid")
-	}
-
-	r := args[1].Regexp.MatchString(args[0].String)
-	return NewValBool(r), nil
-}
-
-func (e *Evaluator) builtinCall(name string, args []Val) (Val, error, bool) {
-	switch name {
-	case "regexp_match":
-		a, b := e.builtinCallRegexpMatch(args)
-		return a, b, true
-
-	case "regexp_contain":
-		a, b := e.builtinCallRegexpContain(args)
-		return a, b, true
-
-	default:
-		break
-	}
-
-	return NewValNull(), nil, false
+func (e *Evaluator) doErr(p *program, pc int, err error) error {
+	dbg := p.dbgList[pc]
+	return fmt.Errorf("policy(%s), %s has error: %s", p.name, dbg.where(), err.Error())
 }
 
 func (e *Evaluator) doEval(event string, pp []*program) error {
@@ -436,7 +406,7 @@ VM:
 				actName := prog.idxStr(bc.argument)
 				val := e.top0()
 				if e.ActionFn == nil {
-					return fmt.Errorf("action callback is not set")
+					return e.doErrf(prog, pc, "action %s is not allowed", actName)
 				}
 
 				if err := e.ActionFn(e, actName, val); err != nil {
@@ -466,7 +436,7 @@ VM:
 				e.popN(2)
 				v, err := e.doBin(lhs, rhs, bc.opcode)
 				if err != nil {
-					return err
+					return e.doErr(prog, pc, err)
 				}
 				e.push(v)
 				break
@@ -482,7 +452,7 @@ VM:
 				e.pop()
 				v, err := e.doNegate(t)
 				if err != nil {
-					return err
+					return e.doErr(prog, pc, err)
 				}
 				e.push(v)
 				break
@@ -605,15 +575,13 @@ VM:
 				var r Val
 				var err error
 
-				r, err, found := e.builtinCall(funcName.String, arg)
-				if !found {
-					if e.CallFn == nil {
-						return fmt.Errorf("call callback is not set")
-					}
+				if e.CallFn != nil {
 					r, err = e.CallFn(e, funcName.String, arg)
+				} else {
+					err = e.doErrf(prog, pc, "function %s is not found", funcName.String)
 				}
 				if err != nil {
-					return err
+					return e.doErr(prog, pc, err)
 				}
 				e.popN(paramSize + 1)
 				e.push(r)
@@ -637,7 +605,7 @@ VM:
 				fentry := intrinsicFunc[funcIndex.Int]
 				r, err := fentry.entry(e, "$intrinsic$", arg)
 				if err != nil {
-					return err
+					return e.doErr(prog, pc, err)
 				}
 				e.popN(paramSize + 1)
 				e.push(r)
@@ -657,7 +625,7 @@ VM:
 				recv := e.topN(paramSize + 1)
 				ret, err := recv.Method(methodName.String, arg)
 				if err != nil {
-					return err
+					return e.doErr(prog, pc, err)
 				}
 
 				e.popN(paramSize + 2)
@@ -668,7 +636,7 @@ VM:
 				top := e.top0()
 				str, err := top.ToString()
 				if err != nil {
-					return err
+					return e.doErr(prog, pc, err)
 				}
 				e.pop()
 				e.push(NewValStr(str))
@@ -689,11 +657,11 @@ VM:
 			case bcLoadVar:
 				vname := prog.idxStr(bc.argument)
 				if e.LoadVarFn == nil {
-					return fmt.Errorf("dynamic variable: %s is not found", vname)
+					return e.doErrf(prog, pc, "dynamic variable: %s is not fonud", vname)
 				}
 				val, err := e.LoadVarFn(e, vname)
 				if err != nil {
-					return err
+					return e.doErr(prog, pc, err)
 				}
 				e.push(val)
 				break
@@ -703,7 +671,7 @@ VM:
 				e.pop()
 				vname := prog.idxStr(bc.argument)
 				if e.SetVarFn == nil {
-					return fmt.Errorf("dynamic variable: %s is not found", vname)
+					return e.doErrf(prog, pc, "dynamic variable: %s is not fonud", vname)
 				}
 				if err := e.SetVarFn(e, vname, top); err != nil {
 					return err
@@ -719,7 +687,7 @@ VM:
 				er := e.top0()
 				val, err := ee.Index(er)
 				if err != nil {
-					return err
+					return e.doErr(prog, pc, err)
 				}
 				e.popN(2)
 				e.push(val)
@@ -741,7 +709,7 @@ VM:
 				vname := prog.idxStr(bc.argument)
 				val, err := ee.Dot(vname)
 				if err != nil {
-					return err
+					return e.doErr(prog, pc, err)
 				}
 				e.pop()
 				e.push(val)
@@ -773,7 +741,7 @@ VM:
 				tmp := prog.idxTemplate(bc.argument)
 				data, err := tmp.Execute(ctx)
 				if err != nil {
-					return err
+					return e.doErr(prog, pc, err)
 				}
 
 				e.push(NewValStr(data))
@@ -788,7 +756,7 @@ VM:
 
 			case bcLoadSession:
 				if len(e.Session) <= bc.argument {
-					return fmt.Errorf("@session is not executed, or not initialized")
+					return e.doErrf(prog, pc, "@session is not executed")
 				} else {
 					e.push(e.Session[bc.argument])
 				}
@@ -796,7 +764,7 @@ VM:
 
 			case bcStoreSession:
 				if len(e.Session) <= bc.argument {
-					return fmt.Errorf("@session is not executed, or not initialized")
+					return e.doErrf(prog, pc, "@session is not executed")
 				} else {
 					e.Session[bc.argument] = e.top0()
 					e.pop()
