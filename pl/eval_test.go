@@ -1286,6 +1286,122 @@ test{
 
 }
 
+func TestAssign2(t *testing.T) {
+	assert := assert.New(t)
+	assert.True(testString(
+		`
+session {
+  a = ["a", "b"];
+}
+
+test{
+  a[10] = "hello world";
+  output => a[10];
+};
+`, "hello world"))
+
+	assert.True(testNull(
+		`
+session {
+  a = [];
+}
+
+test{
+  a[10] = "hello world";
+  output => a[7]
+};
+`))
+
+	assert.True(testString(
+		`
+session {
+  a = {}
+}
+
+test{
+  a.b = "hello world";
+  output => a.b;
+};
+`, "hello world"))
+
+	assert.True(testNull(
+		`
+session {
+  a = {}
+}
+
+test{
+  a["xx"] = null;
+  output => a.xx;
+};
+`))
+
+}
+
+func TestAssign3(t *testing.T) {
+	assert := assert.New(t)
+	rr := NewValNull()
+	ret := &rr
+
+	dvar := &Val{}
+
+	eval := NewEvaluator(
+		func(_ *Evaluator, vname string) (Val, error) {
+			if vname == "a_int" {
+				return NewValInt(1), nil
+			}
+			if vname == "a_str" {
+				return NewValStr("hello"), nil
+			}
+			if vname == "a_real" {
+				return NewValReal(1.0), nil
+			}
+			if vname == "a" {
+				return *dvar, nil
+			}
+			return NewValNull(), fmt.Errorf("%s unknown var", vname)
+		},
+		func(_ *Evaluator, fname string, v Val) error {
+			if fname == "a" {
+				*dvar = v
+				return nil
+			}
+			return fmt.Errorf("%s is unknown var", fname)
+		},
+		func(_ *Evaluator, fname string, args []Val) (Val, error) {
+			return NewValNull(), fmt.Errorf("%s unknown func", fname)
+		},
+		func(_ *Evaluator, aname string, aval Val) error {
+			if aname == "output" {
+				*ret = aval
+			}
+			return nil
+		})
+
+	code :=
+		`
+test {
+  a = "Hello World";
+  output => a;
+};
+`
+
+	policy, err := CompilePolicy(code)
+
+	// fmt.Printf(":code\n%s", policy.Dump())
+
+	assert.True(err == nil)
+
+	err = eval.EvalSession(policy)
+	assert.True(err == nil)
+
+	err = eval.Eval("test", policy)
+	assert.True(err == nil)
+
+	assert.True(ret.Type == ValStr)
+	assert.True(ret.String == "Hello World")
+}
+
 func TestIfStatment(t *testing.T) {
 	assert := assert.New(t)
 	assert.True(testString(

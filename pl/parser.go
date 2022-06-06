@@ -417,7 +417,7 @@ func (p *parser) parseBasicStmt(prog *program) error {
 
 		case suffixIndex:
 			lastIns := prog.popLast()
-			must(lastIns.opcode == bcDot, "must be index")
+			must(lastIns.opcode == bcIndex, "must be index")
 
 			if err := p.parseExpr(prog); err != nil {
 				return err

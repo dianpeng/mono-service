@@ -498,10 +498,15 @@ func (v *Val) IndexSet(idx, val Val) error {
 		if err != nil {
 			return err
 		}
+
 		if i >= len(v.List.Data) {
-			return fmt.Errorf("index out of range")
+			for j := len(v.List.Data); j < i; j++ {
+				v.List.Data = append(v.List.Data, NewValNull())
+			}
+			v.List.Data = append(v.List.Data, val)
+		} else {
+			v.List.Data[i] = val
 		}
-		v.List.Data[i] = val
 		return nil
 
 	case ValMap:
