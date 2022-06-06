@@ -374,7 +374,7 @@ func (p *parser) parseBasicStmt(prog *program) error {
 			p.l.next()
 
 			idx := prog.addStr(name)
-			prog.emit1(bcLoadVar, idx)
+			prog.emit1(bcStoreVar, idx)
 			break
 
 		default:

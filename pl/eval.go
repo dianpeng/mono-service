@@ -58,6 +58,7 @@ func CompilePolicy(policy string) (*Policy, error) {
 
 // Evaluation part of the VM
 type EvalLoadVar func(*Evaluator, string) (Val, error)
+type EvalSetVar func(*Evaluator, string, Val) error
 type EvalCall func(*Evaluator, string, []Val) (Val, error)
 type EvalAction func(*Evaluator, string, Val) error
 
@@ -66,6 +67,7 @@ type Evaluator struct {
 	Session   []Val
 	Local     []Val
 	LoadVarFn EvalLoadVar
+	SetVarFn  EvalSetVar
 	CallFn    EvalCall
 	ActionFn  EvalAction
 }
@@ -76,15 +78,17 @@ func NewEvaluatorSimple() *Evaluator {
 
 func NewEvaluator(
 	f0 EvalLoadVar,
-	f1 EvalCall,
-	f2 EvalAction) *Evaluator {
+	f1 EvalSetVar,
+	f2 EvalCall,
+	f3 EvalAction) *Evaluator {
 
 	return &Evaluator{
 		Stack:     nil,
 		Session:   nil,
 		LoadVarFn: f0,
-		CallFn:    f1,
-		ActionFn:  f2,
+		SetVarFn:  f1,
+		CallFn:    f2,
+		ActionFn:  f3,
 	}
 }
 
@@ -116,6 +120,10 @@ func (e *Evaluator) top0() Val {
 
 func (e *Evaluator) top1() Val {
 	return e.topN(1)
+}
+
+func (e *Evaluator) top2() Val {
+	return e.topN(2)
 }
 
 func (e *Evaluator) newLocal(size int) {
@@ -681,13 +689,25 @@ VM:
 			case bcLoadVar:
 				vname := prog.idxStr(bc.argument)
 				if e.LoadVarFn == nil {
-					return fmt.Errorf("load_var callback is not set")
+					return fmt.Errorf("dynamic variable: %s is not found", vname)
 				}
 				val, err := e.LoadVarFn(e, vname)
 				if err != nil {
 					return err
 				}
 				e.push(val)
+				break
+
+			case bcStoreVar:
+				top := e.top0()
+				e.pop()
+				vname := prog.idxStr(bc.argument)
+				if e.SetVarFn == nil {
+					return fmt.Errorf("dynamic variable: %s is not found", vname)
+				}
+				if err := e.SetVarFn(e, vname, top); err != nil {
+					return err
+				}
 				break
 
 			case bcLoadDollar:
@@ -705,15 +725,36 @@ VM:
 				e.push(val)
 				break
 
+			case bcIndexSet:
+				recv := e.top2()
+				index := e.top1()
+				value := e.top0()
+				e.popN(3)
+
+				if err := recv.IndexSet(index, value); err != nil {
+					return err
+				}
+				break
+
 			case bcDot:
 				ee := e.top0()
 				vname := prog.idxStr(bc.argument)
-				val, err := ee.Dot(NewValStr(vname))
+				val, err := ee.Dot(vname)
 				if err != nil {
 					return err
 				}
 				e.pop()
 				e.push(val)
+				break
+
+			case bcDotSet:
+				recv := e.top1()
+				value := e.top0()
+				e.popN(2)
+
+				if err := recv.DotSet(prog.idxStr(bc.argument), value); err != nil {
+					return err
+				}
 				break
 
 			case bcStoreLocal:

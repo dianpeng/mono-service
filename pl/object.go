@@ -1,6 +1,7 @@
 package pl
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"regexp"
@@ -448,7 +449,79 @@ func (v *Val) Index(idx Val) (Val, error) {
 	}
 }
 
-func (v *Val) Dot(idx Val) (Val, error) {
+func (v *Val) IndexSet(idx, val Val) error {
+	switch v.Type {
+	case ValInt, ValReal, ValBool, ValNull:
+		return fmt.Errorf("cannot do subfield set by indexing on primitive type")
+
+	case ValRegexp:
+		return fmt.Errorf("cannot do subfield set by indexing on regexp")
+
+	case ValStr:
+		i, err := idx.ToIndex()
+		if err != nil {
+			return err
+		}
+		if i >= len(v.String) {
+			return fmt.Errorf("index out of range")
+		}
+		if val.Type != ValStr {
+			return fmt.Errorf("string subfield setting must be type string")
+		}
+
+		b := new(bytes.Buffer)
+		b.WriteString(v.String[:i])
+		b.WriteString(val.String)
+		b.WriteString(v.String[i:])
+
+		v.String = b.String()
+		return nil
+
+	case ValPair:
+		i, err := idx.ToIndex()
+		if err != nil {
+			return err
+		}
+		if i == 0 {
+			v.Pair.First = val
+			return nil
+		}
+		if i == 1 {
+			v.Pair.Second = val
+			return nil
+		}
+
+		return fmt.Errorf("invalid index, 0 or 1 is allowed on Pair")
+
+	case ValList:
+		i, err := idx.ToIndex()
+		if err != nil {
+			return err
+		}
+		if i >= len(v.List.Data) {
+			return fmt.Errorf("index out of range")
+		}
+		v.List.Data[i] = val
+		return nil
+
+	case ValMap:
+		i, err := idx.ToString()
+		if err != nil {
+			return err
+		}
+		v.Map.Data[i] = val
+		return nil
+
+	default:
+		if v.Usr.IndexSetFn != nil {
+			return v.Usr.IndexSetFn(v.Usr.Context, idx, val)
+		} else {
+			return fmt.Errorf("type: %s does not support index operator mutation", v.Id())
+		}
+	}
+}
+
+func (v *Val) Dot(i string) (Val, error) {
 	switch v.Type {
 	case ValInt, ValReal, ValBool, ValNull, ValStr, ValList:
 		return NewValNull(), fmt.Errorf("cannot apply dot operator on none Map or User type")
@@ -457,10 +530,6 @@ func (v *Val) Dot(idx Val) (Val, error) {
 		return NewValNull(), fmt.Errorf("cannot apply dot operator on regexp")
 
 	case ValMap:
-		i, err := idx.ToString()
-		if err != nil {
-			return NewValNull(), err
-		}
 		if vv, ok := v.Map.Data[i]; !ok {
 			return NewValNull(), fmt.Errorf("%s key not found", i)
 		} else {
@@ -468,10 +537,6 @@ func (v *Val) Dot(idx Val) (Val, error) {
 		}
 
 	case ValPair:
-		i, err := idx.ToString()
-		if err != nil {
-			return NewValNull(), err
-		}
 		if i == "first" {
 			return v.Pair.First, nil
 		}
@@ -482,11 +547,40 @@ func (v *Val) Dot(idx Val) (Val, error) {
 		return NewValNull(), fmt.Errorf("invalid field name, 'first'/'second' is allowed on Pair")
 
 	default:
-		i, err := idx.ToString()
-		if err != nil {
-			return NewValNull(), err
-		}
 		return v.Usr.DotFn(v.Usr.Context, i)
+	}
+}
+
+func (v *Val) DotSet(i string, val Val) error {
+	switch v.Type {
+	case ValInt, ValReal, ValBool, ValNull, ValStr, ValList:
+		return fmt.Errorf("cannot apply dot operator on none Map or User type")
+
+	case ValRegexp:
+		return fmt.Errorf("cannot apply dot operator on regexp")
+
+	case ValMap:
+		v.Map.Data[i] = val
+		return nil
+
+	case ValPair:
+		if i == "first" {
+			v.Pair.First = val
+			return nil
+		}
+		if i == "second" {
+			v.Pair.Second = val
+			return nil
+		}
+
+		return fmt.Errorf("invalid field name, 'first'/'second' is allowed on Pair")
+
+	default:
+		if v.Usr.DotSetFn != nil {
+			return v.Usr.DotSetFn(v.Usr.Context, i, val)
+		} else {
+			return fmt.Errorf("type: %s does not support dot operator mutation", v.Id())
+		}
 	}
 }
 

@@ -145,7 +145,7 @@ func TestEval1(t *testing.T) {
 				}
 				return NewValNull(), fmt.Errorf("%s unknown var", vname)
 			},
-
+			nil,
 			func(_ *Evaluator, fname string, args []Val) (Val, error) {
 				if fname == "abs" {
 					a0 := args[0]
@@ -264,7 +264,7 @@ policy(
 				}
 				return NewValNull(), fmt.Errorf("%s unknown var", vname)
 			},
-
+			nil,
 			func(_ *Evaluator, fname string, args []Val) (Val, error) {
 				if fname == "abs" {
 					a0 := args[0]
@@ -410,7 +410,7 @@ func TestStrInterpo(t *testing.T) {
 				}
 				return NewValNull(), fmt.Errorf("%s unknown var", vname)
 			},
-
+			nil,
 			func(_ *Evaluator, fname string, args []Val) (Val, error) {
 				if fname == "abs" {
 					a0 := args[0]
@@ -461,7 +461,7 @@ func TestLocal(t *testing.T) {
 				}
 				return NewValNull(), fmt.Errorf("%s unknown var", vname)
 			},
-
+			nil,
 			func(_ *Evaluator, fname string, args []Val) (Val, error) {
 				if fname == "abs" {
 					a0 := args[0]
@@ -532,7 +532,7 @@ func test(code string) (Val, bool) {
 			}
 			return NewValNull(), fmt.Errorf("%s unknown var", vname)
 		},
-
+		nil,
 		func(_ *Evaluator, fname string, args []Val) (Val, error) {
 			return NewValNull(), fmt.Errorf("%s unknown func", fname)
 		},
@@ -550,6 +550,12 @@ func test(code string) (Val, bool) {
 
 	if err != nil {
 		fmt.Printf(":policy %s", err.Error())
+		return NewValNull(), false
+	}
+
+	err = eval.EvalSession(policy)
+	if err != nil {
+		fmt.Printf(":evalSession %s", err.Error())
 		return NewValNull(), false
 	}
 
@@ -1252,6 +1258,31 @@ test{
   output => if false { 10 } elif false { "XX" };
 };
 `))
+
+}
+
+func TestAssign1(t *testing.T) {
+	assert := assert.New(t)
+	assert.True(testString(
+		`
+session {
+  a = 10
+}
+
+test{
+  a = "hello world";
+  output => a;
+};
+`, "hello world"))
+
+	assert.True(testString(
+		`
+test{
+  let a = 100;
+  a = "hello world";
+  output => a;
+};
+`, "hello world"))
 
 }
 
