@@ -1041,12 +1041,21 @@ SUFFIX:
 	for {
 		switch p.l.token {
 		case tkDot:
-			*lastType = suffixDot
 			ntk := p.l.next()
 			if ntk == tkId || ntk == tkStr {
-				idx := prog.addStr(p.l.valueText)
-				prog.emit1(p.l, bcDot, idx)
-				p.l.next()
+        name := p.l.valueText
+        nntk := p.l.next()
+        if nntk == tkLPar {
+          *lastType = suffixMethod
+          // a.b(...) a method call here, just treat it as a method call
+          if err := p.parseMCall(prog, name); err != nil {
+            return err
+          }
+        } else {
+          *lastType = suffixDot
+          idx := prog.addStr(name)
+          prog.emit1(p.l, bcDot, idx)
+        }
 			} else {
 				return p.err("invalid expresion, expect id or string after '.'")
 			}
@@ -1063,23 +1072,6 @@ SUFFIX:
 				return p.err("invalid expression, expect ] to close index")
 			}
 			p.l.next()
-			break
-
-		case tkSharp:
-			*lastType = suffixMethod
-			// method invocation
-			if !p.l.expect(tkId) {
-				return p.l.toError()
-			}
-
-			methodName := p.l.valueText
-			if !p.l.expect(tkLPar) {
-				return p.l.toError()
-			}
-
-			if err := p.parseMCall(prog, methodName); err != nil {
-				return err
-			}
 			break
 
 		default:
@@ -1150,7 +1142,7 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 
 		// check whether we have suffix experssion
 		switch p.l.token {
-		case tkDot, tkLSqr, tkSharp:
+    case tkDot, tkLSqr:
 			break
 
 		default:
