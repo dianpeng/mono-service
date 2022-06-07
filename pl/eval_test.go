@@ -2,9 +2,10 @@ package pl
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type actionOutput map[string]Val
@@ -21,8 +22,8 @@ func (a *actionOutput) intAt(idx string, val int) bool {
 		return false
 	}
 
-	if int(x.Int) != val {
-		fmt.Printf("actionOutput(%s) unexpected: %d = %d", idx, x.Int, val)
+	if int(x.Int()) != val {
+		fmt.Printf("actionOutput(%s) unexpected: %d = %d", idx, x.Int(), val)
 		return false
 	}
 
@@ -150,7 +151,7 @@ func TestEval1(t *testing.T) {
 				if fname == "abs" {
 					a0 := args[0]
 					must(a0.Type == ValInt, "must be int")
-					return NewValInt64(-a0.Int), nil
+					return NewValInt64(-a0.Int()), nil
 				}
 				return NewValNull(), fmt.Errorf("%s unknown func", fname)
 			},
@@ -215,7 +216,7 @@ policy(
 			{
 				e := l.Data[0]
 				assert.True(e.Type == ValInt)
-				assert.Equal(e.Int, int64(1), "int")
+				assert.Equal(e.Int(), int64(1), "int")
 			}
 			{
 				e := l.Data[1]
@@ -269,7 +270,7 @@ policy(
 				if fname == "abs" {
 					a0 := args[0]
 					must(a0.Type == ValInt, "must be int")
-					return NewValInt64(-a0.Int), nil
+					return NewValInt64(-a0.Int()), nil
 				}
 				return NewValNull(), fmt.Errorf("%s unknown func", fname)
 			},
@@ -393,7 +394,7 @@ policy(
 			v000, ok := v00.Map.Data["c"]
 			assert.True(ok)
 			assert.True(v000.Type == ValInt)
-			assert.True(v000.Int == 1)
+			assert.True(v000.Int() == 1)
 		}
 	}
 }
@@ -415,7 +416,7 @@ func TestStrInterpo(t *testing.T) {
 				if fname == "abs" {
 					a0 := args[0]
 					must(a0.Type == ValInt, "must be int")
-					return NewValInt64(-a0.Int), nil
+					return NewValInt64(-a0.Int()), nil
 				}
 				return NewValNull(), fmt.Errorf("%s unknown func", fname)
 			},
@@ -466,7 +467,7 @@ func TestLocal(t *testing.T) {
 				if fname == "abs" {
 					a0 := args[0]
 					must(a0.Type == ValInt, "must be int")
-					return NewValInt64(-a0.Int), nil
+					return NewValInt64(-a0.Int()), nil
 				}
 				return NewValNull(), fmt.Errorf("%s unknown func", fname)
 			},
@@ -578,8 +579,8 @@ func testInt64(code string, expect int64) bool {
 		return false
 	}
 
-	if val.Int != expect {
-		fmt.Printf(":return invalid value %d\n", val.Int)
+	if val.Int() != expect {
+		fmt.Printf(":return invalid value %d\n", val.Int())
 		return false
 	}
 
@@ -597,8 +598,8 @@ func testInt(code string, expect int) bool {
 		return false
 	}
 
-	if val.Int != int64(expect) {
-		fmt.Printf(":return invalid value %d\n", val.Int)
+	if val.Int() != int64(expect) {
+		fmt.Printf(":return invalid value %d\n", val.Int())
 		return false
 	}
 

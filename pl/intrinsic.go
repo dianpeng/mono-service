@@ -43,8 +43,7 @@ func visnil(i reflect.Value) bool {
 // must be (any, error) or any
 func unpack(i reflect.Value) (Val, error) {
 	switch i.Kind() {
-	case reflect.Int,
-		reflect.Int8,
+	case reflect.Int, reflect.Int8,
 		reflect.Int16,
 		reflect.Int32,
 		reflect.Int64:

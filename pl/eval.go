@@ -137,7 +137,7 @@ func (e *Evaluator) newLocal(size int) {
 
 func mustReal(x Val) float64 {
 	if x.Type == ValInt {
-		return float64(x.Int)
+		return float64(x.Int())
 	} else {
 		return x.Real
 	}
@@ -161,7 +161,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 	case bcSub:
 		if lhs.Type == rhs.Type {
 			if lhs.Type == ValInt {
-				return NewValInt64(lhs.Int - rhs.Int), nil
+				return NewValInt64(lhs.Int() - rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
 				return NewValReal(lhs.Real - rhs.Real), nil
@@ -174,7 +174,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 	case bcMul:
 		if lhs.Type == rhs.Type {
 			if lhs.Type == ValInt {
-				return NewValInt64(lhs.Int * rhs.Int), nil
+				return NewValInt64(lhs.Int() * rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
 				return NewValReal(lhs.Real * rhs.Real), nil
@@ -187,7 +187,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 	case bcPow:
 		if lhs.Type == rhs.Type {
 			if lhs.Type == ValInt {
-				return NewValInt64(powI(lhs.Int, rhs.Int)), nil
+				return NewValInt64(powI(lhs.Int(), rhs.Int())), nil
 			}
 			if lhs.Type == ValReal {
 				return NewValReal(math.Pow(lhs.Real, rhs.Real)), nil
@@ -200,10 +200,10 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 	case bcMod:
 		if lhs.Type == rhs.Type {
 			if lhs.Type == ValInt {
-				if rhs.Int == 0 {
+				if rhs.Int() == 0 {
 					return NewValNull(), fmt.Errorf("divide zero")
 				}
-				return NewValInt64(lhs.Int % rhs.Int), nil
+				return NewValInt64(lhs.Int() % rhs.Int()), nil
 			}
 		}
 		return NewValNull(), fmt.Errorf("invalid operand for *")
@@ -211,10 +211,10 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 	case bcDiv:
 		if lhs.Type == rhs.Type {
 			if lhs.Type == ValInt {
-				if rhs.Int == 0 {
+				if rhs.Int() == 0 {
 					return NewValNull(), fmt.Errorf("divide zero")
 				}
-				return NewValInt64(lhs.Int / rhs.Int), nil
+				return NewValInt64(lhs.Int() / rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
 				return NewValReal(lhs.Real / rhs.Real), nil
@@ -227,7 +227,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 	case bcAdd:
 		if lhs.Type == rhs.Type {
 			if lhs.Type == ValInt {
-				return NewValInt64(lhs.Int + rhs.Int), nil
+				return NewValInt64(lhs.Int() + rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
 				return NewValReal(lhs.Real + rhs.Real), nil
@@ -249,7 +249,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 	case bcEq:
 		if lhs.Type == rhs.Type {
 			if lhs.Type == ValInt {
-				return NewValBool(lhs.Int == rhs.Int), nil
+				return NewValBool(lhs.Int() == rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
 				return NewValBool(lhs.Real == rhs.Real), nil
@@ -265,7 +265,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 	case bcNe:
 		if lhs.Type == rhs.Type {
 			if lhs.Type == ValInt {
-				return NewValBool(lhs.Int != rhs.Int), nil
+				return NewValBool(lhs.Int() != rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
 				return NewValBool(lhs.Real != rhs.Real), nil
@@ -281,7 +281,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 	case bcLt:
 		if lhs.Type == rhs.Type {
 			if lhs.Type == ValInt {
-				return NewValBool(lhs.Int < rhs.Int), nil
+				return NewValBool(lhs.Int() < rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
 				return NewValBool(lhs.Real < rhs.Real), nil
@@ -297,7 +297,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 	case bcLe:
 		if lhs.Type == rhs.Type {
 			if lhs.Type == ValInt {
-				return NewValBool(lhs.Int <= rhs.Int), nil
+				return NewValBool(lhs.Int() <= rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
 				return NewValBool(lhs.Real <= rhs.Real), nil
@@ -313,7 +313,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 	case bcGt:
 		if lhs.Type == rhs.Type {
 			if lhs.Type == ValInt {
-				return NewValBool(lhs.Int > rhs.Int), nil
+				return NewValBool(lhs.Int() > rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
 				return NewValBool(lhs.Real > rhs.Real), nil
@@ -329,7 +329,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 	case bcGe:
 		if lhs.Type == rhs.Type {
 			if lhs.Type == ValInt {
-				return NewValBool(lhs.Int >= rhs.Int), nil
+				return NewValBool(lhs.Int() >= rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
 				return NewValBool(lhs.Real >= rhs.Real), nil
@@ -369,7 +369,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 func (e *Evaluator) doNegate(v Val) (Val, error) {
 	switch v.Type {
 	case ValInt:
-		return NewValInt64(-v.Int), nil
+		return NewValInt64(-v.Int()), nil
 	case ValReal:
 		return NewValReal(-v.Real), nil
 	default:
@@ -599,10 +599,10 @@ VM:
 				must(funcIndex.Type == ValInt,
 					fmt.Sprintf("function indext must be indext but %s", funcIndex.Id()))
 
-				must(funcIndex.Int >= 0,
+				must(funcIndex.Int() >= 0,
 					fmt.Sprintf("function index must be none negative"))
 
-				fentry := intrinsicFunc[funcIndex.Int]
+				fentry := intrinsicFunc[funcIndex.Int()]
 				r, err := fentry.entry(e, "$intrinsic$", arg)
 				if err != nil {
 					return e.doErr(prog, pc, err)

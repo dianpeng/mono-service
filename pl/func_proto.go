@@ -646,7 +646,7 @@ func (f *FuncProto) check0(exp protoelem, got Val, c convoneval) (the_return boo
 		if exp.opcode.isInt() {
 			return true
 		} else if exp.opcode.isUInt() {
-			return got.Int >= 0
+			return got.Int() >= 0
 		}
 		break
 
@@ -870,43 +870,43 @@ func (f *FuncProto) pack(v Val, t opc) *reflect.Value {
 	var rv reflect.Value
 	switch int(t) {
 	case PInt:
-		rv = reflect.ValueOf(int(v.Int))
+		rv = reflect.ValueOf(int(v.Int()))
 		break
 
 	case PI8:
-		rv = reflect.ValueOf(int8(v.Int))
+		rv = reflect.ValueOf(int8(v.Int()))
 		break
 
 	case PI16:
-		rv = reflect.ValueOf(int16(v.Int))
+		rv = reflect.ValueOf(int16(v.Int()))
 		break
 
 	case PI32:
-		rv = reflect.ValueOf(int32(v.Int))
+		rv = reflect.ValueOf(int32(v.Int()))
 		break
 
 	case PI64:
-		rv = reflect.ValueOf(int64(v.Int))
+		rv = reflect.ValueOf(int64(v.Int()))
 		break
 
 	case PUInt:
-		rv = reflect.ValueOf(uint(v.Int))
+		rv = reflect.ValueOf(uint(v.Int()))
 		break
 
 	case PUI8:
-		rv = reflect.ValueOf(uint8(v.Int))
+		rv = reflect.ValueOf(uint8(v.Int()))
 		break
 
 	case PUI16:
-		rv = reflect.ValueOf(uint16(v.Int))
+		rv = reflect.ValueOf(uint16(v.Int()))
 		break
 
 	case PUI32:
-		rv = reflect.ValueOf(uint32(v.Int))
+		rv = reflect.ValueOf(uint32(v.Int()))
 		break
 
 	case PUI64:
-		rv = reflect.ValueOf(uint64(v.Int))
+		rv = reflect.ValueOf(uint64(v.Int()))
 		break
 
 	case PReal, PUReal:

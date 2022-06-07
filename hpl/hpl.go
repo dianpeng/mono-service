@@ -355,7 +355,7 @@ func (p *Hpl) httpResponseAction(x *pl.Evaluator, actionName string, arg pl.Val)
 		if arg.Type != pl.ValInt {
 			return fmt.Errorf("status action must have a int argument")
 		} else {
-			p.respWriter.statusCode = int(arg.Int)
+			p.respWriter.statusCode = int(arg.Int())
 		}
 		return nil
 

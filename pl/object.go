@@ -96,7 +96,7 @@ type Pair struct {
 
 type Val struct {
 	Type   int
-	Int    int64
+	vInt    int64
 	Real   float64
 	Bool   bool
 	String string
@@ -105,6 +105,10 @@ type Val struct {
 	List   *List
 	Map    *Map
 	Usr    *UVal
+}
+
+func (v *Val) Int() int64 {
+  return v.vInt
 }
 
 func NewValNull() Val {
@@ -116,14 +120,14 @@ func NewValNull() Val {
 func NewValInt64(i int64) Val {
 	return Val{
 		Type: ValInt,
-		Int:  i,
+		vInt:  i,
 	}
 }
 
 func NewValInt(i int) Val {
 	return Val{
 		Type: ValInt,
-		Int:  int64(i),
+		vInt:  int64(i),
 	}
 }
 
@@ -286,7 +290,7 @@ func (v *Val) AddMap(key string, val Val) {
 func (v *Val) ToBoolean() bool {
 	switch v.Type {
 	case ValInt:
-		return v.Int != 0
+		return v.Int() != 0
 	case ValReal:
 		return v.Real != 0
 	case ValStr:
@@ -307,8 +311,8 @@ func (v *Val) ToBoolean() bool {
 func (v *Val) ToIndex() (int, error) {
 	switch v.Type {
 	case ValInt:
-		if v.Int >= 0 {
-			return int(v.Int), nil
+		if v.Int() >= 0 {
+			return int(v.Int()), nil
 		}
 		return 0, fmt.Errorf("negative value cannot be index")
 
@@ -323,7 +327,7 @@ func (v *Val) ToIndex() (int, error) {
 func (v *Val) ToNative() interface{} {
 	switch v.Type {
 	case ValInt:
-		return v.Int
+		return v.Int()
 	case ValReal:
 		return v.Real
 	case ValStr:
@@ -364,7 +368,7 @@ func (v *Val) ToNative() interface{} {
 func (v *Val) ToString() (string, error) {
 	switch v.Type {
 	case ValInt:
-		return fmt.Sprintf("%d", v.Int), nil
+		return fmt.Sprintf("%d", v.Int()), nil
 	case ValReal:
 		return fmt.Sprintf("%f", v.Real), nil
 	case ValBool:
@@ -595,7 +599,7 @@ func (v *Val) methodInt(name string, args []Val) (Val, error) {
 		if len(args) != 0 {
 			return NewValNull(), fmt.Errorf("method: int:to_string must have 0 arguments")
 		}
-		return NewValStr(fmt.Sprintf("%d", v.Int)), nil
+		return NewValStr(fmt.Sprintf("%d", v.Int())), nil
 	default:
 		return NewValNull(), fmt.Errorf("method: int:%s is unknown", name)
 	}
@@ -711,9 +715,9 @@ func (v *Val) methodStr(name string, args []Val) (Val, error) {
 		}
 		var ret string
 		if len(args) == 2 {
-			ret = v.String[args[0].Int:args[1].Int]
+			ret = v.String[args[0].Int():args[1].Int()]
 		} else {
-			ret = v.String[args[0].Int:]
+			ret = v.String[args[0].Int():]
 		}
 		return NewValStr(ret), nil
 
@@ -727,12 +731,12 @@ func (v *Val) methodStr(name string, args []Val) (Val, error) {
 		if len(args) == 1 {
 			return NewValInt(strings.Index(v.String, args[0].String)), nil
 		} else {
-			sub := v.String[args[1].Int:]
+			sub := v.String[args[1].Int():]
 			where := strings.Index(sub, args[0].String)
 			if where == -1 {
 				return NewValInt(-1), nil
 			} else {
-				return NewValInt64(int64(where) + args[1].Int), nil
+				return NewValInt64(int64(where) + args[1].Int()), nil
 			}
 		}
 
@@ -764,10 +768,10 @@ func (v *Val) methodList(name string, args []Val) (Val, error) {
 		}
 		num := 1
 		if len(args) == 1 {
-			if args[0].Type != ValInt || args[0].Int < 0 {
+			if args[0].Type != ValInt || args[0].Int() < 0 {
 				return NewValNull(), fmt.Errorf("method: list:pop_back invalid argument")
 			}
-			num = int(args[0].Int)
+			num = int(args[0].Int())
 		}
 
 		if num < len(v.List.Data) {
@@ -799,9 +803,9 @@ func (v *Val) methodList(name string, args []Val) (Val, error) {
 		}
 		var ret []Val
 		if len(args) == 2 {
-			ret = v.List.Data[args[0].Int:args[1].Int]
+			ret = v.List.Data[args[0].Int():args[1].Int()]
 		} else {
-			ret = v.List.Data[args[0].Int:]
+			ret = v.List.Data[args[0].Int():]
 		}
 		return NewValListRaw(ret), nil
 
@@ -940,7 +944,7 @@ func (v *Val) Id() string {
 func (v *Val) Info() string {
 	switch v.Type {
 	case ValInt:
-		return fmt.Sprintf("[int: %d]", v.Int)
+		return fmt.Sprintf("[int: %d]", v.Int())
 	case ValReal:
 		return fmt.Sprintf("[real: %f]", v.Real)
 	case ValBool:
