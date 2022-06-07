@@ -941,7 +941,7 @@ func (f *FuncProto) pack(v Val, t opc) *reflect.Value {
 		break
 
 	case PRegexp:
-		rv = reflect.ValueOf(v.Regexp)
+		rv = reflect.ValueOf(v.Regexp())
 		break
 
 	case PAny:

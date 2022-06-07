@@ -344,7 +344,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 
 	case bcRegexpMatch:
 		if lhs.Type == ValStr && rhs.Type == ValRegexp {
-			r := rhs.Regexp.Match([]byte(lhs.String()))
+			r := rhs.Regexp().Match([]byte(lhs.String()))
 			return NewValBool(r), nil
 		} else {
 			return NewValNull(), fmt.Errorf("regexp operator ~ must be applied on string and regexp")
@@ -352,7 +352,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 
 	case bcRegexpNMatch:
 		if lhs.Type == ValStr && rhs.Type == ValRegexp {
-			r := rhs.Regexp.Match([]byte(lhs.String()))
+			r := rhs.Regexp().Match([]byte(lhs.String()))
 			return NewValBool(!r), nil
 		} else {
 			return NewValNull(), fmt.Errorf("regexp operator !~ must be applied on string and regexp")

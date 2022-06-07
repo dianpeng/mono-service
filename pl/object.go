@@ -100,7 +100,7 @@ type Val struct {
 	vReal   float64
 	vBool   bool
 	vString string
-	Regexp  *regexp.Regexp
+	vRegexp *regexp.Regexp
 	Pair    *Pair
 	List    *List
 	Map     *Map
@@ -137,6 +137,14 @@ func (v *Val) String() string {
 
 func (v *Val) SetString(vv string) {
 	v.vString = vv
+}
+
+func (v *Val) Regexp() *regexp.Regexp {
+	return v.vRegexp
+}
+
+func (v *Val) SetRegexp(vv *regexp.Regexp) {
+	v.vRegexp = vv
 }
 
 func NewValNull() Val {
@@ -192,8 +200,8 @@ func NewValPair(f Val, s Val) Val {
 
 func NewValRegexp(r *regexp.Regexp) Val {
 	return Val{
-		Type:   ValRegexp,
-		Regexp: r,
+		Type:    ValRegexp,
+		vRegexp: r,
 	}
 }
 
@@ -382,7 +390,7 @@ func (v *Val) ToNative() interface{} {
 			v.Pair.Second.ToNative(),
 		}
 	case ValRegexp:
-		return fmt.Sprintf("[Regexp: %s]", v.Regexp.String())
+		return fmt.Sprintf("[Regexp: %s]", v.Regexp().String())
 
 	default:
 		if v.Usr.ToNativeFn != nil {
@@ -411,7 +419,7 @@ func (v *Val) ToString() (string, error) {
 		return v.String(), nil
 
 	case ValRegexp:
-		return v.Regexp.String(), nil
+		return v.Regexp().String(), nil
 
 	case ValList, ValMap, ValPair:
 		return "", fmt.Errorf("cannot convert List/Map/Pair to string")
@@ -991,7 +999,7 @@ func (v *Val) Info() string {
 	case ValPair:
 		return fmt.Sprintf("[pair: %s=>%s]", v.Pair.First.Info(), v.Pair.Second.Info())
 	case ValRegexp:
-		return fmt.Sprintf("[regexp: %s]", v.Regexp.String())
+		return fmt.Sprintf("[regexp: %s]", v.Regexp().String())
 	default:
 		if v.Usr.InfoFn != nil {
 			return v.Usr.InfoFn(v.Usr.Context)
