@@ -16,7 +16,7 @@ func fnConcateHttpBody(argument []pl.Val) (pl.Val, error) {
 	var input []io.Reader
 	for idx, a := range argument {
 		if a.Id() == "http.body" {
-			body, _ := a.Usr.Context.(*HplHttpBody)
+			body, _ := a.Usr().Context.(*HplHttpBody)
 			input = append(input, body.ToStream())
 		} else {
 			str, err := a.ToString()
@@ -98,7 +98,7 @@ func fnHeaderHas(argument []pl.Val) (pl.Val, error) {
 			"argument must be string")
 	}
 
-	hdr, ok := argument[0].Usr.Context.(*HplHttpHeader)
+	hdr, ok := argument[0].Usr().Context.(*HplHttpHeader)
 	must(ok, "must be http.header")
 
 	if vv := hdr.header.Get(argument[1].String()); vv == "" {
@@ -156,7 +156,7 @@ func fnHeaderDelete(argument []pl.Val) (pl.Val, error) {
 			"argument must be string")
 	}
 
-	hdr, ok := argument[0].Usr.Context.(*HplHttpHeader)
+	hdr, ok := argument[0].Usr().Context.(*HplHttpHeader)
 	must(ok, "must be http.header")
 
 	cnt := doHeaderDelete(hdr.header, argument[1].String())

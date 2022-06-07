@@ -118,7 +118,7 @@ func foreachHeaderKV(arg pl.Val, fn func(key string, val string)) bool {
 		}
 	} else if arg.Id() == "http.header" {
 		// known special user type to us, then just foreach the header
-		hdr := arg.Usr.Context.(*HplHttpHeader)
+		hdr := arg.Usr().Context.(*HplHttpHeader)
 		for k, v := range hdr.header {
 			for _, vv := range v {
 				fn(k, vv)
@@ -416,7 +416,7 @@ func (p *Hpl) httpResponseAction(x *pl.Evaluator, actionName string, arg pl.Val)
 		if arg.Type == pl.ValStr {
 			p.respWriter.writeBodyString(arg.String())
 		} else if arg.Id() == "http.body" {
-			body, ok := arg.Usr.Context.(*HplHttpBody)
+			body, ok := arg.Usr().Context.(*HplHttpBody)
 			must(ok, "invalid body type")
 			p.respWriter.writeBodyStream(body.ToStream())
 		} else {

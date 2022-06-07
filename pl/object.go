@@ -104,63 +104,87 @@ type Val struct {
 	Pair    *Pair
 	vList   *List
 	vMap    *Map
-	Usr     *UVal
+	vUsr    *UVal
 }
 
 func (v *Val) Int() int64 {
+	must(v.Type == ValInt, "must be int")
 	return v.vInt
 }
 
 func (v *Val) SetInt(i int64) {
+	v.Type = ValInt
 	v.vInt = i
 }
 
 func (v *Val) Real() float64 {
+	must(v.Type == ValReal, "must be real")
 	return v.vReal
 }
 
 func (v *Val) SetReal(vv float64) {
+	v.Type = ValReal
 	v.vReal = vv
 }
 
 func (v *Val) Bool() bool {
+	must(v.Type == ValBool, "must be bool")
 	return v.vBool
 }
 
 func (v *Val) SetBool(vv bool) {
+	v.Type = ValBool
 	v.vBool = vv
 }
 
 func (v *Val) String() string {
+	must(v.Type == ValStr, "must be string")
 	return v.vString
 }
 
 func (v *Val) SetString(vv string) {
+	v.Type = ValStr
 	v.vString = vv
 }
 
 func (v *Val) Regexp() *regexp.Regexp {
+	must(v.Type == ValRegexp, "must be regexp")
 	return v.vRegexp
 }
 
 func (v *Val) SetRegexp(vv *regexp.Regexp) {
+	v.Type = ValRegexp
 	v.vRegexp = vv
 }
 
 func (v *Val) List() *List {
+	must(v.Type == ValList, "must be list")
 	return v.vList
 }
 
 func (v *Val) SetList(vv *List) {
+	v.Type = ValList
 	v.vList = vv
 }
 
 func (v *Val) Map() *Map {
+	must(v.Type == ValMap, "must be map")
 	return v.vMap
 }
 
 func (v *Val) SetMap(vv *Map) {
+	v.Type = ValMap
 	v.vMap = vv
+}
+
+func (v *Val) Usr() *UVal {
+	must(v.Type == ValUsr, "must be usr")
+	return v.vUsr
+}
+
+func (v *Val) SetUsr(vv *UVal) {
+	v.Type = ValUsr
+	v.vUsr = vv
 }
 
 func NewValNull() Val {
@@ -275,7 +299,7 @@ func NewValUsr(
 	f9 UValToNative) Val {
 	return Val{
 		Type: ValUsr,
-		Usr: &UVal{
+		vUsr: &UVal{
 			Context:    c,
 			IndexFn:    f0,
 			IndexSetFn: f1,
@@ -303,7 +327,7 @@ func NewValUsrImmutable(
 	f9 UValToNative) Val {
 	return Val{
 		Type: ValUsr,
-		Usr: &UVal{
+		vUsr: &UVal{
 			Context:    c,
 			IndexFn:    f0,
 			IndexSetFn: nil,
@@ -409,10 +433,10 @@ func (v *Val) ToNative() interface{} {
 		return fmt.Sprintf("[Regexp: %s]", v.Regexp().String())
 
 	default:
-		if v.Usr.ToNativeFn != nil {
-			return v.Usr.ToNativeFn(v.Usr.Context)
+		if v.Usr().ToNativeFn != nil {
+			return v.Usr().ToNativeFn(v.Usr().Context)
 		} else {
-			return v.Usr.Context
+			return v.Usr().Context
 		}
 	}
 }
@@ -441,7 +465,7 @@ func (v *Val) ToString() (string, error) {
 		return "", fmt.Errorf("cannot convert List/Map/Pair to string")
 
 	default:
-		return v.Usr.ToStringFn(v.Usr.Context)
+		return v.Usr().ToStringFn(v.Usr().Context)
 	}
 	return "", nil
 }
@@ -501,7 +525,7 @@ func (v *Val) Index(idx Val) (Val, error) {
 
 	default:
 		// User
-		return v.Usr.IndexFn(v.Usr.Context, idx)
+		return v.Usr().IndexFn(v.Usr().Context, idx)
 	}
 }
 
@@ -573,8 +597,8 @@ func (v *Val) IndexSet(idx, val Val) error {
 		return nil
 
 	default:
-		if v.Usr.IndexSetFn != nil {
-			return v.Usr.IndexSetFn(v.Usr.Context, idx, val)
+		if v.Usr().IndexSetFn != nil {
+			return v.Usr().IndexSetFn(v.Usr().Context, idx, val)
 		} else {
 			return fmt.Errorf("type: %s does not support index operator mutation", v.Id())
 		}
@@ -607,7 +631,7 @@ func (v *Val) Dot(i string) (Val, error) {
 		return NewValNull(), fmt.Errorf("invalid field name, 'first'/'second' is allowed on Pair")
 
 	default:
-		return v.Usr.DotFn(v.Usr.Context, i)
+		return v.Usr().DotFn(v.Usr().Context, i)
 	}
 }
 
@@ -636,8 +660,8 @@ func (v *Val) DotSet(i string, val Val) error {
 		return fmt.Errorf("invalid field name, 'first'/'second' is allowed on Pair")
 
 	default:
-		if v.Usr.DotSetFn != nil {
-			return v.Usr.DotSetFn(v.Usr.Context, i, val)
+		if v.Usr().DotSetFn != nil {
+			return v.Usr().DotSetFn(v.Usr().Context, i, val)
 		} else {
 			return fmt.Errorf("type: %s does not support dot operator mutation", v.Id())
 		}
@@ -923,8 +947,8 @@ func (v *Val) methodMap(name string, args []Val) (Val, error) {
 }
 
 func (v *Val) methodUsr(name string, args []Val) (Val, error) {
-	if v.Usr.MethodFn != nil {
-		return v.Usr.MethodFn(v.Usr.Context, name, args)
+	if v.Usr().MethodFn != nil {
+		return v.Usr().MethodFn(v.Usr().Context, name, args)
 	} else {
 		return NewValNull(), fmt.Errorf("%s:%s is unknown", v.Id(), name)
 	}
@@ -984,8 +1008,8 @@ func (v *Val) Id() string {
 	case ValRegexp:
 		return "regexp"
 	default:
-		if v.Usr.IdFn != nil {
-			return v.Usr.IdFn(v.Usr.Context)
+		if v.Usr().IdFn != nil {
+			return v.Usr().IdFn(v.Usr().Context)
 		} else {
 			return "user"
 		}
@@ -1017,8 +1041,8 @@ func (v *Val) Info() string {
 	case ValRegexp:
 		return fmt.Sprintf("[regexp: %s]", v.Regexp().String())
 	default:
-		if v.Usr.InfoFn != nil {
-			return v.Usr.InfoFn(v.Usr.Context)
+		if v.Usr().InfoFn != nil {
+			return v.Usr().InfoFn(v.Usr().Context)
 		} else {
 			return fmt.Sprintf("[user: %s]", v.Id())
 		}

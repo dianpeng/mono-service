@@ -937,7 +937,7 @@ func (f *FuncProto) pack(v Val, t opc) *reflect.Value {
 		return nil
 
 	case PUsr:
-		rv = reflect.ValueOf(v.Usr.Context)
+		rv = reflect.ValueOf(v.Usr().Context)
 		break
 
 	case PRegexp:
