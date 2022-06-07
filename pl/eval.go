@@ -139,7 +139,7 @@ func mustReal(x Val) float64 {
 	if x.Type == ValInt {
 		return float64(x.Int())
 	} else {
-		return x.Real
+		return x.Real()
 	}
 }
 
@@ -164,7 +164,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValInt64(lhs.Int() - rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
-				return NewValReal(lhs.Real - rhs.Real), nil
+				return NewValReal(lhs.Real() - rhs.Real()), nil
 			}
 		} else if lhs.IsNumber() && rhs.IsNumber() {
 			return NewValReal(mustReal(lhs) - mustReal(rhs)), nil
@@ -177,7 +177,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValInt64(lhs.Int() * rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
-				return NewValReal(lhs.Real * rhs.Real), nil
+				return NewValReal(lhs.Real() * rhs.Real()), nil
 			}
 		} else if lhs.IsNumber() && rhs.IsNumber() {
 			return NewValReal(mustReal(lhs) * mustReal(rhs)), nil
@@ -190,7 +190,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValInt64(powI(lhs.Int(), rhs.Int())), nil
 			}
 			if lhs.Type == ValReal {
-				return NewValReal(math.Pow(lhs.Real, rhs.Real)), nil
+				return NewValReal(math.Pow(lhs.Real(), rhs.Real())), nil
 			}
 		} else if lhs.IsNumber() && rhs.IsNumber() {
 			return NewValReal(math.Pow(mustReal(lhs), mustReal(rhs))), nil
@@ -217,7 +217,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValInt64(lhs.Int() / rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
-				return NewValReal(lhs.Real / rhs.Real), nil
+				return NewValReal(lhs.Real() / rhs.Real()), nil
 			}
 		} else if lhs.IsNumber() && rhs.IsNumber() {
 			return NewValReal(mustReal(lhs) / mustReal(rhs)), nil
@@ -230,7 +230,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValInt64(lhs.Int() + rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
-				return NewValReal(lhs.Real + rhs.Real), nil
+				return NewValReal(lhs.Real() + rhs.Real()), nil
 			}
 			if lhs.Type == ValStr {
 				return NewValStr(lhs.String + rhs.String), nil
@@ -252,7 +252,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValBool(lhs.Int() == rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
-				return NewValBool(lhs.Real == rhs.Real), nil
+				return NewValBool(lhs.Real() == rhs.Real()), nil
 			}
 			if lhs.Type == ValStr {
 				return NewValBool(lhs.String == rhs.String), nil
@@ -268,7 +268,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValBool(lhs.Int() != rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
-				return NewValBool(lhs.Real != rhs.Real), nil
+				return NewValBool(lhs.Real() != rhs.Real()), nil
 			}
 			if lhs.Type == ValStr {
 				return NewValBool(lhs.String != rhs.String), nil
@@ -284,7 +284,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValBool(lhs.Int() < rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
-				return NewValBool(lhs.Real < rhs.Real), nil
+				return NewValBool(lhs.Real() < rhs.Real()), nil
 			}
 			if lhs.Type == ValStr {
 				return NewValBool(lhs.String < rhs.String), nil
@@ -300,7 +300,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValBool(lhs.Int() <= rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
-				return NewValBool(lhs.Real <= rhs.Real), nil
+				return NewValBool(lhs.Real() <= rhs.Real()), nil
 			}
 			if lhs.Type == ValStr {
 				return NewValBool(lhs.String <= rhs.String), nil
@@ -316,7 +316,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValBool(lhs.Int() > rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
-				return NewValBool(lhs.Real > rhs.Real), nil
+				return NewValBool(lhs.Real() > rhs.Real()), nil
 			}
 			if lhs.Type == ValStr {
 				return NewValBool(lhs.String > rhs.String), nil
@@ -332,7 +332,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValBool(lhs.Int() >= rhs.Int()), nil
 			}
 			if lhs.Type == ValReal {
-				return NewValBool(lhs.Real >= rhs.Real), nil
+				return NewValBool(lhs.Real() >= rhs.Real()), nil
 			}
 			if lhs.Type == ValStr {
 				return NewValBool(lhs.String >= rhs.String), nil
@@ -371,7 +371,7 @@ func (e *Evaluator) doNegate(v Val) (Val, error) {
 	case ValInt:
 		return NewValInt64(-v.Int()), nil
 	case ValReal:
-		return NewValReal(-v.Real), nil
+		return NewValReal(-v.Real()), nil
 	default:
 		return NewValNull(), fmt.Errorf("invalid operand for !")
 	}

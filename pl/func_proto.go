@@ -654,7 +654,7 @@ func (f *FuncProto) check0(exp protoelem, got Val, c convoneval) (the_return boo
 		if exp.opcode.isReal() {
 			return true
 		} else if exp.opcode.isUReal() {
-			return got.Real >= 0.0
+			return got.Real() >= 0.0
 		}
 		break
 
@@ -910,15 +910,15 @@ func (f *FuncProto) pack(v Val, t opc) *reflect.Value {
 		break
 
 	case PReal, PUReal:
-		rv = reflect.ValueOf(v.Real)
+		rv = reflect.ValueOf(v.Real())
 		break
 
 	case PR32, PUR32:
-		rv = reflect.ValueOf(float32(v.Real))
+		rv = reflect.ValueOf(float32(v.Real()))
 		break
 
 	case PR64, PUR64:
-		rv = reflect.ValueOf(float64(v.Real))
+		rv = reflect.ValueOf(float64(v.Real()))
 		break
 
 	case PString, PNEString:

@@ -42,8 +42,8 @@ func (a *actionOutput) realAt(idx string, val float64) bool {
 		return false
 	}
 
-	if x.Real != val {
-		fmt.Printf("actionOutput(%s) unexpected: %f = %f", idx, x.Real, val)
+	if x.Real() != val {
+		fmt.Printf("actionOutput(%s) unexpected: %f = %f", idx, x.Real(), val)
 		return false
 	}
 
@@ -226,7 +226,7 @@ policy(
 			{
 				e := l.Data[2]
 				assert.True(e.Type == ValReal)
-				assert.Equal(e.Real, 3.0, "real")
+				assert.Equal(e.Real(), 3.0, "real")
 			}
 			{
 				e := l.Data[3]
@@ -617,8 +617,8 @@ func testReal(code string, expect float64) bool {
 		return false
 	}
 
-	if val.Real != expect {
-		fmt.Printf(":return invalid value %f\n", val.Real)
+	if val.Real() != expect {
+		fmt.Printf(":return invalid value %f\n", val.Real())
 		return false
 	}
 

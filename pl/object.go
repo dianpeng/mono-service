@@ -96,8 +96,8 @@ type Pair struct {
 
 type Val struct {
 	Type   int
-	vInt    int64
-	Real   float64
+	vInt   int64
+	vReal   float64
 	Bool   bool
 	String string
 	Regexp *regexp.Regexp
@@ -108,7 +108,11 @@ type Val struct {
 }
 
 func (v *Val) Int() int64 {
-  return v.vInt
+	return v.vInt
+}
+
+func (v *Val) Real() float64 {
+	return v.vReal
 }
 
 func NewValNull() Val {
@@ -120,14 +124,14 @@ func NewValNull() Val {
 func NewValInt64(i int64) Val {
 	return Val{
 		Type: ValInt,
-		vInt:  i,
+		vInt: i,
 	}
 }
 
 func NewValInt(i int) Val {
 	return Val{
 		Type: ValInt,
-		vInt:  int64(i),
+		vInt: int64(i),
 	}
 }
 
@@ -141,7 +145,7 @@ func NewValStr(s string) Val {
 func NewValReal(d float64) Val {
 	return Val{
 		Type: ValReal,
-		Real: d,
+		vReal: d,
 	}
 }
 
@@ -292,7 +296,7 @@ func (v *Val) ToBoolean() bool {
 	case ValInt:
 		return v.Int() != 0
 	case ValReal:
-		return v.Real != 0
+		return v.Real() != 0
 	case ValStr:
 		return len(v.String) != 0
 	case ValBool:
@@ -329,7 +333,7 @@ func (v *Val) ToNative() interface{} {
 	case ValInt:
 		return v.Int()
 	case ValReal:
-		return v.Real
+		return v.Real()
 	case ValStr:
 		return v.String
 	case ValBool:
@@ -370,7 +374,7 @@ func (v *Val) ToString() (string, error) {
 	case ValInt:
 		return fmt.Sprintf("%d", v.Int()), nil
 	case ValReal:
-		return fmt.Sprintf("%f", v.Real), nil
+		return fmt.Sprintf("%f", v.Real()), nil
 	case ValBool:
 		if v.Bool {
 			return "true", nil
@@ -611,37 +615,37 @@ func (v *Val) methodReal(name string, args []Val) (Val, error) {
 		if len(args) != 0 {
 			return NewValNull(), fmt.Errorf("method: real:to_string must have 0 arguments")
 		}
-		return NewValStr(fmt.Sprintf("%f", v.Real)), nil
+		return NewValStr(fmt.Sprintf("%f", v.Real())), nil
 	case "is_nan":
 		if len(args) != 0 {
 			return NewValNull(), fmt.Errorf("method: real:is_ana must have 0 arguments")
 		}
-		return NewValBool(math.IsNaN(v.Real)), nil
+		return NewValBool(math.IsNaN(v.Real())), nil
 	case "is_inf":
 		if len(args) != 0 {
 			return NewValNull(), fmt.Errorf("method: real:is_inf must have 0 arguments")
 		}
-		return NewValBool(math.IsInf(v.Real, 0)), nil
+		return NewValBool(math.IsInf(v.Real(), 0)), nil
 	case "is_ninf":
 		if len(args) != 0 {
 			return NewValNull(), fmt.Errorf("method: real:is_ninf must have 0 arguments")
 		}
-		return NewValBool(math.IsInf(v.Real, -1)), nil
+		return NewValBool(math.IsInf(v.Real(), -1)), nil
 	case "is_pinf":
 		if len(args) != 0 {
 			return NewValNull(), fmt.Errorf("method: real:is_pinf must have 0 arguments")
 		}
-		return NewValBool(math.IsInf(v.Real, 1)), nil
+		return NewValBool(math.IsInf(v.Real(), 1)), nil
 	case "cell":
 		if len(args) != 0 {
 			return NewValNull(), fmt.Errorf("method: real:cell must have 0 arguments")
 		}
-		return NewValReal(math.Ceil(v.Real)), nil
+		return NewValReal(math.Ceil(v.Real())), nil
 	case "floor":
 		if len(args) != 0 {
 			return NewValNull(), fmt.Errorf("method: real:floor must have 0 arguments")
 		}
-		return NewValReal(math.Floor(v.Real)), nil
+		return NewValReal(math.Floor(v.Real())), nil
 
 	default:
 		return NewValNull(), fmt.Errorf("method: real:%s is unknown", name)
@@ -946,7 +950,7 @@ func (v *Val) Info() string {
 	case ValInt:
 		return fmt.Sprintf("[int: %d]", v.Int())
 	case ValReal:
-		return fmt.Sprintf("[real: %f]", v.Real)
+		return fmt.Sprintf("[real: %f]", v.Real())
 	case ValBool:
 		if v.Bool {
 			return "[bool: true]"
