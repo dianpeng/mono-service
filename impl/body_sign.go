@@ -111,6 +111,11 @@ func (b *bodySignSession) Service() service.Service {
 }
 
 func (b *bodySignSession) reset() {
+	if b.r.body != nil {
+		name := b.r.body.Name()
+		b.r.body.Close()
+		os.Remove(name)
+	}
 	b.r = nil
 	b.op = ""
 	b.method = ""
@@ -156,19 +161,11 @@ func (b *bodySignSession) Start(r service.SessionResource) error {
 }
 
 func (b *bodySignSession) Done(_ interface{}) {
-	b.res = nil
 	b.reset()
+	b.res = nil
 }
 
 func (b *bodySignSession) Accept(ctx interface{}) (service.SessionResult, error) {
-	defer func() {
-		if b.r.body != nil {
-			name := b.r.body.Name()
-			b.r.body.Close()
-			os.Remove(name)
-		}
-	}()
-
 	param, ok := ctx.(*bodySignInput)
 	if !ok {
 		return service.SessionResult{},
@@ -343,9 +340,9 @@ Additionally, it exposes following policy variable for user to use
 4. signExpect, if it is a verify operation, then the expect field will be
                stored here
 
-5. reqBody, a duplicated stream of body of request. Notes after the sign
-            the original request body is not usable anymore, ie it is empty
-            since it has been consumed up
+5. signBody, a duplicated stream of body of request. Notes after the sign
+             the original request body is not usable anymore, ie it is empty
+             since it has been consumed up
 
 With this service, user can echo the request body back regardlessly however
 large the request body is. For example it can sign a 4gb request body and

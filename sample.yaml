@@ -19,9 +19,9 @@ vhost:
             header_set => ("x-body-sign-final-result", sign);
             header_set => ("x-body-sign-method", signMethod);
 
-            // notes, we need to use reqBody, since the original body has been
+            // notes, we need to use signBody, since the original body has been
             // consumed up
-            body => reqBody;
+            body => signBody;
           };
 
           // policy for handling verification result
@@ -34,9 +34,9 @@ vhost:
               ("x-body-sign-expect", signExpect)
             ];
 
-            // notes, we need to use reqBody, since the original body has been
+            // notes, we need to use signBody, since the original body has been
             // consumed up
-            body => reqBody;
+            body => signBody;
           };
 
           pass => {
@@ -45,7 +45,7 @@ vhost:
               ("x-body-sign-result", sign),
               ("x-body-sign-expect", signExpect)
             ];
-            body => reqBody;
+            body => signBody;
           };
 
           log => {

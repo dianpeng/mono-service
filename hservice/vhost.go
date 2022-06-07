@@ -446,12 +446,6 @@ func (v *VHost) doPhase(asvc *vhostService,
 		}
 	}
 
-	{
-		// 3.4) run the session's done handler
-		handler.setPhase(phase.PhaseSessionDone, "session.Done")
-		handler.session.Done(sessionCtx)
-	}
-
 	// 4. Generate the http response based on sessions result
 	{
 		handler.setPhase(phase.PhaseHttpResponse, "http.Response")
@@ -460,6 +454,15 @@ func (v *VHost) doPhase(asvc *vhostService,
 			v.doPhaseError(asvc, w, req, param, err, phase.PhaseHttpResponse)
 			return
 		}
+	}
+
+	// Notes, we need to invoke session's done handler *after* the response been
+	// generated since the session handler may have some data used by the response
+	// handler
+	{
+		// 3.4) run the session's done handler
+		handler.setPhase(phase.PhaseSessionDone, "session.Done")
+		handler.session.Done(sessionCtx)
 	}
 
 	// 5. Lastly log generation
