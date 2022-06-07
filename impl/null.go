@@ -4,18 +4,13 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/dianpeng/mono-service/alog"
 	"github.com/dianpeng/mono-service/config"
-	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/pl"
 	"github.com/dianpeng/mono-service/service"
-	"github.com/dianpeng/mono-service/util"
 	hrouter "github.com/julienschmidt/httprouter"
 )
 
 type nullService struct {
-	config *config.Service
-	policy *pl.Policy
 }
 
 func (s *nullService) Name() string {
@@ -26,34 +21,25 @@ func (s *nullService) IDL() string {
 	return ""
 }
 
-func (s *nullService) Tag() string {
-	return s.config.Tag
-}
-
-func (s *nullService) Policy() string {
-	return s.config.Policy
-}
-
-func (s *nullService) PolicyDump() string {
-	return s.policy.Dump()
-}
-
-func (s *nullService) Router() string {
-	return s.config.Router
-}
-
-func (s *nullService) MethodList() []string {
-	return s.config.Method
-}
-
 type nullSession struct {
-	hpl     *hpl.Hpl
 	service *nullService
 	r       service.SessionResource
 }
 
-func (s *nullSession) hplLoadVar(x *pl.Evaluator, name string) (pl.Val, error) {
-	return pl.NewValNull(), fmt.Errorf("unknown variable %s", name)
+func (s *nullSession) OnLoadVar(_ int, _ *pl.Evaluator, name string) (pl.Val, error) {
+	return pl.NewValNull(), fmt.Errorf("module(null): unknown variable %s", name)
+}
+
+func (s *nullSession) OnStoreVar(_ int, _ *pl.Evaluator, name string, _ pl.Val) error {
+	return fmt.Errorf("module(null): unknown variable %s for storing", name)
+}
+
+func (s *nullSession) OnCall(_ int, _ *pl.Evaluator, name string, _ []pl.Val) (pl.Val, error) {
+	return pl.NewValNull(), fmt.Errorf("module(null): unknown function %s", name)
+}
+
+func (s *nullSession) OnAction(_ int, _ *pl.Evaluator, name string, _ pl.Val) error {
+	return fmt.Errorf("module(null): unknown action %s", name)
 }
 
 func (s *nullSession) Service() service.Service {
@@ -62,10 +48,10 @@ func (s *nullSession) Service() service.Service {
 
 func (s *nullSession) Start(r service.SessionResource) error {
 	s.r = r
-	return s.hpl.OnSession(s)
+	return nil
 }
 
-func (s *nullSession) Done() {
+func (s *nullSession) Done(_ interface{}) {
 	s.r = nil
 }
 
@@ -73,38 +59,18 @@ func (s *nullSession) SessionResource() service.SessionResource {
 	return s.r
 }
 
-func (s *nullSession) Allow(_ *http.Request, _ hrouter.Params) error {
-	return nil
+func (s *nullSession) Prepare(_ *http.Request, _ hrouter.Params) (interface{}, error) {
+	return nil, nil
 }
 
-func (s *nullSession) Accept(w http.ResponseWriter, req *http.Request, p hrouter.Params) {
-	err := s.hpl.OnHttpResponse(
-		"response",
-		hpl.HttpContext{
-			Request:        req,
-			ResponseWriter: w,
-			QueryParams:    p,
-		},
-		s,
-	)
-
-	if err != nil {
-		util.ErrorRequest(w, err)
-	}
-}
-
-func (s *nullSession) Log(log *alog.SessionLog) error {
-	return s.hpl.OnLog(
-		"log",
-		log,
-		s,
-	)
+func (s *nullSession) Accept(_ interface{}) (service.SessionResult, error) {
+	return service.SessionResult{
+		Event: "response",
+	}, nil
 }
 
 func (s *nullService) NewSession() (service.Session, error) {
 	session := &nullSession{}
-	hpl := hpl.NewHplWithPolicy(session.hplLoadVar, nil, nil, s.policy)
-	session.hpl = hpl
 	session.service = s
 	return session, nil
 }
@@ -125,18 +91,7 @@ func (n *nullServiceFactory) IDL() string {
 }
 
 func (n *nullServiceFactory) Create(config *config.Service) (service.Service, error) {
-
-	svc := &nullService{
-		config: config,
-	}
-
-	policy, err := pl.CompilePolicy(config.Policy)
-	if err != nil {
-		return nil, err
-	}
-	svc.policy = policy
-
-	return svc, nil
+	return &nullService{}, nil
 }
 
 func init() {

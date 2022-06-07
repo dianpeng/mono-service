@@ -56,6 +56,13 @@ func NotZeroInt64(v int64, d int64) int64 {
 	return v
 }
 
+func NotZeroStr(v string, d string) string {
+	if v == "" {
+		return d
+	}
+	return v
+}
+
 func (s *Service) GetConfig(name string) interface{} {
 	v, ok := s.Config[name]
 	if !ok {

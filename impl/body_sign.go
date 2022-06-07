@@ -6,12 +6,10 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/dianpeng/mono-service/alog"
 	"github.com/dianpeng/mono-service/config"
 	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/pl"
 	"github.com/dianpeng/mono-service/service"
-	"github.com/dianpeng/mono-service/util"
 	hrouter "github.com/julienschmidt/httprouter"
 
 	// crypto
@@ -51,18 +49,23 @@ type signResult struct {
 }
 
 type bodySignService struct {
-	config           *config.Service
 	tempDir          string
 	signPrefix       string
 	verifyPrefix     string
 	verifyHeaderName string
 	opHeaderName     string
 	methodHeaderName string
-	policy           *pl.Policy
+}
+
+// prepare's returned result
+type bodySignInput struct {
+	op     string
+	method string
+	expect string
+	body   io.Reader
 }
 
 type bodySignSession struct {
-	hpl     *hpl.Hpl
 	service *bodySignService
 	r       *signResult
 	op      string
@@ -76,53 +79,31 @@ func (b *bodySignService) Name() string {
 	return "body_sign"
 }
 
-func (b *bodySignService) Tag() string {
-	return b.config.Tag
-}
-
 func (b *bodySignService) IDL() string {
 	return ""
-}
-
-func (b *bodySignService) Policy() string {
-	return b.config.Policy
-}
-
-func (b *bodySignService) PolicyDump() string {
-	return b.policy.Dump()
-}
-
-func (b *bodySignService) Router() string {
-	return b.config.Router
-}
-
-func (b *bodySignService) MethodList() []string {
-	return b.config.Method
 }
 
 func (b *bodySignService) NewSession() (service.Session, error) {
 	session := &bodySignSession{
 		service: b,
 	}
-	session.hpl = hpl.NewHplWithPolicy(session.hplLoadVar, nil, nil, b.policy)
 	return session, nil
 }
 
-func (b *bodySignSession) hplLoadVar(x *pl.Evaluator, name string) (pl.Val, error) {
-	switch name {
-	case "signMethod":
-		return pl.NewValStr(b.method), nil
-	case "signOp":
-		return pl.NewValStr(b.op), nil
-	case "sign":
-		return pl.NewValStr(b.r.result), nil
-	case "signExpect":
-		return pl.NewValStr(b.r.sign), nil
-	case "reqBody":
-		return hpl.NewHplHttpBodyValFromStream(b.r.body), nil
-	default:
-		return pl.NewValNull(), fmt.Errorf("invalid variable: %s", name)
-	}
+func (s *bodySignSession) OnLoadVar(_ int, _ *pl.Evaluator, name string) (pl.Val, error) {
+	return pl.NewValNull(), fmt.Errorf("module(body_sign): unknown variable %s", name)
+}
+
+func (s *bodySignSession) OnStoreVar(_ int, _ *pl.Evaluator, name string, _ pl.Val) error {
+	return fmt.Errorf("module(body_sign): unknown variable %s for storing", name)
+}
+
+func (s *bodySignSession) OnCall(_ int, _ *pl.Evaluator, name string, _ []pl.Val) (pl.Val, error) {
+	return pl.NewValNull(), fmt.Errorf("module(body_sign): unknown function %s", name)
+}
+
+func (s *bodySignSession) OnAction(_ int, _ *pl.Evaluator, name string, _ pl.Val) error {
+	return fmt.Errorf("module(body_sign): unknown action %s", name)
 }
 
 func (b *bodySignSession) Service() service.Service {
@@ -135,13 +116,12 @@ func (b *bodySignSession) reset() {
 	b.method = ""
 }
 
-// getting out the method and op arguments
-func (b *bodySignSession) getParam(req *http.Request, p hrouter.Params) (string, string, error) {
+func (b *bodySignSession) Prepare(req *http.Request, p hrouter.Params) (interface{}, error) {
 	op := p.ByName("op")
 	if op == "" {
 		xx := req.Header.Get(b.service.opHeaderName)
 		if xx == "" {
-			return "", "", fmt.Errorf("body_sign op parameter is not specified")
+			return nil, fmt.Errorf("body_sign op parameter is not specified")
 		}
 	}
 
@@ -149,28 +129,38 @@ func (b *bodySignSession) getParam(req *http.Request, p hrouter.Params) (string,
 	if method == "" {
 		xx := req.Header.Get(b.service.methodHeaderName)
 		if xx == "" {
-			return "", "", fmt.Errorf("body_sign method parameter is not specified")
+			return nil, fmt.Errorf("body_sign method parameter is not specified")
 		}
 	}
 
-	return op, method, nil
+	expect := ""
+
+	if op == "verify" {
+		expect = req.Header.Get(b.service.verifyHeaderName)
+		if expect == "" {
+			return nil, fmt.Errorf("verification result header is not set")
+		}
+	}
+
+	return &bodySignInput{
+		op:     op,
+		method: method,
+		expect: expect,
+		body:   req.Body,
+	}, nil
 }
 
 func (b *bodySignSession) Start(r service.SessionResource) error {
 	b.res = r
-	return b.hpl.OnSession(b)
+	return nil
 }
 
-func (b *bodySignSession) Done() {
+func (b *bodySignSession) Done(_ interface{}) {
 	b.res = nil
-}
-
-func (b *bodySignSession) SessionResource() service.SessionResource {
-	return b.res
-}
-
-func (b *bodySignSession) Accept(w http.ResponseWriter, req *http.Request, p hrouter.Params) {
 	b.reset()
+}
+
+func (b *bodySignSession) Accept(ctx interface{}) (service.SessionResult, error) {
 	defer func() {
 		if b.r.body != nil {
 			name := b.r.body.Name()
@@ -179,40 +169,32 @@ func (b *bodySignSession) Accept(w http.ResponseWriter, req *http.Request, p hro
 		}
 	}()
 
-	op := p.ByName("op")
-	method := p.ByName("method")
-
-	op, method, err := b.getParam(req, p)
-	if err != nil {
-		util.ErrorRequest(w, fmt.Errorf("invalid operation %s", op))
-		return
+	param, ok := ctx.(*bodySignInput)
+	if !ok {
+		return service.SessionResult{},
+			fmt.Errorf("module(body_sign): input context parameter invalid")
 	}
 
-	switch op {
+	switch param.op {
 	case "sign":
-		err := b.sign(req.Body, method)
-		if err != nil {
-			util.ErrorRequest(w, err)
-			return
+		if err := b.sign(param.body, param.method); err != nil {
+			return service.SessionResult{}, err
 		}
 		break
 
 	case "verify":
-		err := b.verify(req.Body, req.Header, method)
-		if err != nil {
-			util.ErrorRequest(w, err)
-			return
+		if err := b.verify(param.body, param.expect, param.method); err != nil {
+			return service.SessionResult{}, err
 		}
 		break
 
 	default:
-		util.ErrorRequest(w, fmt.Errorf("invalid operation %s", op))
-		return
+		return service.SessionResult{}, fmt.Errorf("invalid operation %s", param.op)
 	}
 
 	var selector string
 
-	if op == "sign" {
+	if param.op == "sign" {
 		selector = "sign"
 	} else {
 		if b.r.sign == b.r.result {
@@ -222,28 +204,33 @@ func (b *bodySignSession) Accept(w http.ResponseWriter, req *http.Request, p hro
 		}
 	}
 
-	err = b.hpl.OnHttpResponse(
-		selector,
-		hpl.HttpContext{
-			Request:        req,
-			ResponseWriter: w,
-			QueryParams:    p,
+	output := []pl.DynamicVariable{
+		pl.DynamicVariable{
+			Key:   "signMethod",
+			Value: pl.NewValStr(param.method),
 		},
-		b,
-	)
-
-	if err != nil {
-		util.ErrorRequest(w, fmt.Errorf("HPL execution error: %s", err.Error()))
-		return
+		pl.DynamicVariable{
+			Key:   "signOp",
+			Value: pl.NewValStr(param.op),
+		},
+		pl.DynamicVariable{
+			Key:   "sign",
+			Value: pl.NewValStr(b.r.result),
+		},
+		pl.DynamicVariable{
+			Key:   "signExpect",
+			Value: pl.NewValStr(b.r.sign),
+		},
+		pl.DynamicVariable{
+			Key:   "signBody",
+			Value: hpl.NewHplHttpBodyValFromStream(b.r.body),
+		},
 	}
-}
 
-func (b *bodySignSession) Log(log *alog.SessionLog) error {
-	return b.hpl.OnLog("log", log, b)
-}
-
-func (b *bodySignSession) Allow(_ *http.Request, _ hrouter.Params) error {
-	return nil
+	return service.SessionResult{
+		Event: selector,
+		Vars:  output,
+	}, nil
 }
 
 func (b *bodySignSession) hashBody(data io.Reader, method string) (*signResult, error) {
@@ -308,22 +295,21 @@ func (b *bodySignSession) sign(data io.Reader, method string) error {
 
 // verify the incomming http request, ie generate sign result from its body and
 // also create a stream by using the temporary file
-func (b *bodySignSession) verify(data io.Reader, hdr http.Header, method string) error {
+func (b *bodySignSession) verify(data io.Reader, expect string, method string) error {
 	r, err := b.hashBody(data, method)
 	if err != nil {
 		return err
 	}
 	b.r = r
 
-	expect := hdr.Get(b.service.verifyHeaderName)
-	if expect == "" {
-		return fmt.Errorf("verification result header is not set")
-	}
-
 	b.r.sign = expect
 	b.op = "verify"
 	b.method = method
 	return nil
+}
+
+func (b *bodySignSession) SessionResource() service.SessionResource {
+	return b.res
 }
 
 func (b *bodySignServiceFactory) Name() string {
@@ -369,19 +355,13 @@ having no problem at all
 }
 
 func (b *bodySignServiceFactory) Create(config *config.Service) (service.Service, error) {
-	p, err := pl.CompilePolicy(config.Policy)
-	if err != nil {
-		return nil, err
-	}
 	svc := &bodySignService{
-		config:           config,
 		tempDir:          config.GetConfigStringDefault("temp_dir", defTempDir),
 		signPrefix:       config.GetConfigStringDefault("sign_prefix", defSignPrefix),
 		verifyPrefix:     config.GetConfigStringDefault("verify_prefix", defVerifyPrefix),
 		verifyHeaderName: config.GetConfigStringDefault("verify_header_name", defVerifyHeaderName),
 		opHeaderName:     config.GetConfigStringDefault("op_header_name", defOpHeaderName),
 		methodHeaderName: config.GetConfigStringDefault("method_header_name", defMethodHeaderName),
-		policy:           p,
 	}
 	return svc, nil
 }

@@ -7,7 +7,6 @@ import (
 
 	// router
 	"github.com/dianpeng/mono-service/pl"
-	"github.com/dianpeng/mono-service/service"
 
 	// library usage
 	"strings"
@@ -40,7 +39,7 @@ func fnConcateHttpBody(argument []pl.Val) (pl.Val, error) {
 //   [2]: [header](list[string]),
 //   [3]: [body](string)
 // )
-func fnDoHttp(res service.SessionResource, argument []pl.Val) (pl.Val, error) {
+func fnDoHttp(session SessionWrapper, argument []pl.Val) (pl.Val, error) {
 	if len(argument) < 2 {
 		return pl.NewValNull(), fmt.Errorf("function: http expect at least 2 arguments")
 	}
@@ -65,15 +64,17 @@ func fnDoHttp(res service.SessionResource, argument []pl.Val) (pl.Val, error) {
 	// check header field
 	if len(argument) >= 3 && argument[2].Type == pl.ValList {
 		for _, hdr := range argument[2].List.Data {
-			if hdr.Type == pl.ValPair && hdr.Pair.First.Type == pl.ValStr && hdr.Pair.Second.Type == pl.ValStr {
+			if hdr.Type == pl.ValPair &&
+				hdr.Pair.First.Type == pl.ValStr &&
+				hdr.Pair.Second.Type == pl.ValStr {
 				req.Header.Add(hdr.Pair.First.String, hdr.Pair.Second.String)
 			}
 		}
 	}
 
-	client, err := res.GetHttpClient(url.String)
+	client, err := session.GetHttpClient(url.String)
 	if err != nil {
-		return pl.NewValNull(), err
+		return pl.NewValNull(), fmt.Errorf("function: http cannot create client: %s", err.Error())
 	}
 
 	resp, err := client.Do(req)

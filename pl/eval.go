@@ -58,18 +58,18 @@ func CompilePolicy(policy string) (*Policy, error) {
 
 // Evaluation part of the VM
 type EvalLoadVar func(*Evaluator, string) (Val, error)
-type EvalSetVar func(*Evaluator, string, Val) error
+type EvalStoreVar func(*Evaluator, string, Val) error
 type EvalCall func(*Evaluator, string, []Val) (Val, error)
 type EvalAction func(*Evaluator, string, Val) error
 
 type Evaluator struct {
-	Stack     []Val
-	Session   []Val
-	Local     []Val
-	LoadVarFn EvalLoadVar
-	SetVarFn  EvalSetVar
-	CallFn    EvalCall
-	ActionFn  EvalAction
+	Stack      []Val
+	Session    []Val
+	Local      []Val
+	LoadVarFn  EvalLoadVar
+	StoreVarFn EvalStoreVar
+	CallFn     EvalCall
+	ActionFn   EvalAction
 }
 
 func NewEvaluatorSimple() *Evaluator {
@@ -78,17 +78,17 @@ func NewEvaluatorSimple() *Evaluator {
 
 func NewEvaluator(
 	f0 EvalLoadVar,
-	f1 EvalSetVar,
+	f1 EvalStoreVar,
 	f2 EvalCall,
 	f3 EvalAction) *Evaluator {
 
 	return &Evaluator{
-		Stack:     nil,
-		Session:   nil,
-		LoadVarFn: f0,
-		SetVarFn:  f1,
-		CallFn:    f2,
-		ActionFn:  f3,
+		Stack:      nil,
+		Session:    nil,
+		LoadVarFn:  f0,
+		StoreVarFn: f1,
+		CallFn:     f2,
+		ActionFn:   f3,
 	}
 }
 
@@ -670,10 +670,10 @@ VM:
 				top := e.top0()
 				e.pop()
 				vname := prog.idxStr(bc.argument)
-				if e.SetVarFn == nil {
+				if e.StoreVarFn == nil {
 					return e.doErrf(prog, pc, "dynamic variable: %s is not fonud", vname)
 				}
-				if err := e.SetVarFn(e, vname, top); err != nil {
+				if err := e.StoreVarFn(e, vname, top); err != nil {
 					return err
 				}
 				break

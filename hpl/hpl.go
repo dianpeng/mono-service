@@ -8,7 +8,6 @@ import (
 	// router
 	"github.com/dianpeng/mono-service/alog"
 	"github.com/dianpeng/mono-service/pl"
-	"github.com/dianpeng/mono-service/service"
 	hrouter "github.com/julienschmidt/httprouter"
 
 	// library usage
@@ -23,6 +22,26 @@ func must(cond bool, msg string) {
 
 func unreachable(msg string) {
 	panic(fmt.Sprintf("unreachable: %s", msg))
+}
+
+type HttpClient interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
+// Interface used by VHost to bridge SessionWrapper/Service object into the HPL
+// world. HPL knows nothing about the service/session and also hservice. HPL is
+// just a wrapper around PL but with all the http/networking utilities
+type SessionWrapper interface {
+	// HPL/PL scriptting callback
+	OnLoadVar(*pl.Evaluator, string) (pl.Val, error)
+	OnStoreVar(*pl.Evaluator, string, pl.Val) error
+	OnCall(*pl.Evaluator, string, []pl.Val) (pl.Val, error)
+	OnAction(*pl.Evaluator, string, pl.Val) error
+
+	// other utilities
+
+	// special function used for exposing other utilities
+	GetHttpClient(url string) (HttpClient, error)
 }
 
 // ----------------------------------------------------------------------------
@@ -76,15 +95,11 @@ type Hpl struct {
 	Eval   *pl.Evaluator
 	Policy *pl.Policy
 
-	UserLoadFn pl.EvalLoadVar
-	UserCall   pl.EvalCall
-	UserAction pl.EvalAction
-
 	// internal status during evaluation context
 	request    pl.Val
 	respWriter *hplResponseWriter
 	params     pl.Val
-	session    service.Session
+	session    SessionWrapper
 
 	log       *alog.SessionLog
 	isRunning bool
@@ -131,7 +146,209 @@ func foreachStr(arg pl.Val, fn func(key string)) bool {
 	return true
 }
 
-func (p *Hpl) httpEvalAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
+func NewHpl() *Hpl {
+	p := &Hpl{}
+	p.Eval = pl.NewEvaluatorSimple()
+	return p
+}
+
+func NewHplWithPolicy(policy *pl.Policy) *Hpl {
+	p := &Hpl{}
+	p.Eval = pl.NewEvaluatorSimple()
+	p.SetPolicy(policy)
+	return p
+}
+
+func (h *Hpl) CompilePolicy(input string) error {
+	p, err := pl.CompilePolicy(input)
+	if err != nil {
+		return err
+	}
+	h.Policy = p
+	return nil
+}
+
+func (h *Hpl) SetPolicy(p *pl.Policy) {
+	h.Policy = p
+}
+
+func (p *Hpl) loadVarBasic(x *pl.Evaluator, n string) (pl.Val, error) {
+	switch n {
+	case "request":
+		return p.request, nil
+	case "params":
+		return p.params, nil
+	default:
+		return p.session.OnLoadVar(x, n)
+	}
+}
+
+func (h *Hpl) fnHttp(args []pl.Val) (pl.Val, error) {
+	if h.session == nil {
+		return pl.NewValNull(), fmt.Errorf("function: http cannot be executed, session not bound")
+	}
+	return fnDoHttp(h.session, args)
+}
+
+func (p *Hpl) evalCallBasic(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
+	switch n {
+	case "http":
+		return p.fnHttp(args)
+	case "concate_http_body":
+		return fnConcateHttpBody(args)
+	case "header_has":
+		return fnHeaderHas(args)
+	case "header_delete":
+		return fnHeaderDelete(args)
+
+	default:
+		return p.session.OnCall(x, n, args)
+	}
+}
+
+// -----------------------------------------------------------------------------
+// init phase
+func (h *Hpl) initLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
+	return h.session.OnLoadVar(x, n)
+}
+
+func (p *Hpl) initStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
+	return p.session.OnStoreVar(x, n, v)
+}
+
+func (h *Hpl) initEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
+	return h.session.OnCall(x, n, args)
+}
+
+func (h *Hpl) initAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
+	return h.session.OnAction(x, actionName, arg)
+}
+
+func (h *Hpl) OnInit(session SessionWrapper) error {
+	if h.Policy == nil {
+		return fmt.Errorf("the Hpl engine does not have any policy binded")
+	}
+	if h.isRunning {
+		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
+	}
+	if h.respWriter != nil {
+		panic("concurrent access")
+	}
+
+	h.isRunning = true
+	h.session = session
+
+	h.Eval.LoadVarFn = h.initLoadVar
+	h.Eval.StoreVarFn = h.initStoreVar
+	h.Eval.CallFn = h.initEvalCall
+	h.Eval.ActionFn = h.initAction
+
+	defer func() {
+		h.isRunning = false
+		h.respWriter = nil
+		h.session = nil
+	}()
+
+	return h.Eval.EvalSession(h.Policy)
+}
+
+// -----------------------------------------------------------------------------
+// access phase
+func (h *Hpl) accessLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
+	return h.loadVarBasic(x, n)
+}
+
+func (h *Hpl) accessStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
+	return h.session.OnStoreVar(x, n, v)
+}
+
+func (h *Hpl) accessEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
+	return h.session.OnCall(x, n, args)
+}
+
+func (h *Hpl) accessAction(x *pl.Evaluator, n string, arg pl.Val) error {
+	return h.session.OnAction(x, n, arg)
+}
+
+func (h *Hpl) OnAccess(selector string, req *http.Request, param hrouter.Params, session SessionWrapper) error {
+	if h.Policy == nil {
+		return fmt.Errorf("the Hpl engine does not have any policy binded")
+	}
+	if h.isRunning {
+		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
+	}
+	if h.respWriter != nil {
+		panic("concurrent access")
+	}
+
+	h.isRunning = true
+	h.request = NewHplHttpRequestVal(req)
+	h.params = NewHplHttpRouterParamsVal(param)
+	h.session = session
+
+	h.Eval.LoadVarFn = h.accessLoadVar
+	h.Eval.StoreVarFn = h.accessStoreVar
+	h.Eval.CallFn = h.accessEvalCall
+	h.Eval.ActionFn = h.accessAction
+
+	defer func() {
+		h.isRunning = false
+		h.session = nil
+	}()
+
+	return h.Eval.Eval(selector, h.Policy)
+}
+
+// -----------------------------------------------------------------------------
+// request phase
+func (h *Hpl) httpRequestLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
+	return h.loadVarBasic(x, n)
+}
+
+func (h *Hpl) httpRequestStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
+	return h.session.OnStoreVar(x, n, v)
+}
+
+func (h *Hpl) httpRequestEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
+	return h.session.OnCall(x, n, args)
+}
+
+func (h *Hpl) httpRequestAction(x *pl.Evaluator, n string, arg pl.Val) error {
+	return h.session.OnAction(x, n, arg)
+}
+
+func (h *Hpl) OnRequest(selector string, req *http.Request, param hrouter.Params, session SessionWrapper) error {
+	if h.Policy == nil {
+		return fmt.Errorf("the Hpl engine does not have any policy binded")
+	}
+	if h.isRunning {
+		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
+	}
+	if h.respWriter != nil {
+		panic("concurrent access")
+	}
+
+	h.isRunning = true
+	h.request = NewHplHttpRequestVal(req)
+	h.params = NewHplHttpRouterParamsVal(param)
+	h.session = session
+
+	h.Eval.LoadVarFn = h.httpRequestLoadVar
+	h.Eval.StoreVarFn = h.httpRequestStoreVar
+	h.Eval.CallFn = h.httpRequestEvalCall
+	h.Eval.ActionFn = h.httpRequestAction
+
+	defer func() {
+		h.isRunning = false
+		h.session = nil
+	}()
+
+	return h.Eval.Eval(selector, h.Policy)
+}
+
+// -----------------------------------------------------------------------------
+// response phase
+func (p *Hpl) httpResponseAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
 	// http response generation action, ie builting actions
 	switch actionName {
 	case "status":
@@ -197,9 +414,6 @@ func (p *Hpl) httpEvalAction(x *pl.Evaluator, actionName string, arg pl.Val) err
 	// body operations
 	case "body":
 		if arg.Type == pl.ValStr {
-			if p.respWriter == nil {
-				panic("WFT???")
-			}
 			p.respWriter.writeBodyString(arg.String)
 		} else if arg.Id() == "http.body" {
 			body, ok := arg.Usr.Context.(*HplHttpBody)
@@ -214,153 +428,27 @@ func (p *Hpl) httpEvalAction(x *pl.Evaluator, actionName string, arg pl.Val) err
 		break
 	}
 
-	if p.UserAction != nil {
-		return p.UserAction(x, actionName, arg)
-	} else {
-		return fmt.Errorf("unknown action %s", actionName)
-	}
+	return p.session.OnAction(x, actionName, arg)
 }
 
-// eval related functions
-func (p *Hpl) httpLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
-	switch n {
-	case "request":
-		return p.request, nil
-	case "params":
-		return p.params, nil
-	case "serviceName":
-		return pl.NewValStr(p.session.Service().Name()), nil
-	case "serviceIdl":
-		return pl.NewValStr(p.session.Service().IDL()), nil
-	case "servicePolicy":
-		return pl.NewValStr(p.session.Service().Policy()), nil
-	case "serviceRouter":
-		return pl.NewValStr(p.session.Service().Router()), nil
-	case "serviceMethodList":
-		r := pl.NewValList()
-		for _, v := range p.session.Service().MethodList() {
-			r.AddList(pl.NewValStr(v))
-		}
-		return r, nil
-	default:
-		if p.UserLoadFn != nil {
-			return p.UserLoadFn(x, n)
-		} else {
-			return pl.NewValNull(), fmt.Errorf("unknown variable %s", n)
-		}
-	}
+func (p *Hpl) httpResponseLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
+	return p.loadVarBasic(x, n)
 }
 
-func (h *Hpl) fnHttp(args []pl.Val) (pl.Val, error) {
-	if h.session == nil {
-		return pl.NewValNull(), fmt.Errorf("function: http cannot be executed, session not bound")
-	}
-	sres := h.session.SessionResource()
-	if sres == nil {
-		return pl.NewValNull(), fmt.Errorf("function: http cannot be executed, session resource empty")
-	}
-	return fnDoHttp(sres, args)
+func (p *Hpl) httpResponseStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
+	return p.session.OnStoreVar(x, n, v)
 }
 
-func (p *Hpl) httpEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	switch n {
-	case "http":
-		return p.fnHttp(args)
-	case "concate_http_body":
-		return fnConcateHttpBody(args)
-	case "header_has":
-		return fnHeaderHas(args)
-	case "header_delete":
-		return fnHeaderDelete(args)
-
-	default:
-		break
-	}
-
-	if p.UserCall != nil {
-		return p.UserCall(x, n, args)
-	} else {
-		return pl.NewValNull(), fmt.Errorf("function %s is unknown", n)
-	}
+func (p *Hpl) httpResponseEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
+	return p.evalCallBasic(x, n, args)
 }
 
-func NewHpl(f0 pl.EvalLoadVar, f1 pl.EvalCall, f2 pl.EvalAction) *Hpl {
-	p := &Hpl{
-		UserLoadFn: f0,
-		UserCall:   f1,
-		UserAction: f2,
-	}
-
-	p.Eval = pl.NewEvaluatorSimple()
-	return p
-}
-
-func NewHplWithPolicy(f0 pl.EvalLoadVar, f1 pl.EvalCall, f2 pl.EvalAction, policy *pl.Policy) *Hpl {
-	p := &Hpl{
-		UserLoadFn: f0,
-		UserCall:   f1,
-		UserAction: f2,
-	}
-
-	p.Eval = pl.NewEvaluatorSimple()
-	p.SetPolicy(policy)
-	return p
-}
-
-func (h *Hpl) CompilePolicy(input string) error {
-	p, err := pl.CompilePolicy(input)
-	if err != nil {
-		return err
-	}
-	h.Policy = p
-	return nil
-}
-
-func (h *Hpl) SetPolicy(p *pl.Policy) {
-	h.Policy = p
-}
-
-// -----------------------------------------------------------------------------
-// prepare phase
-func (h *Hpl) prepareLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
-	switch n {
-	case "serviceName":
-		return pl.NewValStr(h.session.Service().Name()), nil
-	case "serviceIdl":
-		return pl.NewValStr(h.session.Service().IDL()), nil
-	case "servicePolicy":
-		return pl.NewValStr(h.session.Service().Policy()), nil
-	case "serviceRouter":
-		return pl.NewValStr(h.session.Service().Router()), nil
-	case "serviceMethodList":
-		r := pl.NewValList()
-		for _, v := range h.session.Service().MethodList() {
-			r.AddList(pl.NewValStr(v))
-		}
-		return r, nil
-	default:
-		break
-	}
-	if h.UserLoadFn != nil {
-		return h.UserLoadFn(x, n)
-	} else {
-		return pl.NewValNull(), fmt.Errorf("unknown variable %s", n)
-	}
-}
-
-func (h *Hpl) prepareEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	return h.httpEvalCall(x, n, args)
-}
-
-func (h *Hpl) prepareActionCall(x *pl.Evaluator, actionName string, arg pl.Val) error {
-	if h.UserAction != nil {
-		return h.UserAction(x, actionName, arg)
-	} else {
-		return fmt.Errorf("unknown action %s", actionName)
-	}
-}
-
-func (h *Hpl) OnSession(session service.Session) error {
+func (h *Hpl) OnResponse(selector string,
+	resp http.ResponseWriter,
+	req *http.Request,
+	param hrouter.Params,
+	session SessionWrapper,
+) error {
 	if h.Policy == nil {
 		return fmt.Errorf("the Hpl engine does not have any policy binded")
 	}
@@ -368,15 +456,20 @@ func (h *Hpl) OnSession(session service.Session) error {
 		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
 	}
 	if h.respWriter != nil {
-		panic("CONCURRENT PROBLEM")
+		panic("concurrent access")
 	}
 
 	h.isRunning = true
+
+	h.request = NewHplHttpRequestVal(req)
+	h.respWriter = newHplResponseWriter(resp)
+	h.params = NewHplHttpRouterParamsVal(param)
 	h.session = session
 
-	h.Eval.LoadVarFn = h.prepareLoadVar
-	h.Eval.CallFn = h.prepareEvalCall
-	h.Eval.ActionFn = h.prepareActionCall
+	h.Eval.LoadVarFn = h.httpResponseLoadVar
+	h.Eval.StoreVarFn = h.httpResponseStoreVar
+	h.Eval.CallFn = h.httpResponseEvalCall
+	h.Eval.ActionFn = h.httpResponseAction
 
 	defer func() {
 		h.isRunning = false
@@ -384,11 +477,15 @@ func (h *Hpl) OnSession(session service.Session) error {
 		h.session = nil
 	}()
 
-	return h.Eval.EvalSession(h.Policy)
+	err := h.Eval.Eval(selector, h.Policy)
+	if err != nil {
+		return err
+	}
+	return h.respWriter.finish()
 }
 
 // -----------------------------------------------------------------------------
-// session log phase
+// log phase
 func (h *Hpl) logLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
 	switch n {
 	case "logFormat":
@@ -396,14 +493,18 @@ func (h *Hpl) logLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
 	default:
 		break
 	}
-	return h.httpLoadVar(x, n)
+	return h.loadVarBasic(x, n)
+}
+
+func (p *Hpl) logStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
+	return p.session.OnStoreVar(x, n, v)
 }
 
 func (h *Hpl) logEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	return h.httpEvalCall(x, n, args)
+	return h.evalCallBasic(x, n, args)
 }
 
-func (h *Hpl) logActionCall(x *pl.Evaluator, actionName string, arg pl.Val) error {
+func (h *Hpl) logAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
 	switch actionName {
 	case "format":
 		if arg.Type != pl.ValStr {
@@ -439,15 +540,11 @@ func (h *Hpl) logActionCall(x *pl.Evaluator, actionName string, arg pl.Val) erro
 		return nil
 
 	default:
-		if h.UserAction != nil {
-			return h.UserAction(x, actionName, arg)
-		} else {
-			return fmt.Errorf("unknown action %s", actionName)
-		}
+		return h.session.OnAction(x, actionName, arg)
 	}
 }
 
-func (h *Hpl) OnLog(selector string, log *alog.SessionLog, session service.Session) error {
+func (h *Hpl) OnLog(selector string, log *alog.SessionLog, session SessionWrapper) error {
 	if h.Policy == nil {
 		return fmt.Errorf("the Hpl engine does not have any policy binded")
 	}
@@ -466,8 +563,9 @@ func (h *Hpl) OnLog(selector string, log *alog.SessionLog, session service.Sessi
 	h.log = log
 
 	h.Eval.LoadVarFn = h.logLoadVar
+	h.Eval.StoreVarFn = h.logStoreVar
 	h.Eval.CallFn = h.logEvalCall
-	h.Eval.ActionFn = h.logActionCall
+	h.Eval.ActionFn = h.logAction
 
 	defer func() {
 		h.isRunning = false
@@ -476,48 +574,4 @@ func (h *Hpl) OnLog(selector string, log *alog.SessionLog, session service.Sessi
 	}()
 
 	return h.Eval.Eval(selector, h.Policy)
-}
-
-// the following tights into the pipeline of the web server
-
-type HttpContext struct {
-	Request        *http.Request
-	ResponseWriter http.ResponseWriter
-	QueryParams    hrouter.Params
-}
-
-// HTTP response generation phase ----------------------------------------------
-func (h *Hpl) OnHttpResponse(selector string, context HttpContext, session service.Session) error {
-	if h.Policy == nil {
-		return fmt.Errorf("the Hpl engine does not have any policy binded")
-	}
-	if h.isRunning {
-		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
-	}
-	if h.respWriter != nil {
-		panic("concurrent access")
-	}
-
-	h.isRunning = true
-
-	h.request = NewHplHttpRequestVal(context.Request)
-	h.respWriter = newHplResponseWriter(context.ResponseWriter)
-	h.params = NewHplHttpRouterParamsVal(context.QueryParams)
-	h.session = session
-
-	h.Eval.LoadVarFn = h.httpLoadVar
-	h.Eval.CallFn = h.httpEvalCall
-	h.Eval.ActionFn = h.httpEvalAction
-
-	defer func() {
-		h.isRunning = false
-		h.respWriter = nil
-		h.session = nil
-	}()
-
-	err := h.Eval.Eval(selector, h.Policy)
-	if err != nil {
-		return err
-	}
-	return h.respWriter.finish()
 }

@@ -1,10 +1,10 @@
 package pl
 
 import (
-  "fmt"
+	"bytes"
+	"fmt"
 	"log"
 	"strconv"
-  "bytes"
 )
 
 // all the builtin basic functions
@@ -14,11 +14,11 @@ func initModBasic() {
 		"",
 		"%a*",
 		func(info *intrinsicinfo, _ *Evaluator, _ string, args []Val) (Val, error) {
-      buf := new(bytes.Buffer)
+			buf := new(bytes.Buffer)
 			for _, x := range args {
-        native := x.ToNative()
-        buf.WriteString(fmt.Sprintf("%T=>%+v", native, native))
-        buf.WriteRune(';')
+				native := x.ToNative()
+				buf.WriteString(fmt.Sprintf("%T=>%+v", native, native))
+				buf.WriteRune(';')
 			}
 			log.Println(buf.String())
 			return NewValNull(), nil
