@@ -107,7 +107,7 @@ type Hpl struct {
 
 func foreachHeaderKV(arg pl.Val, fn func(key string, val string)) bool {
 	if arg.Type == pl.ValList {
-		for _, v := range arg.List.Data {
+		for _, v := range arg.List().Data {
 			if v.Type == pl.ValPair && v.Pair.First.Type == pl.ValStr && v.Pair.Second.Type == pl.ValStr {
 				fn(v.Pair.First.String(), v.Pair.Second.String())
 			}
@@ -133,7 +133,7 @@ func foreachHeaderKV(arg pl.Val, fn func(key string, val string)) bool {
 
 func foreachStr(arg pl.Val, fn func(key string)) bool {
 	if arg.Type == pl.ValList {
-		for _, v := range arg.List.Data {
+		for _, v := range arg.List().Data {
 			if v.Type == pl.ValStr {
 				fn(v.String())
 			}
@@ -526,7 +526,7 @@ func (h *Hpl) logAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
 			break
 
 		case pl.ValList:
-			for _, e := range arg.List.Data {
+			for _, e := range arg.List().Data {
 				if e.Type == pl.ValStr {
 					h.log.Appendix = append(h.log.Appendix, e.String())
 				}

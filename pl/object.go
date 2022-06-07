@@ -102,7 +102,7 @@ type Val struct {
 	vString string
 	vRegexp *regexp.Regexp
 	Pair    *Pair
-	List    *List
+	vList   *List
 	Map     *Map
 	Usr     *UVal
 }
@@ -145,6 +145,14 @@ func (v *Val) Regexp() *regexp.Regexp {
 
 func (v *Val) SetRegexp(vv *regexp.Regexp) {
 	v.vRegexp = vv
+}
+
+func (v *Val) List() *List {
+	return v.vList
+}
+
+func (v *Val) SetList(vv *List) {
+	v.vList = vv
 }
 
 func NewValNull() Val {
@@ -208,7 +216,7 @@ func NewValRegexp(r *regexp.Regexp) Val {
 func NewValListRaw(d []Val) Val {
 	return Val{
 		Type: ValList,
-		List: &List{
+		vList: &List{
 			Data: d,
 		},
 	}
@@ -216,8 +224,8 @@ func NewValListRaw(d []Val) Val {
 
 func NewValList() Val {
 	return Val{
-		Type: ValList,
-		List: NewList(),
+		Type:  ValList,
+		vList: NewList(),
 	}
 }
 
@@ -314,7 +322,7 @@ func (v *Val) IsNumber() bool {
 
 func (v *Val) AddList(vv Val) {
 	must(v.Type == ValList, "AddList: must be list")
-	v.List.Data = append(v.List.Data, vv)
+	v.List().Data = append(v.List().Data, vv)
 }
 
 func (v *Val) AddMap(key string, val Val) {
@@ -336,7 +344,7 @@ func (v *Val) ToBoolean() bool {
 	case ValNull:
 		return true
 	case ValList:
-		return len(v.List.Data) != 0
+		return len(v.List().Data) != 0
 	case ValMap:
 		return len(v.Map.Data) != 0
 	default:
@@ -374,7 +382,7 @@ func (v *Val) ToNative() interface{} {
 		return nil
 	case ValList:
 		var x []interface{}
-		for _, xx := range v.List.Data {
+		for _, xx := range v.List().Data {
 			x = append(x, xx.ToNative())
 		}
 		return x
@@ -467,10 +475,10 @@ func (v *Val) Index(idx Val) (Val, error) {
 		if err != nil {
 			return NewValNull(), err
 		}
-		if i >= len(v.List.Data) {
+		if i >= len(v.List().Data) {
 			return NewValNull(), fmt.Errorf("index out of range")
 		}
-		return v.List.Data[i], nil
+		return v.List().Data[i], nil
 
 	case ValMap:
 		i, err := idx.ToString()
@@ -538,13 +546,13 @@ func (v *Val) IndexSet(idx, val Val) error {
 			return err
 		}
 
-		if i >= len(v.List.Data) {
-			for j := len(v.List.Data); j < i; j++ {
-				v.List.Data = append(v.List.Data, NewValNull())
+		if i >= len(v.List().Data) {
+			for j := len(v.List().Data); j < i; j++ {
+				v.List().Data = append(v.List().Data, NewValNull())
 			}
-			v.List.Data = append(v.List.Data, val)
+			v.List().Data = append(v.List().Data, val)
 		} else {
-			v.List.Data[i] = val
+			v.List().Data[i] = val
 		}
 		return nil
 
@@ -786,7 +794,7 @@ func (v *Val) methodList(name string, args []Val) (Val, error) {
 		if len(args) != 0 {
 			return NewValNull(), fmt.Errorf("method: list:len must have 0 arguments")
 		}
-		return NewValInt(len(v.List.Data)), nil
+		return NewValInt(len(v.List().Data)), nil
 
 	case "push_back":
 		if len(args) == 0 {
@@ -809,10 +817,10 @@ func (v *Val) methodList(name string, args []Val) (Val, error) {
 			num = int(args[0].Int())
 		}
 
-		if num < len(v.List.Data) {
-			v.List.Data = v.List.Data[0 : len(v.List.Data)-num]
+		if num < len(v.List().Data) {
+			v.List().Data = v.List().Data[0 : len(v.List().Data)-num]
 		} else {
-			v.List.Data = make([]Val, 0, 0)
+			v.List().Data = make([]Val, 0, 0)
 		}
 
 		return NewValNull(), nil
@@ -824,7 +832,7 @@ func (v *Val) methodList(name string, args []Val) (Val, error) {
 		if args[0].Type != ValList {
 			return NewValNull(), fmt.Errorf("method: list:extend invalid argument")
 		}
-		for _, x := range args[0].List.Data {
+		for _, x := range args[0].List().Data {
 			v.AddList(x)
 		}
 		return NewValNull(), nil
@@ -838,9 +846,9 @@ func (v *Val) methodList(name string, args []Val) (Val, error) {
 		}
 		var ret []Val
 		if len(args) == 2 {
-			ret = v.List.Data[args[0].Int():args[1].Int()]
+			ret = v.List().Data[args[0].Int():args[1].Int()]
 		} else {
-			ret = v.List.Data[args[0].Int():]
+			ret = v.List().Data[args[0].Int():]
 		}
 		return NewValListRaw(ret), nil
 
@@ -993,7 +1001,7 @@ func (v *Val) Info() string {
 	case ValStr:
 		return fmt.Sprintf("[string: %s]", v.String())
 	case ValList:
-		return fmt.Sprintf("[list: %d]", len(v.List.Data))
+		return fmt.Sprintf("[list: %d]", len(v.List().Data))
 	case ValMap:
 		return fmt.Sprintf("[map: %d]", len(v.Map.Data))
 	case ValPair:

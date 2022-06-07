@@ -115,7 +115,7 @@ func (a *actionOutput) listAt(idx string) *List {
 		fmt.Printf("actionOutput(%s) not list", idx)
 		return nil
 	}
-	return x.List
+	return x.List()
 }
 
 func (a *actionOutput) mapAt(idx string) *Map {
@@ -240,8 +240,8 @@ policy(
 			{
 				e := l.Data[6]
 				assert.True(e.Type == ValList)
-				assert.True(e.List != nil)
-				assert.True(len(e.List.Data) == 0)
+				assert.True(e.List() != nil)
+				assert.True(len(e.List().Data) == 0)
 			}
 		}
 		{

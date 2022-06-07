@@ -125,7 +125,7 @@ func initModStr() {
 				return NewValNull(), err
 			}
 			var slist []string
-			for _, v := range args[0].List.Data {
+			for _, v := range args[0].List().Data {
 				if v.Type == ValStr {
 					slist = append(slist, v.String())
 				}

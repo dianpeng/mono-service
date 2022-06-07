@@ -138,7 +138,7 @@ func initModBasic() {
 			case ValPair:
 				return NewValInt(2), nil
 			case ValList:
-				return NewValInt(len(a.List.Data)), nil
+				return NewValInt(len(a.List().Data)), nil
 			default:
 				return NewValInt(len(a.Map.Data)), nil
 			}
@@ -163,7 +163,7 @@ func initModBasic() {
 			case ValPair:
 				return NewValBool(true), nil
 			case ValList:
-				return NewValBool(len(a.List.Data) == 0), nil
+				return NewValBool(len(a.List().Data) == 0), nil
 			default:
 				return NewValBool(len(a.Map.Data) == 0), nil
 			}

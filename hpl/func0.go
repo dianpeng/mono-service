@@ -63,7 +63,7 @@ func fnDoHttp(session SessionWrapper, argument []pl.Val) (pl.Val, error) {
 
 	// check header field
 	if len(argument) >= 3 && argument[2].Type == pl.ValList {
-		for _, hdr := range argument[2].List.Data {
+		for _, hdr := range argument[2].List().Data {
 			if hdr.Type == pl.ValPair &&
 				hdr.Pair.First.Type == pl.ValStr &&
 				hdr.Pair.Second.Type == pl.ValStr {
