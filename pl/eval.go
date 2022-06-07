@@ -233,7 +233,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValReal(lhs.Real() + rhs.Real()), nil
 			}
 			if lhs.Type == ValStr {
-				return NewValStr(lhs.String + rhs.String), nil
+				return NewValStr(lhs.String() + rhs.String()), nil
 			}
 		} else if lhs.IsNumber() && rhs.IsNumber() {
 			return NewValReal(mustReal(lhs) + mustReal(rhs)), nil
@@ -255,7 +255,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValBool(lhs.Real() == rhs.Real()), nil
 			}
 			if lhs.Type == ValStr {
-				return NewValBool(lhs.String == rhs.String), nil
+				return NewValBool(lhs.String() == rhs.String()), nil
 			}
 		} else if lhs.IsNumber() && rhs.IsNumber() {
 			return NewValBool(mustReal(lhs) == mustReal(rhs)), nil
@@ -271,7 +271,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValBool(lhs.Real() != rhs.Real()), nil
 			}
 			if lhs.Type == ValStr {
-				return NewValBool(lhs.String != rhs.String), nil
+				return NewValBool(lhs.String() != rhs.String()), nil
 			}
 		} else if lhs.IsNumber() && rhs.IsNumber() {
 			return NewValBool(mustReal(lhs) != mustReal(rhs)), nil
@@ -287,7 +287,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValBool(lhs.Real() < rhs.Real()), nil
 			}
 			if lhs.Type == ValStr {
-				return NewValBool(lhs.String < rhs.String), nil
+				return NewValBool(lhs.String() < rhs.String()), nil
 			}
 		} else if lhs.IsNumber() && rhs.IsNumber() {
 			return NewValBool(mustReal(lhs) < mustReal(rhs)), nil
@@ -303,7 +303,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValBool(lhs.Real() <= rhs.Real()), nil
 			}
 			if lhs.Type == ValStr {
-				return NewValBool(lhs.String <= rhs.String), nil
+				return NewValBool(lhs.String() <= rhs.String()), nil
 			}
 		} else if lhs.IsNumber() && rhs.IsNumber() {
 			return NewValBool(mustReal(lhs) <= mustReal(rhs)), nil
@@ -319,7 +319,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValBool(lhs.Real() > rhs.Real()), nil
 			}
 			if lhs.Type == ValStr {
-				return NewValBool(lhs.String > rhs.String), nil
+				return NewValBool(lhs.String() > rhs.String()), nil
 			}
 		} else if lhs.IsNumber() && rhs.IsNumber() {
 			return NewValBool(mustReal(lhs) > mustReal(rhs)), nil
@@ -335,7 +335,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 				return NewValBool(lhs.Real() >= rhs.Real()), nil
 			}
 			if lhs.Type == ValStr {
-				return NewValBool(lhs.String >= rhs.String), nil
+				return NewValBool(lhs.String() >= rhs.String()), nil
 			}
 		} else if lhs.IsNumber() && rhs.IsNumber() {
 			return NewValBool(mustReal(lhs) >= mustReal(rhs)), nil
@@ -344,7 +344,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 
 	case bcRegexpMatch:
 		if lhs.Type == ValStr && rhs.Type == ValRegexp {
-			r := rhs.Regexp.Match([]byte(lhs.String))
+			r := rhs.Regexp.Match([]byte(lhs.String()))
 			return NewValBool(r), nil
 		} else {
 			return NewValNull(), fmt.Errorf("regexp operator ~ must be applied on string and regexp")
@@ -352,7 +352,7 @@ func (e *Evaluator) doBin(lhs, rhs Val, op int) (Val, error) {
 
 	case bcRegexpNMatch:
 		if lhs.Type == ValStr && rhs.Type == ValRegexp {
-			r := rhs.Regexp.Match([]byte(lhs.String))
+			r := rhs.Regexp.Match([]byte(lhs.String()))
 			return NewValBool(!r), nil
 		} else {
 			return NewValNull(), fmt.Errorf("regexp operator !~ must be applied on string and regexp")
@@ -547,7 +547,7 @@ VM:
 					name := e.Stack[ii]
 					must(name.Type == ValStr, "must be string")
 					val := e.Stack[ii+1]
-					m.AddMap(name.String, val)
+					m.AddMap(name.String(), val)
 					ii = ii + 2
 				}
 				e.popN(cnt * 2)
@@ -576,9 +576,9 @@ VM:
 				var err error
 
 				if e.CallFn != nil {
-					r, err = e.CallFn(e, funcName.String, arg)
+					r, err = e.CallFn(e, funcName.String(), arg)
 				} else {
-					err = e.doErrf(prog, pc, "function %s is not found", funcName.String)
+					err = e.doErrf(prog, pc, "function %s is not found", funcName.String())
 				}
 				if err != nil {
 					return e.doErr(prog, pc, err)
@@ -623,7 +623,7 @@ VM:
 				arg := e.Stack[argStart:argEnd]
 
 				recv := e.topN(paramSize + 1)
-				ret, err := recv.Method(methodName.String, arg)
+				ret, err := recv.Method(methodName.String(), arg)
 				if err != nil {
 					return e.doErr(prog, pc, err)
 				}
@@ -648,7 +648,7 @@ VM:
 				for ii := len(e.Stack) - sz; ii < len(e.Stack); ii++ {
 					v := e.Stack[ii]
 					must(v.Type == ValStr, "must be string during concatenation")
-					b.WriteString(v.String)
+					b.WriteString(v.String())
 				}
 				e.popN(sz)
 				e.push(NewValStr(b.String()))

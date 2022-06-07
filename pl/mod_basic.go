@@ -51,7 +51,7 @@ func initModBasic() {
 			if err != nil {
 				return NewValNull(), err
 			}
-			i, err := strconv.ParseInt(args[0].String, 10, 64)
+			i, err := strconv.ParseInt(args[0].String(), 10, 64)
 
 			if alen == 1 {
 				if err != nil {
@@ -77,7 +77,7 @@ func initModBasic() {
 			if err != nil {
 				return NewValNull(), err
 			}
-			i, err := strconv.ParseFloat(args[0].String, 64)
+			i, err := strconv.ParseFloat(args[0].String(), 64)
 
 			if alen == 1 {
 				if err != nil {
@@ -132,7 +132,7 @@ func initModBasic() {
 			a := args[0]
 			switch args[0].Type {
 			case ValStr:
-				return NewValInt(len(a.String)), nil
+				return NewValInt(len(a.String())), nil
 			case ValRegexp, ValUsr, ValInt, ValReal, ValBool, ValNull:
 				return NewValInt(0), nil
 			case ValPair:
@@ -157,7 +157,7 @@ func initModBasic() {
 			a := args[0]
 			switch args[0].Type {
 			case ValStr:
-				return NewValBool(len(a.String) == 0), nil
+				return NewValBool(len(a.String()) == 0), nil
 			case ValRegexp, ValUsr, ValInt, ValReal, ValBool, ValNull:
 				return NewValBool(true), nil
 			case ValPair:

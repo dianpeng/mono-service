@@ -2,8 +2,9 @@ package pl
 
 import (
 	"bytes"
-	"github.com/google/uuid"
 	"math/rand"
+
+	"github.com/google/uuid"
 )
 
 var randomstringlettertable = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_")

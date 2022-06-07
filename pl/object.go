@@ -95,28 +95,48 @@ type Pair struct {
 }
 
 type Val struct {
-	Type   int
-	vInt   int64
-	vReal  float64
+	Type    int
+	vInt    int64
+	vReal   float64
 	vBool   bool
-	String string
-	Regexp *regexp.Regexp
-	Pair   *Pair
-	List   *List
-	Map    *Map
-	Usr    *UVal
+	vString string
+	Regexp  *regexp.Regexp
+	Pair    *Pair
+	List    *List
+	Map     *Map
+	Usr     *UVal
 }
 
 func (v *Val) Int() int64 {
 	return v.vInt
 }
 
+func (v *Val) SetInt(i int64) {
+	v.vInt = i
+}
+
 func (v *Val) Real() float64 {
 	return v.vReal
 }
 
+func (v *Val) SetReal(vv float64) {
+	v.vReal = vv
+}
+
 func (v *Val) Bool() bool {
 	return v.vBool
+}
+
+func (v *Val) SetBool(vv bool) {
+	v.vBool = vv
+}
+
+func (v *Val) String() string {
+	return v.vString
+}
+
+func (v *Val) SetString(vv string) {
+	v.vString = vv
 }
 
 func NewValNull() Val {
@@ -141,8 +161,8 @@ func NewValInt(i int) Val {
 
 func NewValStr(s string) Val {
 	return Val{
-		Type:   ValStr,
-		String: s,
+		Type:    ValStr,
+		vString: s,
 	}
 }
 
@@ -155,7 +175,7 @@ func NewValReal(d float64) Val {
 
 func NewValBool(b bool) Val {
 	return Val{
-		Type: ValBool,
+		Type:  ValBool,
 		vBool: b,
 	}
 }
@@ -302,7 +322,7 @@ func (v *Val) ToBoolean() bool {
 	case ValReal:
 		return v.Real() != 0
 	case ValStr:
-		return len(v.String) != 0
+		return len(v.String()) != 0
 	case ValBool:
 		return v.Bool()
 	case ValNull:
@@ -339,7 +359,7 @@ func (v *Val) ToNative() interface{} {
 	case ValReal:
 		return v.Real()
 	case ValStr:
-		return v.String
+		return v.String()
 	case ValBool:
 		return v.Bool()
 	case ValNull:
@@ -388,7 +408,7 @@ func (v *Val) ToString() (string, error) {
 	case ValNull:
 		return "", fmt.Errorf("cannot convert Null to string")
 	case ValStr:
-		return v.String, nil
+		return v.String(), nil
 
 	case ValRegexp:
 		return v.Regexp.String(), nil
@@ -415,10 +435,10 @@ func (v *Val) Index(idx Val) (Val, error) {
 		if err != nil {
 			return NewValNull(), err
 		}
-		if i >= len(v.String) {
+		if i >= len(v.String()) {
 			return NewValNull(), fmt.Errorf("index out of range")
 		}
-		return NewValStr(v.String[i : i+1]), nil
+		return NewValStr(v.String()[i : i+1]), nil
 
 	case ValPair:
 		i, err := idx.ToIndex()
@@ -474,7 +494,7 @@ func (v *Val) IndexSet(idx, val Val) error {
 		if err != nil {
 			return err
 		}
-		if i >= len(v.String) {
+		if i >= len(v.String()) {
 			return fmt.Errorf("index out of range")
 		}
 		if val.Type != ValStr {
@@ -482,11 +502,10 @@ func (v *Val) IndexSet(idx, val Val) error {
 		}
 
 		b := new(bytes.Buffer)
-		b.WriteString(v.String[:i])
-		b.WriteString(val.String)
-		b.WriteString(v.String[i:])
-
-		v.String = b.String()
+		b.WriteString(v.String()[:i])
+		b.WriteString(val.String())
+		b.WriteString(v.String()[i:])
+		v.SetString(b.String())
 		return nil
 
 	case ValPair:
@@ -698,20 +717,20 @@ func (v *Val) methodStr(name string, args []Val) (Val, error) {
 		if len(args) != 0 {
 			return NewValNull(), fmt.Errorf("method: str:len must have 0 arguments")
 		}
-		return NewValInt(len(v.String)), nil
+		return NewValInt(len(v.String())), nil
 
 	case "upper":
 		if len(args) != 0 {
 			return NewValNull(), fmt.Errorf("method: str:upper must have 0 arguments")
 		}
-		v.String = strings.ToUpper(v.String)
+		v.SetString(strings.ToUpper(v.String()))
 		return *v, nil
 
 	case "lower":
 		if len(args) != 0 {
 			return NewValNull(), fmt.Errorf("method: str:lower must have 0 arguments")
 		}
-		v.String = strings.ToLower(v.String)
+		v.SetString(strings.ToLower(v.String()))
 		return *v, nil
 
 	case "substr":
@@ -723,9 +742,9 @@ func (v *Val) methodStr(name string, args []Val) (Val, error) {
 		}
 		var ret string
 		if len(args) == 2 {
-			ret = v.String[args[0].Int():args[1].Int()]
+			ret = v.String()[args[0].Int():args[1].Int()]
 		} else {
-			ret = v.String[args[0].Int():]
+			ret = v.String()[args[0].Int():]
 		}
 		return NewValStr(ret), nil
 
@@ -737,10 +756,10 @@ func (v *Val) methodStr(name string, args []Val) (Val, error) {
 			return NewValNull(), fmt.Errorf("method: str:index argument must be one string and one int")
 		}
 		if len(args) == 1 {
-			return NewValInt(strings.Index(v.String, args[0].String)), nil
+			return NewValInt(strings.Index(v.String(), args[0].String())), nil
 		} else {
-			sub := v.String[args[1].Int():]
-			where := strings.Index(sub, args[0].String)
+			sub := v.String()[args[1].Int():]
+			where := strings.Index(sub, args[0].String())
 			if where == -1 {
 				return NewValInt(-1), nil
 			} else {
@@ -837,7 +856,7 @@ func (v *Val) methodMap(name string, args []Val) (Val, error) {
 		if args[0].Type != ValStr {
 			return NewValNull(), fmt.Errorf("method: map:set invalid argument")
 		}
-		v.Map.Data[args[0].String] = args[1]
+		v.Map.Data[args[0].String()] = args[1]
 		return NewValNull(), nil
 
 	case "del":
@@ -847,7 +866,7 @@ func (v *Val) methodMap(name string, args []Val) (Val, error) {
 		if args[0].Type != ValStr {
 			return NewValNull(), fmt.Errorf("method: map:del invalid argument")
 		}
-		delete(v.Map.Data, args[0].String)
+		delete(v.Map.Data, args[0].String())
 		return NewValNull(), nil
 
 	case "get":
@@ -857,7 +876,7 @@ func (v *Val) methodMap(name string, args []Val) (Val, error) {
 		if args[0].Type != ValStr {
 			return NewValNull(), fmt.Errorf("method: map:get invalid argument")
 		}
-		v, ok := v.Map.Data[args[0].String]
+		v, ok := v.Map.Data[args[0].String()]
 		if !ok {
 			return args[1], nil
 		} else {
@@ -871,7 +890,7 @@ func (v *Val) methodMap(name string, args []Val) (Val, error) {
 		if args[0].Type != ValStr {
 			return NewValNull(), fmt.Errorf("method: map:has invalid argument")
 		}
-		_, ok := v.Map.Data[args[0].String]
+		_, ok := v.Map.Data[args[0].String()]
 		return NewValBool(ok), nil
 
 	default:
@@ -964,7 +983,7 @@ func (v *Val) Info() string {
 	case ValNull:
 		return "[null]"
 	case ValStr:
-		return fmt.Sprintf("[string: %s]", v.String)
+		return fmt.Sprintf("[string: %s]", v.String())
 	case ValList:
 		return fmt.Sprintf("[list: %d]", len(v.List.Data))
 	case ValMap:

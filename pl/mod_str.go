@@ -1,8 +1,6 @@
 package pl
 
-import (
-	"strings"
-)
+import "strings"
 
 func initModStr() {
 
@@ -129,10 +127,10 @@ func initModStr() {
 			var slist []string
 			for _, v := range args[0].List.Data {
 				if v.Type == ValStr {
-					slist = append(slist, v.String)
+					slist = append(slist, v.String())
 				}
 			}
-			return NewValStr(strings.Join(slist, args[1].String)), nil
+			return NewValStr(strings.Join(slist, args[1].String())), nil
 		},
 	)
 

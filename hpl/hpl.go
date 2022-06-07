@@ -109,12 +109,12 @@ func foreachHeaderKV(arg pl.Val, fn func(key string, val string)) bool {
 	if arg.Type == pl.ValList {
 		for _, v := range arg.List.Data {
 			if v.Type == pl.ValPair && v.Pair.First.Type == pl.ValStr && v.Pair.Second.Type == pl.ValStr {
-				fn(v.Pair.First.String, v.Pair.Second.String)
+				fn(v.Pair.First.String(), v.Pair.Second.String())
 			}
 		}
 	} else if arg.Type == pl.ValPair {
 		if arg.Pair.First.Type == pl.ValStr && arg.Pair.Second.Type == pl.ValStr {
-			fn(arg.Pair.First.String, arg.Pair.Second.String)
+			fn(arg.Pair.First.String(), arg.Pair.Second.String())
 		}
 	} else if arg.Id() == "http.header" {
 		// known special user type to us, then just foreach the header
@@ -135,11 +135,11 @@ func foreachStr(arg pl.Val, fn func(key string)) bool {
 	if arg.Type == pl.ValList {
 		for _, v := range arg.List.Data {
 			if v.Type == pl.ValStr {
-				fn(v.String)
+				fn(v.String())
 			}
 		}
 	} else if arg.Type == pl.ValStr {
-		fn(arg.String)
+		fn(arg.String())
 	} else {
 		return false
 	}
@@ -414,7 +414,7 @@ func (p *Hpl) httpResponseAction(x *pl.Evaluator, actionName string, arg pl.Val)
 	// body operations
 	case "body":
 		if arg.Type == pl.ValStr {
-			p.respWriter.writeBodyString(arg.String)
+			p.respWriter.writeBodyString(arg.String())
 		} else if arg.Id() == "http.body" {
 			body, ok := arg.Usr.Context.(*HplHttpBody)
 			must(ok, "invalid body type")
@@ -510,7 +510,7 @@ func (h *Hpl) logAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
 		if arg.Type != pl.ValStr {
 			return fmt.Errorf("status format must have a string argument")
 		} else {
-			fmt, err := alog.NewSessionLogFormat(arg.String)
+			fmt, err := alog.NewSessionLogFormat(arg.String())
 			if err != nil {
 				return err
 			}
@@ -528,7 +528,7 @@ func (h *Hpl) logAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
 		case pl.ValList:
 			for _, e := range arg.List.Data {
 				if e.Type == pl.ValStr {
-					h.log.Appendix = append(h.log.Appendix, e.String)
+					h.log.Appendix = append(h.log.Appendix, e.String())
 				}
 			}
 			break

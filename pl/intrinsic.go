@@ -58,7 +58,6 @@ func unpack(i reflect.Value) (Val, error) {
 
 	case reflect.Float32, reflect.Float64:
 		return NewValReal(float64(i.Float())), nil
-
 	case reflect.String:
 		return NewValStr(i.String()), nil
 	case reflect.Bool:

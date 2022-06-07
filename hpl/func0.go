@@ -51,12 +51,12 @@ func fnDoHttp(session SessionWrapper, argument []pl.Val) (pl.Val, error) {
 
 	var body io.Reader
 	if len(argument) == 4 && argument[3].Type == pl.ValStr {
-		body = strings.NewReader(argument[3].String)
+		body = strings.NewReader(argument[3].String())
 	} else {
 		body = http.NoBody
 	}
 
-	req, err := http.NewRequest(method.String, url.String, body)
+	req, err := http.NewRequest(method.String(), url.String(), body)
 	if err != nil {
 		return pl.NewValNull(), err
 	}
@@ -67,12 +67,12 @@ func fnDoHttp(session SessionWrapper, argument []pl.Val) (pl.Val, error) {
 			if hdr.Type == pl.ValPair &&
 				hdr.Pair.First.Type == pl.ValStr &&
 				hdr.Pair.Second.Type == pl.ValStr {
-				req.Header.Add(hdr.Pair.First.String, hdr.Pair.Second.String)
+				req.Header.Add(hdr.Pair.First.String(), hdr.Pair.Second.String())
 			}
 		}
 	}
 
-	client, err := session.GetHttpClient(url.String)
+	client, err := session.GetHttpClient(url.String())
 	if err != nil {
 		return pl.NewValNull(), fmt.Errorf("function: http cannot create client: %s", err.Error())
 	}
@@ -101,7 +101,7 @@ func fnHeaderHas(argument []pl.Val) (pl.Val, error) {
 	hdr, ok := argument[0].Usr.Context.(*HplHttpHeader)
 	must(ok, "must be http.header")
 
-	if vv := hdr.header.Get(argument[1].String); vv == "" {
+	if vv := hdr.header.Get(argument[1].String()); vv == "" {
 		return pl.NewValBool(false), nil
 	} else {
 		return pl.NewValBool(true), nil
@@ -159,6 +159,6 @@ func fnHeaderDelete(argument []pl.Val) (pl.Val, error) {
 	hdr, ok := argument[0].Usr.Context.(*HplHttpHeader)
 	must(ok, "must be http.header")
 
-	cnt := doHeaderDelete(hdr.header, argument[1].String)
+	cnt := doHeaderDelete(hdr.header, argument[1].String())
 	return pl.NewValInt(cnt), nil
 }

@@ -82,8 +82,8 @@ func (a *actionOutput) strAt(idx string, val string) bool {
 		return false
 	}
 
-	if x.String != val {
-		fmt.Printf("actionOutput(%s) unexpected: %s = %s\n", idx, x.String, val)
+	if x.String() != val {
+		fmt.Printf("actionOutput(%s) unexpected: %s = %s\n", idx, x.String(), val)
 		return false
 	}
 
@@ -231,7 +231,7 @@ policy(
 			{
 				e := l.Data[3]
 				assert.True(e.Type == ValStr)
-				assert.Equal(e.String, "Hello World", "str")
+				assert.Equal(e.String(), "Hello World", "str")
 			}
 			{
 				e := l.Data[5]
@@ -250,7 +250,7 @@ policy(
 			v, ok := m.Data["a"]
 			assert.True(ok)
 			assert.Equal(v.Type, ValStr, "map.type")
-			assert.Equal(v.String, "Hello World")
+			assert.Equal(v.String(), "Hello World")
 		}
 	}
 
@@ -683,8 +683,8 @@ func testString(code string, expect string) bool {
 		return false
 	}
 
-	if val.String != expect {
-		fmt.Printf(":return invalid value %s\n", val.String)
+	if val.String() != expect {
+		fmt.Printf(":return invalid value %s\n", val.String())
 		return false
 	}
 
@@ -1400,7 +1400,7 @@ test {
 	assert.True(err == nil)
 
 	assert.True(ret.Type == ValStr)
-	assert.True(ret.String == "Hello World")
+	assert.True(ret.String() == "Hello World")
 }
 
 func TestIfStatment(t *testing.T) {

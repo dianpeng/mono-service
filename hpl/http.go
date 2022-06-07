@@ -5,12 +5,13 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/dianpeng/mono-service/pl"
-	hrouter "github.com/julienschmidt/httprouter"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/dianpeng/mono-service/pl"
+	hrouter "github.com/julienschmidt/httprouter"
 )
 
 // * --------------------------------------------------------------------------
@@ -71,7 +72,7 @@ func (h *HplHttpBody) Index(_ interface{}, name pl.Val) (pl.Val, error) {
 		return pl.NewValNull(), fmt.Errorf("invalid index, http body field name must be string")
 	}
 
-	switch name.String {
+	switch name.String() {
 	case "string":
 		return pl.NewValStr(h.DupString()), nil
 	case "length":
@@ -81,7 +82,7 @@ func (h *HplHttpBody) Index(_ interface{}, name pl.Val) (pl.Val, error) {
 			return pl.NewValNull(), nil
 		}
 	default:
-		return pl.NewValNull(), fmt.Errorf("invalid index, unknown name %s", name.String)
+		return pl.NewValNull(), fmt.Errorf("invalid index, unknown name %s", name.String())
 	}
 }
 
@@ -155,7 +156,7 @@ func (h *HplHttpHeader) Index(_ interface{}, key pl.Val) (pl.Val, error) {
 	if key.Type != pl.ValStr {
 		return pl.NewValNull(), fmt.Errorf("invalid index, header name must be string")
 	}
-	return pl.NewValStr(h.header.Get(key.String)), nil
+	return pl.NewValStr(h.header.Get(key.String())), nil
 }
 
 func (h *HplHttpHeader) Dot(x interface{}, key string) (pl.Val, error) {
@@ -219,7 +220,7 @@ func (h *HplHttpUrl) Index(_ interface{}, key pl.Val) (pl.Val, error) {
 		return pl.NewValNull(), fmt.Errorf("invalid index, URL name must be string")
 	}
 
-	switch key.String {
+	switch key.String() {
 	case "scheme":
 		return pl.NewValStr(h.url.Scheme), nil
 	case "host":
@@ -233,7 +234,7 @@ func (h *HplHttpUrl) Index(_ interface{}, key pl.Val) (pl.Val, error) {
 	case "userInfo":
 		return pl.NewValStr(h.url.User.String()), nil
 	default:
-		return pl.NewValNull(), fmt.Errorf("unknown component %s in URL", key.String)
+		return pl.NewValNull(), fmt.Errorf("unknown component %s in URL", key.String())
 	}
 }
 
@@ -320,7 +321,7 @@ func (h *HplHttpRequest) Index(_ interface{}, key pl.Val) (pl.Val, error) {
 		return pl.NewValNull(), fmt.Errorf("invalid index, request's component must be string")
 	}
 
-	switch key.String {
+	switch key.String() {
 	case "header":
 		return h.header, nil
 	case "method":
@@ -389,7 +390,7 @@ func (h *HplHttpRequest) Index(_ interface{}, key pl.Val) (pl.Val, error) {
 		break
 	}
 
-	return pl.NewValNull(), fmt.Errorf("unknown field name %s for request", key.String)
+	return pl.NewValNull(), fmt.Errorf("unknown field name %s for request", key.String())
 }
 
 func (h *HplHttpRequest) Dot(x interface{}, name string) (pl.Val, error) {
@@ -462,7 +463,7 @@ func (h *HplHttpResponse) Index(_ interface{}, name pl.Val) (pl.Val, error) {
 		return pl.NewValNull(), fmt.Errorf("invalid index, name must be string")
 	}
 
-	switch name.String {
+	switch name.String() {
 	case "statusText":
 		return pl.NewValStr(h.response.Status), nil
 	case "status":
@@ -502,7 +503,7 @@ func (h *HplHttpResponse) Index(_ interface{}, name pl.Val) (pl.Val, error) {
 		break
 	}
 
-	return pl.NewValNull(), fmt.Errorf("invalid index, unknown field: %s", name.String)
+	return pl.NewValNull(), fmt.Errorf("invalid index, unknown field: %s", name.String())
 }
 
 func (h *HplHttpResponse) Dot(x interface{}, name string) (pl.Val, error) {
@@ -575,7 +576,7 @@ func (h *HplHttpRouterParams) Index(_ interface{}, name pl.Val) (pl.Val, error) 
 		return pl.NewValNull(), fmt.Errorf("invalid index, http.router's field must be string")
 	}
 
-	return pl.NewValStr(h.params.ByName(name.String)), nil
+	return pl.NewValStr(h.params.ByName(name.String())), nil
 }
 
 func (h *HplHttpRouterParams) Dot(x interface{}, name string) (pl.Val, error) {

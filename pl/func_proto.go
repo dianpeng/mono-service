@@ -662,7 +662,7 @@ func (f *FuncProto) check0(exp protoelem, got Val, c convoneval) (the_return boo
 		if exp.opcode == PString {
 			return true
 		} else if exp.opcode == PNEString {
-			return len(got.String) != 0
+			return len(got.String()) != 0
 		}
 		break
 
@@ -922,7 +922,7 @@ func (f *FuncProto) pack(v Val, t opc) *reflect.Value {
 		break
 
 	case PString, PNEString:
-		rv = reflect.ValueOf(v.String)
+		rv = reflect.ValueOf(v.String())
 		break
 
 	case PBool, PTrue, PFalse:
