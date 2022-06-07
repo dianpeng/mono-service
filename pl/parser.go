@@ -1043,19 +1043,19 @@ SUFFIX:
 		case tkDot:
 			ntk := p.l.next()
 			if ntk == tkId || ntk == tkStr {
-        name := p.l.valueText
-        nntk := p.l.next()
-        if nntk == tkLPar {
-          *lastType = suffixMethod
-          // a.b(...) a method call here, just treat it as a method call
-          if err := p.parseMCall(prog, name); err != nil {
-            return err
-          }
-        } else {
-          *lastType = suffixDot
-          idx := prog.addStr(name)
-          prog.emit1(p.l, bcDot, idx)
-        }
+				name := p.l.valueText
+				nntk := p.l.next()
+				if nntk == tkLPar {
+					*lastType = suffixMethod
+					// a.b(...) a method call here, just treat it as a method call
+					if err := p.parseMCall(prog, name); err != nil {
+						return err
+					}
+				} else {
+					*lastType = suffixDot
+					idx := prog.addStr(name)
+					prog.emit1(p.l, bcDot, idx)
+				}
 			} else {
 				return p.err("invalid expresion, expect id or string after '.'")
 			}
@@ -1142,7 +1142,7 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 
 		// check whether we have suffix experssion
 		switch p.l.token {
-    case tkDot, tkLSqr:
+		case tkDot, tkLSqr:
 			break
 
 		default:
