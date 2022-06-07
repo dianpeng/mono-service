@@ -85,6 +85,7 @@ const (
 	tkContinue
 	tkBreak
 	tkNext
+	tkFunction
 
 	// intrinsic keywords, used for special builtin functionalities
 	tkTemplate
@@ -217,6 +218,8 @@ func getTokenName(tk int) string {
 		return "break"
 	case tkNext:
 		return "next"
+	case tkFunction:
+		return "function"
 	case tkReturn:
 		return "return"
 
@@ -578,6 +581,9 @@ func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 	case "next":
 		t.token = tkNext
 		return tkNext
+	case "function":
+		t.token = tkFunction
+		return tkFunction
 	case "return":
 		t.token = tkReturn
 		return tkReturn

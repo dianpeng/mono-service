@@ -307,4 +307,6 @@ func init() {
 	initModCodec()
 	initModStr()
 	initModRandom()
+	initModMath()
+	initModRegexp()
 }
