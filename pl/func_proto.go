@@ -670,9 +670,9 @@ func (f *FuncProto) check0(exp protoelem, got Val, c convoneval) (the_return boo
 		if exp.opcode == PBool {
 			return true
 		} else if exp.opcode == PTrue {
-			return got.Bool
+			return got.Bool()
 		} else if exp.opcode == PFalse {
-			return !got.Bool
+			return !got.Bool()
 		}
 		break
 
@@ -926,7 +926,7 @@ func (f *FuncProto) pack(v Val, t opc) *reflect.Value {
 		break
 
 	case PBool, PTrue, PFalse:
-		rv = reflect.ValueOf(v.Bool)
+		rv = reflect.ValueOf(v.Bool())
 		break
 
 	case PNull:

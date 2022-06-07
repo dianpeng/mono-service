@@ -62,7 +62,7 @@ func (a *actionOutput) boolAt(idx string, val bool) bool {
 		return false
 	}
 
-	if x.Bool != val {
+	if x.Bool() != val {
 		fmt.Printf("actionOutput(%s) unexpected(bool)", idx)
 		return false
 	}
@@ -221,7 +221,7 @@ policy(
 			{
 				e := l.Data[1]
 				assert.True(e.Type == ValBool)
-				assert.Equal(e.Bool, true, "bool")
+				assert.Equal(e.Bool(), true, "bool")
 			}
 			{
 				e := l.Data[2]
@@ -375,7 +375,7 @@ policy(
 			v1, ok := l.Data["b"]
 			assert.True(ok)
 			assert.True(v1.Type == ValBool)
-			assert.True(v1.Bool)
+			assert.True(v1.Bool())
 		}
 
 		{
@@ -636,8 +636,8 @@ func testBool(code string, expect bool) bool {
 		return false
 	}
 
-	if val.Bool != expect {
-		fmt.Printf(":return invalid value %t\n", val.Bool)
+	if val.Bool() != expect {
+		fmt.Printf(":return invalid value %t\n", val.Bool())
 		return false
 	}
 
@@ -651,7 +651,7 @@ func testCond(code string, expect bool) bool {
 	}
 
 	if val.ToBoolean() != expect {
-		fmt.Printf(":return invalid cond %t\n", val.Bool)
+		fmt.Printf(":return invalid cond %t\n", val.Bool())
 		return false
 	}
 

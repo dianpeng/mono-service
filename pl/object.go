@@ -97,8 +97,8 @@ type Pair struct {
 type Val struct {
 	Type   int
 	vInt   int64
-	vReal   float64
-	Bool   bool
+	vReal  float64
+	vBool   bool
 	String string
 	Regexp *regexp.Regexp
 	Pair   *Pair
@@ -113,6 +113,10 @@ func (v *Val) Int() int64 {
 
 func (v *Val) Real() float64 {
 	return v.vReal
+}
+
+func (v *Val) Bool() bool {
+	return v.vBool
 }
 
 func NewValNull() Val {
@@ -144,7 +148,7 @@ func NewValStr(s string) Val {
 
 func NewValReal(d float64) Val {
 	return Val{
-		Type: ValReal,
+		Type:  ValReal,
 		vReal: d,
 	}
 }
@@ -152,7 +156,7 @@ func NewValReal(d float64) Val {
 func NewValBool(b bool) Val {
 	return Val{
 		Type: ValBool,
-		Bool: b,
+		vBool: b,
 	}
 }
 
@@ -300,7 +304,7 @@ func (v *Val) ToBoolean() bool {
 	case ValStr:
 		return len(v.String) != 0
 	case ValBool:
-		return v.Bool
+		return v.Bool()
 	case ValNull:
 		return true
 	case ValList:
@@ -337,7 +341,7 @@ func (v *Val) ToNative() interface{} {
 	case ValStr:
 		return v.String
 	case ValBool:
-		return v.Bool
+		return v.Bool()
 	case ValNull:
 		return nil
 	case ValList:
@@ -376,7 +380,7 @@ func (v *Val) ToString() (string, error) {
 	case ValReal:
 		return fmt.Sprintf("%f", v.Real()), nil
 	case ValBool:
-		if v.Bool {
+		if v.Bool() {
 			return "true", nil
 		} else {
 			return "false", nil
@@ -659,7 +663,7 @@ func (v *Val) methodBool(name string, args []Val) (Val, error) {
 			return NewValNull(), fmt.Errorf("method: bool:to_string must have 0 arguments")
 		}
 		var r string
-		if v.Bool {
+		if v.Bool() {
 			r = "true"
 		} else {
 			r = "false"
@@ -952,7 +956,7 @@ func (v *Val) Info() string {
 	case ValReal:
 		return fmt.Sprintf("[real: %f]", v.Real())
 	case ValBool:
-		if v.Bool {
+		if v.Bool() {
 			return "[bool: true]"
 		} else {
 			return "[bool: false]"

@@ -61,7 +61,6 @@ func unpack(i reflect.Value) (Val, error) {
 
 	case reflect.String:
 		return NewValStr(i.String()), nil
-
 	case reflect.Bool:
 		return NewValBool(i.Bool()), nil
 
