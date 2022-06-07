@@ -129,7 +129,7 @@ func (a *actionOutput) mapAt(idx string) *Map {
 		fmt.Printf("actionOutput(%s) not map", idx)
 		return nil
 	}
-	return x.Map
+	return x.Map()
 }
 
 func TestEval1(t *testing.T) {
@@ -387,11 +387,11 @@ policy(
 			assert.True(ok)
 			assert.True(v0.Type == ValMap)
 
-			v00, ok := v0.Map.Data["b"]
+			v00, ok := v0.Map().Data["b"]
 			assert.True(ok)
 			assert.True(v00.Type == ValMap)
 
-			v000, ok := v00.Map.Data["c"]
+			v000, ok := v00.Map().Data["c"]
 			assert.True(ok)
 			assert.True(v000.Type == ValInt)
 			assert.True(v000.Int() == 1)

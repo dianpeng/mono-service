@@ -27,9 +27,7 @@ func visnil(i reflect.Value) bool {
 	switch i.Kind() {
 	case reflect.Func,
 		reflect.Chan,
-		reflect.Interface,
-		reflect.Map,
-		reflect.Pointer,
+		reflect.Interface, reflect.Map, reflect.Pointer,
 		reflect.Slice:
 		return i.IsNil()
 	default:

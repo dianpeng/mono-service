@@ -103,7 +103,7 @@ type Val struct {
 	vRegexp *regexp.Regexp
 	Pair    *Pair
 	vList   *List
-	Map     *Map
+	vMap    *Map
 	Usr     *UVal
 }
 
@@ -153,6 +153,14 @@ func (v *Val) List() *List {
 
 func (v *Val) SetList(vv *List) {
 	v.vList = vv
+}
+
+func (v *Val) Map() *Map {
+	return v.vMap
+}
+
+func (v *Val) SetMap(vv *Map) {
+	v.vMap = vv
 }
 
 func NewValNull() Val {
@@ -232,7 +240,7 @@ func NewValList() Val {
 func NewValMap() Val {
 	return Val{
 		Type: ValMap,
-		Map:  NewMap(),
+		vMap: NewMap(),
 	}
 }
 
@@ -327,7 +335,7 @@ func (v *Val) AddList(vv Val) {
 
 func (v *Val) AddMap(key string, val Val) {
 	must(v.Type == ValMap, "AddMap: must be map")
-	v.Map.Data[key] = val
+	v.Map().Data[key] = val
 }
 
 // never failed
@@ -346,7 +354,7 @@ func (v *Val) ToBoolean() bool {
 	case ValList:
 		return len(v.List().Data) != 0
 	case ValMap:
-		return len(v.Map.Data) != 0
+		return len(v.Map().Data) != 0
 	default:
 		return false
 	}
@@ -388,7 +396,7 @@ func (v *Val) ToNative() interface{} {
 		return x
 	case ValMap:
 		x := make(map[string]interface{})
-		for key, val := range v.Map.Data {
+		for key, val := range v.Map().Data {
 			x[key] = val.ToNative()
 		}
 		return x
@@ -485,7 +493,7 @@ func (v *Val) Index(idx Val) (Val, error) {
 		if err != nil {
 			return NewValNull(), err
 		}
-		if vv, ok := v.Map.Data[i]; !ok {
+		if vv, ok := v.Map().Data[i]; !ok {
 			return NewValNull(), fmt.Errorf("%s key not found", i)
 		} else {
 			return vv, nil
@@ -561,7 +569,7 @@ func (v *Val) IndexSet(idx, val Val) error {
 		if err != nil {
 			return err
 		}
-		v.Map.Data[i] = val
+		v.Map().Data[i] = val
 		return nil
 
 	default:
@@ -582,7 +590,7 @@ func (v *Val) Dot(i string) (Val, error) {
 		return NewValNull(), fmt.Errorf("cannot apply dot operator on regexp")
 
 	case ValMap:
-		if vv, ok := v.Map.Data[i]; !ok {
+		if vv, ok := v.Map().Data[i]; !ok {
 			return NewValNull(), fmt.Errorf("%s key not found", i)
 		} else {
 			return vv, nil
@@ -612,7 +620,7 @@ func (v *Val) DotSet(i string, val Val) error {
 		return fmt.Errorf("cannot apply dot operator on regexp")
 
 	case ValMap:
-		v.Map.Data[i] = val
+		v.Map().Data[i] = val
 		return nil
 
 	case ValPair:
@@ -863,7 +871,7 @@ func (v *Val) methodMap(name string, args []Val) (Val, error) {
 		if len(args) != 0 {
 			return NewValNull(), fmt.Errorf("method: map:len must have 0 arguments")
 		}
-		return NewValInt(len(v.Map.Data)), nil
+		return NewValInt(len(v.Map().Data)), nil
 
 	case "set":
 		if len(args) != 2 {
@@ -872,7 +880,7 @@ func (v *Val) methodMap(name string, args []Val) (Val, error) {
 		if args[0].Type != ValStr {
 			return NewValNull(), fmt.Errorf("method: map:set invalid argument")
 		}
-		v.Map.Data[args[0].String()] = args[1]
+		v.Map().Data[args[0].String()] = args[1]
 		return NewValNull(), nil
 
 	case "del":
@@ -882,7 +890,7 @@ func (v *Val) methodMap(name string, args []Val) (Val, error) {
 		if args[0].Type != ValStr {
 			return NewValNull(), fmt.Errorf("method: map:del invalid argument")
 		}
-		delete(v.Map.Data, args[0].String())
+		delete(v.Map().Data, args[0].String())
 		return NewValNull(), nil
 
 	case "get":
@@ -892,7 +900,7 @@ func (v *Val) methodMap(name string, args []Val) (Val, error) {
 		if args[0].Type != ValStr {
 			return NewValNull(), fmt.Errorf("method: map:get invalid argument")
 		}
-		v, ok := v.Map.Data[args[0].String()]
+		v, ok := v.Map().Data[args[0].String()]
 		if !ok {
 			return args[1], nil
 		} else {
@@ -906,7 +914,7 @@ func (v *Val) methodMap(name string, args []Val) (Val, error) {
 		if args[0].Type != ValStr {
 			return NewValNull(), fmt.Errorf("method: map:has invalid argument")
 		}
-		_, ok := v.Map.Data[args[0].String()]
+		_, ok := v.Map().Data[args[0].String()]
 		return NewValBool(ok), nil
 
 	default:
@@ -1003,7 +1011,7 @@ func (v *Val) Info() string {
 	case ValList:
 		return fmt.Sprintf("[list: %d]", len(v.List().Data))
 	case ValMap:
-		return fmt.Sprintf("[map: %d]", len(v.Map.Data))
+		return fmt.Sprintf("[map: %d]", len(v.Map().Data))
 	case ValPair:
 		return fmt.Sprintf("[pair: %s=>%s]", v.Pair.First.Info(), v.Pair.Second.Info())
 	case ValRegexp:
