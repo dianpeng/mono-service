@@ -6,6 +6,7 @@ import (
 
 	"github.com/dianpeng/mono-service/config"
 	"github.com/dianpeng/mono-service/pl"
+	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/service"
 	hrouter "github.com/julienschmidt/httprouter"
 )
@@ -63,7 +64,7 @@ func (s *nullSession) Prepare(_ *http.Request, _ hrouter.Params) (interface{}, e
 	return nil, nil
 }
 
-func (s *nullSession) Accept(_ interface{}) (service.SessionResult, error) {
+func (s *nullSession) Accept(_ interface{}, _ *hpl.Hpl) (service.SessionResult, error) {
 	return service.SessionResult{
 		Event: "response",
 	}, nil

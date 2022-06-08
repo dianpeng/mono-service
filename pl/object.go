@@ -781,19 +781,17 @@ func (v *Val) methodStr(name string, args []Val) (Val, error) {
 		}
 		return NewValInt(len(v.String())), nil
 
-	case "upper":
+	case "to_upper":
 		if len(args) != 0 {
 			return NewValNull(), fmt.Errorf("method: str:upper must have 0 arguments")
 		}
-		v.SetString(strings.ToUpper(v.String()))
-		return *v, nil
+		return NewValStr(strings.ToUpper(v.String())), nil
 
-	case "lower":
+	case "to_lower":
 		if len(args) != 0 {
 			return NewValNull(), fmt.Errorf("method: str:lower must have 0 arguments")
 		}
-		v.SetString(strings.ToLower(v.String()))
-		return *v, nil
+		return NewValStr(strings.ToLower(v.String())), nil
 
 	case "substr":
 		if len(args) != 2 && len(args) != 1 {

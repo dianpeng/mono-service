@@ -438,7 +438,7 @@ func (v *VHost) doPhase(asvc *vhostService,
 	{
 		// 3.3) run the session accept handler
 		handler.setPhase(phase.PhaseSessionAccept, "session.Accept")
-		if r, err := handler.session.Accept(sessionCtx); err != nil {
+		if r, err := handler.session.Accept(sessionCtx, handler.hpl); err != nil {
 			handler.errorDescription = err.Error()
 			v.doPhaseError(asvc, w, req, param, err, phase.PhaseSessionAccept)
 			return

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/pl"
 	hrouter "github.com/julienschmidt/httprouter"
 	"net/http"
@@ -29,10 +30,10 @@ type Session interface {
 	Prepare(*http.Request, hrouter.Params) (interface{}, error)
 
 	// Invoked when the http request is been accepted by the session handler
-	Accept(context interface{}) (SessionResult, error)
+	Accept(interface{}, *hpl.Hpl) (SessionResult, error)
 
 	// The service session is terminated
-	Done(context interface{})
+	Done(interface{})
 
 	// --------------------------------------------------------------------------
 	// HPL context usage
