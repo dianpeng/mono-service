@@ -14,11 +14,11 @@ import (
 // it when we have time
 
 const (
-	ValInt = iota
+	ValNull = iota
+	ValInt
 	ValReal
 	ValStr
 	ValBool
-	ValNull
 	ValPair
 	ValList
 	ValMap
@@ -282,6 +282,17 @@ func NewValIntList(s []int) Val {
 		r.AddList(NewValInt(vv))
 	}
 	return r
+}
+
+func NewValUsrData(
+	c interface{},
+) Val {
+	return Val{
+		Type: ValUsr,
+		vUsr: &UVal{
+			Context: c,
+		},
+	}
 }
 
 func NewValUsr(

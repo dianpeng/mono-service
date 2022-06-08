@@ -5,56 +5,8 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"strings"
 )
-
-type Policy struct {
-	// can be null
-	g *program
-	p []*program
-}
-
-func (p *Policy) getProgram(name string) *program {
-	for _, xx := range p.p {
-		if xx.name == name {
-			return xx
-		}
-	}
-	return nil
-}
-
-func (p *Policy) Dump() string {
-	var b bytes.Buffer
-	for _, p := range p.p {
-		b.WriteString(p.dump())
-		b.WriteRune('\n')
-	}
-	return b.String()
-}
-
-// Compile the input string into a Policy object
-func CompilePolicy(policy string) (*Policy, error) {
-	p := newParser(policy)
-	pp, err := p.parse()
-	if err != nil {
-		return nil, err
-	}
-
-	var glb *program
-
-	// find out the session variable
-	if len(pp) > 0 {
-		p0 := pp[0]
-		if p0.name == "@session" {
-			glb = p0
-			pp = pp[1:]
-		}
-	}
-
-	return &Policy{
-		g: glb,
-		p: pp,
-	}, nil
-}
 
 // Evaluation part of the VM
 type EvalLoadVar func(*Evaluator, string) (Val, error)
@@ -62,14 +14,106 @@ type EvalStoreVar func(*Evaluator, string, Val) error
 type EvalCall func(*Evaluator, string, []Val) (Val, error)
 type EvalAction func(*Evaluator, string, Val) error
 
+// notes on function call frame layout
+//
+// the parser will generate bytecode to allow following stack value layout
+//
+// [funcframe] (a user value)
+// [arg:N]
+// [arg:N-1]
+//   ...
+// [arg:1]          <-------------- framep+1 (where local stack start)
+// [index:function] <-------------- framep
+
 type Evaluator struct {
 	Stack      []Val
 	Session    []Val
-	Local      []Val
 	LoadVarFn  EvalLoadVar
 	StoreVarFn EvalStoreVar
 	CallFn     EvalCall
 	ActionFn   EvalAction
+
+	// internal states
+
+	// current frame, ie the one that is been executing
+	curframe funcframe
+}
+
+// internal structure which we used to record the current frame and information
+// will be setup inside of the function's caller reserve slot
+type funcframe struct {
+	pc     int
+	prog   *program
+	framep int
+	farg   int
+}
+
+func (ff *funcframe) isTop() bool {
+	return ff.prog == nil
+}
+
+func (ff *funcframe) frameInfo() string {
+	return fmt.Sprintf("[pc=%d]"+
+		"[framep=%d]"+
+		"[argcount=%d]"+
+		"[instr=%s]"+
+		"[type=%s]"+
+		"[name=%s]"+
+		"[localcount=%d]"+
+		"[source=]:\n%s",
+		ff.pc,
+		ff.framep,
+		ff.farg,
+		ff.prog.bcList[ff.pc].dumpWithProgram(ff.prog),
+		ff.prog.typeName(),
+		ff.prog.name,
+		ff.prog.localSize,
+		ff.prog.dbgList[ff.pc].where(),
+	)
+}
+
+func (e *Evaluator) curfuncframeVal() Val {
+	return NewValUsrData(&e.curframe)
+}
+
+func (e *Evaluator) prevframepos() int {
+	// offset by 1 to skip the function's index on the local stack
+	return e.curframe.framep + e.curframe.farg + 1
+}
+
+func (e *Evaluator) localpos() int {
+	return e.curframe.framep + 1
+}
+
+func (e *Evaluator) prevfuncframe() *funcframe {
+	v := e.Stack[e.prevframepos()]
+	must(v.Type == ValUsr, "must be user")
+	ff, ok := v.Usr().Context.(*funcframe)
+	must(ok, "must be frame")
+	return ff
+}
+
+func (e *Evaluator) popfuncframe(prev *funcframe) (int, *program) {
+	e.popTo(e.curframe.framep)
+	pc := prev.pc - 1
+	prog := prev.prog
+	e.curframe = *prev
+	return pc, prog
+}
+
+func newfuncframe(
+	pc int,
+	prog *program,
+	framep int,
+	farg int,
+) (*funcframe, Val) {
+	ff := &funcframe{
+		pc:     pc,
+		prog:   prog,
+		framep: framep,
+		farg:   farg,
+	}
+	return ff, NewValUsrData(ff)
 }
 
 func NewEvaluatorSimple() *Evaluator {
@@ -103,6 +147,11 @@ func (e *Evaluator) popN(cnt int) {
 	e.Stack = e.Stack[:sz-cnt]
 }
 
+func (e *Evaluator) popTo(size int) {
+	must(len(e.Stack) >= size, "invalid popTo size")
+	e.Stack = e.Stack[:size]
+}
+
 func (e *Evaluator) push(v Val) {
 	e.Stack = append(e.Stack, v)
 }
@@ -126,13 +175,11 @@ func (e *Evaluator) top2() Val {
 	return e.topN(2)
 }
 
-func (e *Evaluator) newLocal(size int) {
-	if len(e.Local) < size {
-		e.Local = make([]Val, size, size)
-		for i := 0; i < size; i++ {
-			e.Local[i] = NewValNull()
-		}
-	}
+// local variable is stored at the top of the stack from bot to top and the
+// expression variable is been manipulated at the top of the stack in reverse
+// direction
+func (e *Evaluator) localslot(arg int) int {
+	return e.curframe.framep + 1 + arg
 }
 
 func mustReal(x Val) float64 {
@@ -377,26 +424,82 @@ func (e *Evaluator) doNegate(v Val) (Val, error) {
 	}
 }
 
+// Generate a human readable backtrace for reporting errors
+func (e *Evaluator) backtrace(curframe *program, max int) string {
+	sep := ""
+	var b []string
+	idx := 0
+
+	for {
+		cf := &e.curframe
+		if cf.isTop() {
+			break
+		}
+
+		b = append(b, fmt.Sprintf("%d>%s\n%s\n%s\n", idx, sep, cf.frameInfo(), sep))
+		idx++
+
+		if idx == max {
+			b = append(b, ".........\n")
+			break
+		}
+
+		// pop it up
+		e.popfuncframe(e.prevfuncframe())
+	}
+
+	return strings.Join(b, "")
+}
+
 func (e *Evaluator) doErrf(p *program, pc int, format string, a ...interface{}) error {
+	must(e.curframe.prog == p, "must be compatible")
+	e.curframe.pc = pc
+
 	dbg := p.dbgList[pc]
 	msg := fmt.Sprintf(format, a...)
-	return fmt.Errorf("policy(%s), %s has error: %s", p.name, dbg.where(), msg)
+	return fmt.Errorf("policy(%s), %s has error: %s\n%s",
+		p.name, dbg.where(), msg, e.backtrace(p, 10))
 }
 
 func (e *Evaluator) doErr(p *program, pc int, err error) error {
 	dbg := p.dbgList[pc]
-	return fmt.Errorf("policy(%s), %s has error: %s", p.name, dbg.where(), err.Error())
+	return fmt.Errorf("policy(%s), %s has error: %s\n%s",
+		p.name, dbg.where(), err.Error(), e.backtrace(p, 10))
 }
 
-func (e *Evaluator) doEval(event string, pp []*program) error {
+func (e *Evaluator) doEval(event string, pp []*program, policy *Policy) error {
+	// Enter into the VM with a native function call marker. This serves as a
+	// frame marker to indicate the end of the script frame which will help us
+	// to terminate the frame walk
+
+	// -1 means this is a rule inside of the policy instead of a function call
+	e.push(NewValInt(-1))
+	_, entryV := newfuncframe(
+		0,
+		nil,
+		0,
+		0,
+	)
+	e.push(entryV)
 
 	// VM execution
 VM:
 	for _, prog := range pp {
-		e.newLocal(prog.localSize)
+		// point to currently executing program, notes the PC field is not updated
+		// until the VM breaks, ie when enter into doErr/doErrf
+		e.curframe.prog = prog
+		e.curframe.pc = 0
+		e.curframe.framep = 0
+		e.curframe.farg = 0
 
+		// script function entry label, the bcSCall will setup stack layout and
+		// jump(goto) this label for rexecution. prog will be swapped with the
+		// function program
+	FUNC:
 		// actual loop to interpret the internal policy, the policy selection code
 		// is been fused inside of the bytecode body and terminated by bcMatch bc
+		// make sure the function has enough slot for local variable
+
 	MATCH:
 		for pc := 0; ; pc++ {
 			bc := prog.bcList[pc]
@@ -632,6 +735,45 @@ VM:
 				e.push(ret)
 				break
 
+			// script function call and return
+			case bcSCall:
+				paramSize := bc.argument
+				funcIndex := e.topN(paramSize)
+
+				// create the frame marker for the scriptting call
+				_, newFV := newfuncframe(
+					pc+1, // next pc
+					prog,
+					e.curframe.framep,
+					e.curframe.farg,
+				)
+
+				// setup new calling frame
+				e.push(newFV)
+
+				// enter into the new call
+				newCall := policy.fn[int(funcIndex.Int())]
+				prog = newCall
+
+				e.curframe.prog = prog
+				e.curframe.pc = 0
+				e.curframe.framep = len(e.Stack) - paramSize - 2
+				e.curframe.farg = paramSize
+
+				goto FUNC
+
+			case bcReturn:
+				rv := e.top0()
+
+				prevcf := e.prevfuncframe()
+
+				// return back to the caller
+				pc, prog = e.popfuncframe(prevcf)
+
+				// return value push back to the stack
+				e.push(rv)
+				break
+
 			case bcToStr:
 				top := e.top0()
 				str, err := top.ToString()
@@ -725,13 +867,22 @@ VM:
 				}
 				break
 
+			case bcReserveLocal:
+				sz := bc.argument
+				if sz > 0 {
+					for i := 0; i < sz; i++ {
+						e.Stack = append(e.Stack, NewValNull())
+					}
+				}
+				break
+
 			case bcStoreLocal:
-				e.Local[bc.argument] = e.top0()
+				e.Stack[e.localslot(bc.argument)] = e.top0()
 				e.pop()
 				break
 
 			case bcLoadLocal:
-				e.push(e.Local[bc.argument])
+				e.push(e.Stack[e.localslot(bc.argument)])
 				break
 
 			// special functions, ie intrinsic
@@ -776,6 +927,8 @@ VM:
 				if c.ToBoolean() {
 					e.pop()
 				} else {
+					// leave the frame untouched
+					e.popTo(e.curframe.framep + 2)
 					break MATCH
 				}
 				break
@@ -798,9 +951,9 @@ func (e *Evaluator) EvalSession(p *Policy) error {
 	}
 	glb := []*program{p.g}
 	e.Session = nil
-	return e.doEval("@session", glb)
+	return e.doEval("@session", glb, p)
 }
 
 func (e *Evaluator) Eval(event string, p *Policy) error {
-	return e.doEval(event, p.p)
+	return e.doEval(event, p.p, p)
 }

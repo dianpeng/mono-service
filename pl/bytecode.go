@@ -42,8 +42,9 @@ const (
 
 	// local variable, we use seperate stack to load and store local variables
 	// notes, the local variable is been identified without $
-	bcLoadLocal  = 21
-	bcStoreLocal = 22
+	bcLoadLocal    = 21
+	bcStoreLocal   = 22
+	bcReserveLocal = 23
 
 	// expression
 	bcAdd          = 31
@@ -87,9 +88,11 @@ const (
 	bcStoreSession = 73
 
 	// call
-	bcCall  = 81
-	bcMCall = 82
-	bcICall = 83
+	bcCall   = 81
+	bcMCall  = 82
+	bcICall  = 83
+	bcSCall  = 84
+	bcReturn = 89
 
 	// special functions
 	// render template
@@ -135,9 +138,17 @@ func (s *sourceloc) where() string {
 type bytecodeList []bytecode
 type sourcelocList []sourceloc
 
+const (
+	progRule = iota
+	progFunc
+	progSession
+)
+
 type program struct {
-	name       string
-	localSize  int
+	name      string
+	localSize int
+	argSize   int // if this program is a function call, then this indicates
+	// size of the arguments required for calling the function
 	tbReal     []float64
 	tbInt      []int64
 	tbStr      []string
@@ -145,18 +156,20 @@ type program struct {
 	tbRegexp   []*regexp.Regexp
 
 	// used for actual interpretation
-	bcList  bytecodeList
-	dbgList sourcelocList
+	bcList   bytecodeList
+	dbgList  sourcelocList
+	progtype int
 }
 
-func newProgram(n string) *program {
+func newProgram(n string, t int) *program {
 	return &program{
-		name: n,
+		name:     n,
+		progtype: t,
 	}
 }
 
-func newProgramEmpty(n string) *program {
-	pp := newProgram(n)
+func newProgramEmpty(n string, t int) *program {
+	pp := newProgram(n, t)
 	pp.bcList = append(pp.bcList, bytecode{
 		opcode:   bcHalt,
 		argument: 0,
@@ -286,66 +299,115 @@ func (p *program) patch(l *lexer) int {
 	return idx
 }
 
-func (p *program) emit0At(l *lexer, idx int, opcode int) {
+func (p *program) emit0At(_ *lexer, idx int, opcode int) {
 	p.bcList[idx] = bytecode{
 		opcode: opcode,
 	}
-	p.dbgList = append(p.dbgList, l.dbg())
 }
 
-func (p *program) emit1At(l *lexer, idx int, opcode int, argument int) {
+func (p *program) emit1At(_ *lexer, idx int, opcode int, argument int) {
 	p.bcList[idx] = bytecode{
 		opcode:   opcode,
 		argument: argument,
 	}
-	p.dbgList = append(p.dbgList, l.dbg())
 }
 
 func (p *program) dump() string {
 	var b bytes.Buffer
 	b.WriteString(fmt.Sprintf(":program (%s)\n", p.name))
-
 	for idx, x := range p.bcList {
-		name := getBytecodeName(x.opcode)
-		arg := x.argument
-		switch x.opcode {
-		case bcLoadInt:
-			b.WriteString(fmt.Sprintf("%d. %s(%d:%d)", idx+1, name, arg, p.idxInt(arg)))
-			break
-
-		case bcLoadReal:
-			b.WriteString(fmt.Sprintf("%d. %s(%d:%f)", idx+1, name, arg, p.idxReal(arg)))
-			break
-
-		case bcLoadStr, bcAction, bcDot:
-			b.WriteString(fmt.Sprintf("%d. %s(%d:%s)", idx+1, name, arg, p.idxStr(arg)))
-			break
-
-		case bcLoadRegexp:
-			b.WriteString(fmt.Sprintf("%d. %s(%d:%s)", idx+1, name, arg, p.idxRegexp(arg).String()))
-
-		case bcAddList,
-			bcAddMap,
-			bcCall,
-			bcICall,
-			bcMCall,
-			bcConStr,
-			bcLoadLocal,
-			bcStoreLocal,
-			bcOr,
-			bcAnd,
-			bcJfalse,
-			bcJump,
-			bcTernary:
-
-			b.WriteString(fmt.Sprintf("%d. %s(%d)", idx+1, name, arg))
-			break
-
-		default:
-			b.WriteString(fmt.Sprintf("%d. %s", idx+1, name))
-		}
-		b.WriteRune('\n')
+		b.WriteString(fmt.Sprintf("%d> %s\n", idx+1, x.dumpWithProgram(p)))
 	}
+	return b.String()
+}
+
+func (p *program) typeName() string {
+	switch p.progtype {
+	case progRule:
+		return "rule"
+	case progFunc:
+		return "function"
+	case progSession:
+		return "session"
+	default:
+		return ""
+	}
+}
+
+func (x *bytecode) dumpWithProgram(p *program) string {
+	resolver := func(op int, arg int) string {
+		switch op {
+		case bcLoadReal:
+			return fmt.Sprintf("%f", p.idxReal(arg))
+		case bcLoadStr, bcAction, bcDot:
+			return p.idxStr(arg)
+		case bcLoadRegexp:
+			return p.idxRegexp(arg).String()
+		case bcTemplate:
+			return "[template]"
+		default:
+			return "<unknown>"
+		}
+	}
+	return x.dump(resolver)
+}
+
+func (x *bytecode) dump(resolver func(int, int) string) string {
+	var b bytes.Buffer
+	name := getBytecodeName(x.opcode)
+	arg := x.argument
+
+	wrapper := func(bc int, arg int) string {
+		if resolver != nil {
+			return fmt.Sprintf(":%s", resolver(bc, arg))
+		} else {
+			return ""
+		}
+	}
+
+	switch x.opcode {
+
+	case bcLoadInt,
+		bcLoadReal,
+		bcLoadStr,
+		bcAction,
+		bcDot,
+		bcLoadRegexp,
+		bcTemplate:
+
+		b.WriteString(fmt.Sprintf("%s(%d%s)", name, arg, wrapper(x.opcode, arg)))
+		break
+
+	case bcAddList,
+		bcAddMap,
+		bcCall,
+		bcICall,
+		bcMCall,
+		bcSCall,
+		bcReturn,
+		bcConStr,
+
+		bcLoadLocal,
+		bcStoreLocal,
+		bcReserveLocal,
+
+		bcLoadVar,
+		bcStoreVar,
+		bcDotSet,
+
+		bcAnd,
+		bcOr,
+		bcJfalse,
+		bcJump,
+		bcTernary:
+
+		b.WriteString(fmt.Sprintf("%s(%d)", name, arg))
+		break
+
+	default:
+		b.WriteString(fmt.Sprintf("%s[%d]", name, arg))
+	}
+
 	return b.String()
 }
 
@@ -381,6 +443,10 @@ func getBytecodeName(bc int) string {
 		return "icall"
 	case bcMCall:
 		return "mcall"
+	case bcSCall:
+		return "scall"
+	case bcReturn:
+		return "return"
 	case bcToStr:
 		return "to-str"
 	case bcConStr:
@@ -399,6 +465,8 @@ func getBytecodeName(bc int) string {
 		return "load-local"
 	case bcStoreLocal:
 		return "store-local"
+	case bcReserveLocal:
+		return "reserve-local"
 	case bcAdd:
 		return "add"
 	case bcSub:

@@ -8,6 +8,183 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// a simple testing frameworking which is designed for testing the basic
+// expression of the policy. It assumes user will write output => as return
+// action
+func test(code string) (Val, bool) {
+	rr := NewValNull()
+	ret := &rr
+	eval := NewEvaluator(
+		func(_ *Evaluator, vname string) (Val, error) {
+			if vname == "a_int" {
+				return NewValInt(1), nil
+			}
+			if vname == "a_str" {
+				return NewValStr("hello"), nil
+			}
+			if vname == "a_real" {
+				return NewValReal(1.0), nil
+			}
+			return NewValNull(), fmt.Errorf("%s unknown var", vname)
+		},
+		nil,
+		func(_ *Evaluator, fname string, args []Val) (Val, error) {
+			return NewValNull(), fmt.Errorf("%s unknown func", fname)
+		},
+
+		func(_ *Evaluator, aname string, aval Val) error {
+			if aname == "output" {
+				*ret = aval
+			}
+			return nil
+		})
+
+	policy, err := CompilePolicy(code)
+
+	// fmt.Printf(":code\n%s", policy.Dump())
+
+	if err != nil {
+		fmt.Printf(":policy %s", err.Error())
+		return NewValNull(), false
+	}
+
+	err = eval.EvalSession(policy)
+	if err != nil {
+		fmt.Printf(":evalSession %s", err.Error())
+		return NewValNull(), false
+	}
+
+	err = eval.Eval("test", policy)
+	if err != nil {
+		fmt.Printf(":eval %s", err.Error())
+		return NewValNull(), false
+	}
+	return *ret, true
+}
+
+func testInt64(code string, expect int64) bool {
+	val, ok := test(code)
+	if !ok {
+		return false
+	}
+
+	if val.Type != ValInt {
+		fmt.Printf(":return invalid type %s\n", val.Id())
+		return false
+	}
+
+	if val.Int() != expect {
+		fmt.Printf(":return invalid value %d\n", val.Int())
+		return false
+	}
+
+	return true
+}
+
+func testInt(code string, expect int) bool {
+	val, ok := test(code)
+	if !ok {
+		return false
+	}
+
+	if val.Type != ValInt {
+		fmt.Printf(":return invalid type %s\n", val.Id())
+		return false
+	}
+
+	if val.Int() != int64(expect) {
+		fmt.Printf(":return invalid value %d\n", val.Int())
+		return false
+	}
+
+	return true
+}
+
+func testReal(code string, expect float64) bool {
+	val, ok := test(code)
+	if !ok {
+		return false
+	}
+
+	if val.Type != ValReal {
+		fmt.Printf(":return invalid type %s\n", val.Id())
+		return false
+	}
+
+	if val.Real() != expect {
+		fmt.Printf(":return invalid value %f\n", val.Real())
+		return false
+	}
+
+	return true
+}
+
+func testBool(code string, expect bool) bool {
+	val, ok := test(code)
+	if !ok {
+		return false
+	}
+
+	if val.Type != ValBool {
+		fmt.Printf(":return invalid type %s\n", val.Id())
+		return false
+	}
+
+	if val.Bool() != expect {
+		fmt.Printf(":return invalid value %t\n", val.Bool())
+		return false
+	}
+
+	return true
+}
+
+func testCond(code string, expect bool) bool {
+	val, ok := test(code)
+	if !ok {
+		return false
+	}
+
+	if val.ToBoolean() != expect {
+		fmt.Printf(":return invalid cond %t\n", val.Bool())
+		return false
+	}
+
+	return true
+}
+
+func testNull(code string) bool {
+	val, ok := test(code)
+	if !ok {
+		return false
+	}
+
+	if val.Type != ValNull {
+		fmt.Printf(":return invalid type %s\n", val.Id())
+		return false
+	}
+
+	return true
+}
+
+func testString(code string, expect string) bool {
+	val, ok := test(code)
+	if !ok {
+		return false
+	}
+
+	if val.Type != ValStr {
+		fmt.Printf(":return invalid type %s\n", val.Id())
+		return false
+	}
+
+	if val.String() != expect {
+		fmt.Printf(":return invalid value %s\n", val.String())
+		return false
+	}
+
+	return true
+}
+
 type actionOutput map[string]Val
 
 func (a *actionOutput) intAt(idx string, val int) bool {
@@ -326,31 +503,31 @@ policy(
 			assert.True(l != nil)
 			assert.True(len(l.Data) == 1)
 			assert.True(l.Data[0].Type == ValInt)
-			assert.True(l.Data[0].Int == 1)
+			assert.True(l.Data[0].Int() == 1)
 		}
 		{
 			l := output.listAt("list2")
 			assert.True(l != nil)
 			assert.True(len(l.Data) == 2)
 			assert.True(l.Data[0].Type == ValInt)
-			assert.True(l.Data[0].Int == 1)
+			assert.True(l.Data[0].Int() == 1)
 			assert.True(l.Data[1].Type == ValBool)
-			assert.True(l.Data[1].Bool)
+			assert.True(l.Data[1].Bool())
 		}
 		{
 			l := output.listAt("list3")
 			assert.True(l != nil)
 			assert.True(len(l.Data) == 3)
 			assert.True(l.Data[0].Type == ValInt)
-			assert.True(l.Data[0].Int == 1)
+			assert.True(l.Data[0].Int() == 1)
 
 			assert.True(l.Data[1].Type == ValStr)
-			assert.True(l.Data[1].String == "Hello World")
+			assert.True(l.Data[1].String() == "Hello World")
 
 			assert.True(l.Data[2].Type == ValList)
-			assert.True(l.Data[2].List != nil)
-			assert.True(l.Data[2].List.Data[0].Type == ValInt)
-			assert.True(l.Data[2].List.Data[0].Int == 1)
+			assert.True(l.Data[2].List() != nil)
+			assert.True(l.Data[2].List().Data[0].Type == ValInt)
+			assert.True(l.Data[2].List().Data[0].Int() == 1)
 		}
 
 		{
@@ -514,181 +691,16 @@ func TestLocal(t *testing.T) {
 	}
 }
 
-// a simple testing frameworking which is designed for testing the basic
-// expression of the policy. It assumes user will write output => as return
-// action
-func test(code string) (Val, bool) {
-	rr := NewValNull()
-	ret := &rr
-	eval := NewEvaluator(
-		func(_ *Evaluator, vname string) (Val, error) {
-			if vname == "a_int" {
-				return NewValInt(1), nil
-			}
-			if vname == "a_str" {
-				return NewValStr("hello"), nil
-			}
-			if vname == "a_real" {
-				return NewValReal(1.0), nil
-			}
-			return NewValNull(), fmt.Errorf("%s unknown var", vname)
-		},
-		nil,
-		func(_ *Evaluator, fname string, args []Val) (Val, error) {
-			return NewValNull(), fmt.Errorf("%s unknown func", fname)
-		},
+func TestICall(t *testing.T) {
+	assert := assert.New(t)
+	now := time.Now().Unix()
 
-		func(_ *Evaluator, aname string, aval Val) error {
-			if aname == "output" {
-				*ret = aval
-			}
-			return nil
-		})
-
-	policy, err := CompilePolicy(code)
-
-	// fmt.Printf(":code\n%s", policy.Dump())
-
-	if err != nil {
-		fmt.Printf(":policy %s", err.Error())
-		return NewValNull(), false
-	}
-
-	err = eval.EvalSession(policy)
-	if err != nil {
-		fmt.Printf(":evalSession %s", err.Error())
-		return NewValNull(), false
-	}
-
-	err = eval.Eval("test", policy)
-	if err != nil {
-		fmt.Printf(":eval %s", err.Error())
-		return NewValNull(), false
-	}
-	return *ret, true
-}
-
-func testInt64(code string, expect int64) bool {
-	val, ok := test(code)
-	if !ok {
-		return false
-	}
-
-	if val.Type != ValInt {
-		fmt.Printf(":return invalid type %s\n", val.Id())
-		return false
-	}
-
-	if val.Int() != expect {
-		fmt.Printf(":return invalid value %d\n", val.Int())
-		return false
-	}
-
-	return true
-}
-
-func testInt(code string, expect int) bool {
-	val, ok := test(code)
-	if !ok {
-		return false
-	}
-
-	if val.Type != ValInt {
-		fmt.Printf(":return invalid type %s\n", val.Id())
-		return false
-	}
-
-	if val.Int() != int64(expect) {
-		fmt.Printf(":return invalid value %d\n", val.Int())
-		return false
-	}
-
-	return true
-}
-
-func testReal(code string, expect float64) bool {
-	val, ok := test(code)
-	if !ok {
-		return false
-	}
-
-	if val.Type != ValReal {
-		fmt.Printf(":return invalid type %s\n", val.Id())
-		return false
-	}
-
-	if val.Real() != expect {
-		fmt.Printf(":return invalid value %f\n", val.Real())
-		return false
-	}
-
-	return true
-}
-
-func testBool(code string, expect bool) bool {
-	val, ok := test(code)
-	if !ok {
-		return false
-	}
-
-	if val.Type != ValBool {
-		fmt.Printf(":return invalid type %s\n", val.Id())
-		return false
-	}
-
-	if val.Bool() != expect {
-		fmt.Printf(":return invalid value %t\n", val.Bool())
-		return false
-	}
-
-	return true
-}
-
-func testCond(code string, expect bool) bool {
-	val, ok := test(code)
-	if !ok {
-		return false
-	}
-
-	if val.ToBoolean() != expect {
-		fmt.Printf(":return invalid cond %t\n", val.Bool())
-		return false
-	}
-
-	return true
-}
-
-func testNull(code string) bool {
-	val, ok := test(code)
-	if !ok {
-		return false
-	}
-
-	if val.Type != ValNull {
-		fmt.Printf(":return invalid type %s\n", val.Id())
-		return false
-	}
-
-	return true
-}
-
-func testString(code string, expect string) bool {
-	val, ok := test(code)
-	if !ok {
-		return false
-	}
-
-	if val.Type != ValStr {
-		fmt.Printf(":return invalid type %s\n", val.Id())
-		return false
-	}
-
-	if val.String() != expect {
-		fmt.Printf(":return invalid value %s\n", val.String())
-		return false
-	}
-
-	return true
+	assert.True(testInt64(
+		`
+test{
+  output => time::unix();
+};
+`, now))
 }
 
 // arithmetic operation testing
@@ -1470,16 +1482,70 @@ test{
 
 }
 
-func TestICall(t *testing.T) {
-	assert := assert.New(t)
-	now := time.Now().Unix()
+func fib(a int) int {
+	if a == 0 {
+		return 1
+	} else if a <= 2 {
+		return a
+	} else {
+		return fib(a-1) + fib(a-2)
+	}
+}
 
-	assert.True(testInt64(
+func TestSCall(t *testing.T) {
+	assert := assert.New(t)
+	assert.True(testString(
 		`
+function hello_world(x, y) {
+  let xx = x + y;
+  return xx;
+}
+
 test{
-  output => time::unix();
+  output => hello_world("hello", " world");
 };
-`, now))
+`, "hello world"))
+
+	assert.True(testInt(
+		`
+function fib(n) {
+  return if n == 0 {
+    1;
+  } elif n <= 2 {
+    n;
+  } else {
+    fib(n-1) + fib(n-2);
+  };
+}
+
+test{
+  output => fib(5);
+};
+`, fib(5)))
+
+	assert.False(testInt(
+		`
+function err() {
+  return a_unown_variable;
+}
+
+function bar() {
+  err()
+}
+
+function foo() {
+  bar()
+}
+
+function xx(n) {
+  foo()
+}
+
+test{
+  output => xx(1)
+};
+`, fib(5)))
+
 }
 
 func TestTemplate(t *testing.T) {

@@ -6,15 +6,8 @@ import (
 	"testing"
 )
 
-func dumpProg(x []*program) {
-	if x == nil {
-		return
-	}
-
-	fmt.Printf(":program-list (%d)\n", len(x))
-	for _, pr := range x {
-		fmt.Printf("%s", pr.dump())
-	}
+func dumpProg(x *Policy) {
+	fmt.Printf("%s\n", x.Dump())
 }
 
 // Here the testing of parser just verify its binary result, ie whether it passes

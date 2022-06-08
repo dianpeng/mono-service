@@ -12,7 +12,8 @@ type symTable struct {
 }
 
 func newSymTable() *symTable {
-	return &symTable{}
+	x := &symTable{}
+	return x
 }
 
 func (s *symTable) localSize() int {
@@ -43,14 +44,15 @@ func (s *symTable) add(x string) int {
 
 type parser struct {
 	l       *lexer
-	pmap    []*program
+	policy  *Policy
 	stbl    *symTable
 	sessVar []string
 }
 
 func newParser(input string) *parser {
 	return &parser{
-		l: newLexer(input),
+		l:      newLexer(input),
+		policy: &Policy{},
 	}
 }
 
@@ -94,7 +96,7 @@ func (p *parser) err(xx string) error {
 	}
 }
 
-func (p *parser) parse() ([]*program, error) {
+func (p *parser) parse() (*Policy, error) {
 	p.l.next()
 
 	// only the first statement can be session and it MUST be defined before any
@@ -103,28 +105,39 @@ func (p *parser) parse() ([]*program, error) {
 		if prog, err := p.parseSessionScope(); err != nil {
 			return nil, err
 		} else {
-			p.pmap = append(p.pmap, prog)
+			p.policy.p = append(p.policy.p, prog)
 		}
 	}
 
+LOOP:
 	for {
 		tk := p.l.token
-		if tk == tkId || tk == tkStr || tk == tkLSqr {
-			prog, err := p.parseRule()
-			if err != nil {
+		switch tk {
+		case tkId, tkStr, tkLSqr:
+			if err := p.parseRule(); err != nil {
 				return nil, err
 			}
-			p.pmap = append(p.pmap, prog)
-		} else if tk == tkError {
-			return nil, p.l.toError()
-		} else if tk != tkEof {
-			return nil, p.err("unexpected token, cannot be parsed as policy")
-		} else {
 			break
+
+		case tkFunction:
+			if err := p.parseFunction(); err != nil {
+				return nil, err
+			}
+			break
+
+		case tkError:
+			return nil, p.l.toError()
+
+		default:
+			if tk != tkEof {
+				return nil, p.err("unexpected token, cannot be parsed as known statement")
+			} else {
+				break LOOP
+			}
 		}
 	}
 
-	return p.pmap, nil
+	return p.policy, nil
 }
 
 func (p *parser) parseSessionSet(prog *program) error {
@@ -163,7 +176,8 @@ func (p *parser) parseSessionScope() (*program, error) {
 	}
 	p.l.next()
 
-	prog := newProgram("@session")
+	prog := newProgram("@session", progSession)
+	localR := prog.patch(p.l)
 
 	if p.l.token != tkRBra {
 		// all the statement resides inside of it will be treated as session statement
@@ -197,13 +211,89 @@ func (p *parser) parseSessionScope() (*program, error) {
 
 	// lastly halt the whole execution
 	prog.emit0(p.l, bcHalt)
+	prog.emit1At(p.l, localR, bcReserveLocal, 0)
 
 	p.l.next()
 	return prog, nil
 }
 
-func (p *parser) parseRule() (*program, error) {
+// parsing a user defined script function
+// function name'(' arg-list ')'
+// function's argument are been treated just like local variables, since they
+// will be put into the stack by the caller
+func (p *parser) parseFunction() (the_error error) {
+	must(p.l.token == tkFunction, "must be function")
 	p.stbl = newSymTable()
+	defer func() {
+		p.stbl = nil
+	}()
+
+	// function name
+	if !p.l.expect(tkId) {
+		return p.l.toError()
+	}
+	funcName := p.l.valueText
+	if !p.l.expect(tkLPar) {
+		return p.l.toError()
+	}
+
+	prog := newProgram(funcName, progFunc)
+	localR := prog.patch(p.l)
+	p.policy.fn = append(p.policy.fn, prog)
+	defer func() {
+		if the_error != nil {
+			sz := len(p.policy.fn)
+			p.policy.fn = p.policy.fn[:sz-1]
+		}
+	}()
+
+	// parsing the function's argument and just treat them as
+	if p.l.next() != tkRPar {
+		argcnt := 0
+		for {
+			if !p.l.expectCurrent(tkId) {
+				return p.l.toError()
+			}
+			p.stbl.add(p.l.valueText)
+			p.l.next()
+			argcnt++
+
+			if p.l.token == tkComma {
+				p.l.next()
+			} else if p.l.token == tkRPar {
+				break
+			} else {
+				return p.err("expect a ')' or ',' inside of function argument list")
+			}
+		}
+
+		prog.argSize = argcnt
+	}
+	p.l.next()
+
+	// reserve a frame slot
+	p.stbl.add("#frame")
+
+	// now parsing the function body
+	if err := p.parseBody(prog, true); err != nil {
+		return err
+	}
+
+	// always generate a return nil at the end of the function
+	prog.emit0(p.l, bcLoadNull)
+	prog.emit0(p.l, bcReturn)
+	prog.localSize = p.stbl.localSize() - 1
+	prog.emit1At(p.l, localR, bcReserveLocal, p.stbl.localSize()-1)
+
+	return nil
+}
+
+func (p *parser) parseRule() error {
+	p.stbl = newSymTable()
+	p.stbl.add("#frame")
+	defer func() {
+		p.stbl = nil
+	}()
 
 	var name string
 
@@ -215,11 +305,11 @@ func (p *parser) parseRule() (*program, error) {
 	} else {
 		p.l.next()
 		if p.l.token != tkStr && p.l.token != tkId {
-			return nil, p.err("unexpected token, expect string or identifier for policy name")
+			return p.err("unexpected token, expect string or identifier for policy name")
 		}
 		name = p.l.valueText
 		if !p.l.expect(tkRSqr) {
-			return nil, p.l.toError()
+			return p.l.toError()
 		}
 		p.l.next()
 	}
@@ -227,13 +317,14 @@ func (p *parser) parseRule() (*program, error) {
 	// notes the name must be none empty and also must not start with @, which is
 	// builtin event name
 	if name == "" {
-		return nil, p.err("invalid policy name, cannot be empty string")
+		return p.err("invalid policy name, cannot be empty string")
 	}
 	if name[0] == '@' {
-		return nil, p.err("invalid policy name, cannot start with @ which is builtin name")
+		return p.err("invalid policy name, cannot start with @ which is builtin name")
 	}
 
-	prog := newProgram(name)
+	prog := newProgram(name, progRule)
+	localR := prog.patch(p.l)
 
 	// check whether we have a conditional when, otherwise generate default match
 	// condition
@@ -241,7 +332,7 @@ func (p *parser) parseRule() (*program, error) {
 		p.l.next()
 		err := p.parseExpr(prog)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		prog.emit0(p.l, bcMatch)
 	} else {
@@ -260,25 +351,24 @@ func (p *parser) parseRule() (*program, error) {
 		p.l.next()
 	}
 
-	// now start to parse the body of the policy and start to be awesome
-	if p.l.token != tkLPar && p.l.token != tkLBra {
-		return nil, p.err("expect a '(' or '{' to start an policy")
+	// parse the rule's body
+	if err := p.parseBody(prog, false); err != nil {
+		return err
 	}
 
-	err := p.parseStmt(name, prog)
-	if err != nil {
-		return nil, err
-	}
-
+	// eat the last optional semicolon
 	if p.l.token == tkSemicolon {
 		p.l.next()
 	}
 
-	// add a halt regardlessly
+	// always generate a halt at the end of the rule
 	prog.emit0(p.l, bcHalt)
-	prog.localSize = p.stbl.localSize()
+	prog.localSize = p.stbl.localSize() - 1
+	prog.emit1At(p.l, localR, bcReserveLocal, p.stbl.localSize()-1)
+	p.policy.p = append(p.policy.p, prog)
+
 	p.stbl = nil
-	return prog, nil
+	return nil
 }
 
 // parse basic statement, ie
@@ -435,8 +525,23 @@ func (p *parser) parseBasicStmt(prog *program) error {
 	return nil
 }
 
-func (p *parser) parseStmt(name string, prog *program) error {
-	usePar := p.l.token == tkLPar
+func (p *parser) parseBody(prog *program, isfunc bool) error {
+	usePar := false
+
+	switch p.l.token {
+	case tkLPar:
+		if isfunc {
+		}
+		usePar = true
+		break
+
+	case tkLBra:
+		break
+
+	default:
+		return p.err("expect a '(' or '{' to start function/rule body")
+	}
+
 	ntk := p.l.next()
 
 	if (usePar && ntk == tkRPar) || (!usePar && ntk == tkRBra) {
@@ -477,6 +582,17 @@ func (p *parser) parseStmt(name string, prog *program) error {
 				// just a hacky way to parse it since we just want to reuse the if
 				// expression syntax
 				hasSep = true
+				break
+
+			case tkReturn:
+				if !isfunc {
+					return p.err("return is only allowed inside of function body")
+				}
+				p.l.next()
+				if err := p.parseExpr(prog); err != nil {
+					return err
+				}
+				prog.emit0(p.l, bcReturn)
 				break
 
 			default:
@@ -1016,13 +1132,40 @@ func (p *parser) parseICall(prog *program, index int) error {
 	return nil
 }
 
-func (p *parser) parseNCall(prog *program, name string) error {
+func (p *parser) parseCallish(prog *program, name string) error {
 	intrinsicIdx := indexIntrinsic(name)
 	if intrinsicIdx != -1 {
+		// intrinsic call
 		return p.parseICall(prog, intrinsicIdx)
 	} else {
-		return p.parseCall(prog, name, bcCall)
+		scallIdx := p.policy.getFunctionIndex(name)
+		if scallIdx != -1 {
+			// script function call
+			return p.parseSCall(prog, scallIdx)
+		} else {
+			// dynamic call
+			return p.parseCall(prog, name, bcCall)
+		}
 	}
+}
+
+// Scripting call frame is as following
+// [argN]            <-- tos
+// [argN-1]
+// [arg1]
+// [functionIndex]
+func (p *parser) parseSCall(prog *program, index int) error {
+	{
+		idx := prog.addInt(int64(index))
+		prog.emit1(p.l, bcLoadInt, idx)
+	}
+
+	pcnt, err := p.parseCallArgs(prog)
+	if err != nil {
+		return err
+	}
+	prog.emit1(p.l, bcSCall, pcnt)
+	return nil
 }
 
 func (p *parser) parseMCall(prog *program, name string) error {
@@ -1098,7 +1241,7 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 		// identifier leading types
 		switch p.l.token {
 		case tkLPar:
-			if err := p.parseNCall(prog, name); err != nil {
+			if err := p.parseCallish(prog, name); err != nil {
 				return err
 			}
 			break
@@ -1113,7 +1256,7 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 			if !p.l.expect(tkLPar) {
 				return p.l.toError()
 			}
-			if err := p.parseNCall(prog, modFuncName(modName, funcName)); err != nil {
+			if err := p.parseCallish(prog, modFuncName(modName, funcName)); err != nil {
 				return err
 			}
 			break
