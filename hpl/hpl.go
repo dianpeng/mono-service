@@ -7,8 +7,8 @@ import (
 
 	// router
 	"github.com/dianpeng/mono-service/alog"
+	"github.com/dianpeng/mono-service/hrouter"
 	"github.com/dianpeng/mono-service/pl"
-	hrouter "github.com/julienschmidt/httprouter"
 
 	// library usage
 	"strings"

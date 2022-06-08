@@ -8,9 +8,10 @@ vhost:
     service:
       - name: !eval "'body' + '_sign'"
         tag: !eval "str::to_upper('a very simple service')"
-        router: "/impl/body-sign/:op/:method"
-        method:
-          - "POST"
+        router: 
+          path: "/impl/body-sign/{op}/{method}"
+          method:
+              - "POST"
         max_session_size: 500
         policy: |
           // sign policy, used for handling signing result
@@ -54,17 +55,19 @@ vhost:
 
       - name: "null"
         tag: !env "PATH"
-        router: "/impl/concate"
-        method:
-          - "GET"
+        router: 
+          path: "/impl/concate"
+          method:
+            - "GET"
         max_session_size: 100
         policy: !inc_string "./code.pl"
 
       - name: "null"
         tag: "basic proxy"
-        router: "/impl/null"
-        method:
-          - "GET"
+        router: 
+          path: "/impl/null"
+          method:
+            - "GET"
         config:
           a: "bb"
           c: "dd"

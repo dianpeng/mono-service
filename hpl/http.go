@@ -10,8 +10,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/dianpeng/mono-service/hrouter"
 	"github.com/dianpeng/mono-service/pl"
-	hrouter "github.com/julienschmidt/httprouter"
 )
 
 // * --------------------------------------------------------------------------
@@ -584,11 +584,7 @@ func (h *HplHttpRouterParams) Dot(x interface{}, name string) (pl.Val, error) {
 }
 
 func (h *HplHttpRouterParams) ToString(_ interface{}) (string, error) {
-	var b bytes.Buffer
-	for idx, kv := range h.params {
-		b.WriteString(fmt.Sprintf("%d. %s => %s\n", idx, kv.Key, kv.Value))
-	}
-	return b.String(), nil
+	return h.params.String(), nil
 }
 
 func (h *HplHttpRouterParams) ToJSON(_ interface{}) (string, error) {

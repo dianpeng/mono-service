@@ -12,12 +12,13 @@ import (
 	"github.com/dianpeng/mono-service/g"
 	"github.com/dianpeng/mono-service/hclient"
 	"github.com/dianpeng/mono-service/hpl"
+	"github.com/dianpeng/mono-service/hrouter"
 	_ "github.com/dianpeng/mono-service/impl"
 	"github.com/dianpeng/mono-service/phase"
 	"github.com/dianpeng/mono-service/pl"
 	"github.com/dianpeng/mono-service/service"
 	"github.com/dianpeng/mono-service/util"
-	hrouter "github.com/julienschmidt/httprouter"
+	"github.com/gorilla/mux"
 )
 
 type SessionHandler interface {
@@ -59,7 +60,7 @@ type sessionHandler struct {
 type VHost struct {
 	Name          string
 	ActiveService []*vhostService
-	Router        *hrouter.Router
+	Router        *mux.Router
 	HttpServer    *http.Server
 	LogFormat     *alog.SessionLogFormat
 	ErrorStatus   int
@@ -246,7 +247,7 @@ func (s *sessionHandler) finish() {
 }
 
 // builtin handlers
-func (h *VHost) httpListService(w http.ResponseWriter, _ *http.Request, _ hrouter.Params) {
+func (h *VHost) httpListService(w http.ResponseWriter, _ *http.Request) {
 	var o []interface{}
 
 	for _, svc := range h.ActiveService {
@@ -268,7 +269,7 @@ func (h *VHost) httpListService(w http.ResponseWriter, _ *http.Request, _ hroute
 	w.Write(blob)
 }
 
-func (h *VHost) httpListImpl(w http.ResponseWriter, _ *http.Request, _ hrouter.Params) {
+func (h *VHost) httpListImpl(w http.ResponseWriter, _ *http.Request) {
 	var o []interface{}
 	service.ForeachServiceFactory(
 		func(svc service.ServiceFactory) {
@@ -285,7 +286,7 @@ func (h *VHost) httpListImpl(w http.ResponseWriter, _ *http.Request, _ hrouter.P
 	w.Write(blob)
 }
 
-func (h *VHost) httpInfo(w http.ResponseWriter, _ *http.Request, _ hrouter.Params) {
+func (h *VHost) httpInfo(w http.ResponseWriter, _ *http.Request) {
 	o := make(map[string]interface{})
 	o["name"] = h.Name
 	o["serviceNumber"] = len(h.ActiveService)
@@ -302,10 +303,10 @@ func (h *VHost) httpInfo(w http.ResponseWriter, _ *http.Request, _ hrouter.Param
 	w.Write(blob)
 }
 
-func (h *VHost) builtinHandler(r *hrouter.Router) {
-	r.GET(fmt.Sprintf("/%s/info", h.Name), h.httpInfo)
-	r.GET(fmt.Sprintf("/%s/service/list", h.Name), h.httpListService)
-	r.GET(fmt.Sprintf("/%s/impl/list", h.Name), h.httpListImpl)
+func (h *VHost) builtinHandler(r *mux.Router) {
+	r.HandleFunc(fmt.Sprintf("/vhost/%s/info", h.Name), h.httpInfo).Methods("GET")
+	r.HandleFunc(fmt.Sprintf("/vhost/%s/service/list", h.Name), h.httpListService).Methods("GET")
+	r.HandleFunc(fmt.Sprintf("/vhost/%s/impl/list", h.Name), h.httpListImpl).Methods("GET")
 }
 
 // interface alog.HttpResponseSummary
@@ -353,10 +354,10 @@ func (v *VHost) doPhaseError(
 }
 
 // Session interface defined 3 stages for each module/services
-func (v *VHost) doPhase(asvc *vhostService,
-	w http.ResponseWriter, req *http.Request, param hrouter.Params) {
-
+func (v *VHost) doPhase(asvc *vhostService, w http.ResponseWriter, req *http.Request) {
+	param := hrouter.NewParams(req)
 	handler, err := asvc.getSessionHandler()
+
 	if err != nil {
 		v.doPhaseError(asvc, w, req, param, err, phase.PhaseCreateSessionHandler)
 		return
@@ -478,9 +479,43 @@ func (h *VHost) Run() {
 	h.HttpServer.ListenAndServe()
 }
 
+// router creation and preparation
+func (h *VHost) newRouter(asvc *vhostService, rc *cfg.Router, r *mux.Router) (the_error error) {
+	defer func() {
+		if err := recover(); err != nil {
+			the_error = fmt.Errorf("router creation failed: %s", err)
+		}
+	}()
+
+	if rc.Path == "" {
+		return fmt.Errorf("router.path is not properly configured")
+	}
+
+	rr := r.HandleFunc(rc.Path, func(w http.ResponseWriter, req *http.Request) {
+		h.doPhase(asvc, w, req)
+	})
+
+	// setup method
+	if len(rc.Method) != 0 {
+		rr.Methods(rc.Method...)
+	}
+
+	// setup host
+	if rc.Host != "" {
+		rr.Host(rc.Host)
+	}
+
+	// setup query
+	for _, kv := range rc.Query {
+		rr.Queries(kv.Key, kv.Value)
+	}
+
+	return nil
+}
+
 func newVHost(config *cfg.VHost) (*VHost, error) {
 	vhost := &VHost{}
-	router := hrouter.New()
+	router := mux.NewRouter()
 
 	// misc
 	vhost.ErrorStatus = cfg.NotZeroInt(
@@ -539,39 +574,8 @@ func newVHost(config *cfg.VHost) (*VHost, error) {
 		serviceList = append(serviceList, asvc)
 
 		// router setup
-		r := svc.Router
-		methodList := svc.Method
-
-		for _, method := range methodList {
-			switch method {
-			case "GET", "POST", "HEAD", "OPTIONS", "PUT", "DELETE":
-				_, _, has := router.Lookup(method, r)
-				if has {
-					return nil, fmt.Errorf("service(%s), router(%s, %s) already existed",
-						service.Name(), method, r)
-				}
-				router.Handle(method, r, func(w http.ResponseWriter, r *http.Request, p hrouter.Params) {
-					vhost.doPhase(asvc, w, r, p)
-				})
-				break
-
-			case "*":
-				for _, m := range []string{"GET", "POST", "HEAD", "OPTIONS", "PUT", "DELETE"} {
-					_, _, has := router.Lookup(m, r)
-					if has {
-						return nil, fmt.Errorf("service(%s) router(%s, %s) already existed",
-							service.Name(), method, r)
-					}
-					router.Handle(method, r, func(w http.ResponseWriter, r *http.Request, p hrouter.Params) {
-						vhost.doPhase(asvc, w, r, p)
-					})
-				}
-				break
-
-			default:
-				return nil, fmt.Errorf("service(%s) unknown HTTP method %s",
-					service.Name(), method)
-			}
+		if err := vhost.newRouter(asvc, svc.Router, router); err != nil {
+			return nil, err
 		}
 	}
 

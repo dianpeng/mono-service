@@ -4,10 +4,23 @@ import (
 	"os"
 )
 
+// Router configuration.
+type KV struct {
+	Key   string `yaml:"key"`
+	Value string `yaml:"value"`
+}
+
+type Router struct {
+	Path   string   `yaml:"path"`
+	Host   string   `yaml:"host"`
+	Method []string `yaml:"method"`
+	Query  []KV     `yaml:"query"`
+}
+
 type Service struct {
 	Name                string   `yaml:"name"`
 	Tag                 string   `yaml:"tag"`
-	Router              string   `yaml:"router"`
+	Router              *Router  `yaml:"router"`
 	Method              []string `yaml:"method"`
 	Policy              string   `yaml:"policy"`
 	MaxSessionCacheSize int      `yaml:"max_session_cache_size"`
