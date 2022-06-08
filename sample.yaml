@@ -14,6 +14,12 @@ vhost:
               - "POST"
         max_session_size: 500
         policy: |
+          error => {
+            dprint(phase, error);
+            status => 503;
+            body => "whatever shit: {{phase}} => {{error}}\n";
+          }
+
           // sign policy, used for handling signing result
           sign => {
             status => 200;
@@ -50,7 +56,7 @@ vhost:
           };
 
           log => {
-            echo(logFormat);
+            dprint(logFormat);
           }
 
       - name: "null"

@@ -10,15 +10,15 @@ import (
 // all the builtin basic functions
 func initModBasic() {
 	addF(
-		"echo",
+		"dprint",
 		"",
 		"%a*",
 		func(info *intrinsicinfo, _ *Evaluator, _ string, args []Val) (Val, error) {
 			buf := new(bytes.Buffer)
 			for _, x := range args {
 				native := x.ToNative()
-				buf.WriteString(fmt.Sprintf("%T=>%+v", native, native))
-				buf.WriteRune(';')
+				buf.WriteString(fmt.Sprintf("%T[%+v]", native, native))
+				buf.WriteString("; ")
 			}
 			log.Println(buf.String())
 			return NewValNull(), nil

@@ -42,11 +42,21 @@ func (s *symTable) add(x string) int {
 	return len(s.tbl) - 1
 }
 
+// simulate linker to resolve call types after all the code has been parsed
+type callentry struct {
+	entryPos int
+	callPos  int
+	prog     *program
+	arg      int
+	symbol   string
+}
+
 type parser struct {
-	l       *lexer
-	policy  *Policy
-	stbl    *symTable
-	sessVar []string
+	l         *lexer
+	policy    *Policy
+	stbl      *symTable
+	sessVar   []string
+	callPatch []callentry
 }
 
 func newParser(input string) *parser {
@@ -117,6 +127,8 @@ func (p *parser) parseExpression() (*Policy, error) {
 
 	p.policy.p = append(p.policy.p, prog)
 
+	p.patchAllCall()
+
 	return p.policy, nil
 }
 
@@ -161,11 +173,13 @@ LOOP:
 		}
 	}
 
+	p.patchAllCall()
+
 	return p.policy, nil
 }
 
-func (p *parser) parseSessionSet(prog *program) error {
-	must(p.l.token == tkColon, "must be : to lead to session variable")
+func (p *parser) parseSessionStore(prog *program) error {
+	must(p.l.token == tkSId, "must be session id")
 	gname := p.l.valueText
 	idx := p.findSessionIdx(gname)
 	if idx == -1 {
@@ -183,7 +197,7 @@ func (p *parser) parseSessionSet(prog *program) error {
 }
 
 func (p *parser) parseSessionLoad(prog *program) error {
-	must(p.l.token == tkColon, "must be : to lead to session variable")
+	must(p.l.token == tkSId, "must be sesion id")
 	gname := p.l.valueText
 	idx := p.findSessionIdx(gname)
 	if idx == -1 {
@@ -462,26 +476,13 @@ func (p *parser) parseBasicStmt(prog *program) error {
 			}
 			break
 
-		case tkColon:
-			if !p.l.expectCurrent(tkId) {
-				return p.l.toError()
-			}
-			name := p.l.valueText
-			p.l.next()
-
-			if err := p.parseExpr(prog); err != nil {
+		case tkSId:
+			if err := p.parseSessionStore(prog); err != nil {
 				return err
 			}
-
-			// session symbol table
-			sessVar := p.findSessionIdx(name)
-			if sessVar != -1 {
-				return p.err(fmt.Sprintf("session variable %s is not existed", name))
-			}
-			prog.emit1(p.l, bcStoreSession, sessVar)
 			break
 
-		case tkScope:
+		case tkDId:
 			if !p.l.expectCurrent(tkId) {
 				return p.l.toError()
 			}
@@ -1044,7 +1045,7 @@ func (p *parser) parsePrimary(prog *program, l lexeme) error {
 		}
 		break
 
-	case tkDollar, tkId, tkScope, tkColon:
+	case tkDollar, tkId, tkSId, tkDId:
 		if err := p.parsePExpr(prog, tk, l.sval); err != nil {
 			return err
 		}
@@ -1156,23 +1157,6 @@ func (p *parser) parseICall(prog *program, index int) error {
 	return nil
 }
 
-func (p *parser) parseCallish(prog *program, name string) error {
-	intrinsicIdx := indexIntrinsic(name)
-	if intrinsicIdx != -1 {
-		// intrinsic call
-		return p.parseICall(prog, intrinsicIdx)
-	} else {
-		scallIdx := p.policy.getFunctionIndex(name)
-		if scallIdx != -1 {
-			// script function call
-			return p.parseSCall(prog, scallIdx)
-		} else {
-			// dynamic call
-			return p.parseCall(prog, name, bcCall)
-		}
-	}
-}
-
 // Scripting call frame is as following
 // [argN]            <-- tos
 // [argN-1]
@@ -1194,6 +1178,46 @@ func (p *parser) parseSCall(prog *program, index int) error {
 
 func (p *parser) parseMCall(prog *program, name string) error {
 	return p.parseCall(prog, name, bcMCall)
+}
+
+func (p *parser) parseFreeCall(prog *program, name string) error {
+	entryIndex := prog.patch(p.l)
+
+	pcnt, err := p.parseCallArgs(prog)
+	if err != nil {
+		return err
+	}
+
+	p.callPatch = append(p.callPatch, callentry{
+		entryPos: entryIndex,
+		callPos:  prog.patch(p.l),
+		prog:     prog,
+		arg:      pcnt,
+		symbol:   name,
+	})
+	return nil
+}
+
+func (p *parser) patchAllCall() {
+	for _, e := range p.callPatch {
+		intrinsicIdx := indexIntrinsic(e.symbol)
+		if intrinsicIdx != -1 {
+			idx := e.prog.addInt(int64(intrinsicIdx))
+			e.prog.emit1At(p.l, e.entryPos, bcLoadInt, idx)
+			e.prog.emit1At(p.l, e.callPos, bcICall, e.arg)
+		} else {
+			scallIdx := p.policy.getFunctionIndex(e.symbol)
+			if scallIdx != -1 {
+				idx := e.prog.addInt(int64(scallIdx))
+				e.prog.emit1At(p.l, e.entryPos, bcLoadInt, idx)
+				e.prog.emit1At(p.l, e.callPos, bcSCall, e.arg)
+			} else {
+				idx := e.prog.addStr(e.symbol)
+				e.prog.emit1At(p.l, e.entryPos, bcLoadStr, idx)
+				e.prog.emit1At(p.l, e.callPos, bcCall, e.arg)
+			}
+		}
+	}
 }
 
 const (
@@ -1265,7 +1289,7 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 		// identifier leading types
 		switch p.l.token {
 		case tkLPar:
-			if err := p.parseCallish(prog, name); err != nil {
+			if err := p.parseFreeCall(prog, name); err != nil {
 				return err
 			}
 			break
@@ -1280,7 +1304,7 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 			if !p.l.expect(tkLPar) {
 				return p.l.toError()
 			}
-			if err := p.parseCallish(prog, modFuncName(modName, funcName)); err != nil {
+			if err := p.parseFreeCall(prog, modFuncName(modName, funcName)); err != nil {
 				return err
 			}
 			break
@@ -1321,13 +1345,8 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 		prog.emit0(p.l, bcLoadDollar)
 		break
 
-	case tkColon:
-		if !p.l.expectCurrent(tkId) {
-			return p.l.toError()
-		}
-		gname := p.l.valueText
-
-		p.l.next()
+	case tkSId:
+		gname := name
 
 		// session symbol table
 		idx := p.findSessionIdx(gname)
@@ -1338,12 +1357,7 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 		break
 
 	default:
-		if !p.l.expectCurrent(tkId) {
-			return p.l.toError()
-		}
-		gname := p.l.valueText
-
-		p.l.next()
+		gname := name
 
 		idx := prog.addStr(gname)
 		prog.emit1(p.l, bcLoadVar, idx)
@@ -1585,6 +1599,9 @@ func (p *parser) parseStrInterpolationExpr(strV string, offset int, prog *progra
 	if pp.l.token != tkDRBra {
 		return 0, p.err("invalid string interpolation part, expect }}")
 	}
+
+	p.callPatch = append(p.callPatch, pp.callPatch...)
+
 	return pp.l.cursor + offset, nil
 }
 

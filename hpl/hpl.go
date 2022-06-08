@@ -39,6 +39,8 @@ type SessionWrapper interface {
 	OnAction(*pl.Evaluator, string, pl.Val) error
 
 	// other utilities
+	GetPhaseName() string
+	GetErrorDescription() string
 
 	// special function used for exposing other utilities
 	GetHttpClient(url string) (HttpClient, error)
@@ -570,6 +572,60 @@ func (h *Hpl) OnLog(selector string, log *alog.SessionLog, session SessionWrappe
 	defer func() {
 		h.isRunning = false
 		h.respWriter = nil
+		h.session = nil
+	}()
+
+	return h.Eval.Eval(selector, h.Policy)
+}
+
+// -----------------------------------------------------------------------------
+// error phase
+func (h *Hpl) errorLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
+	switch n {
+	case "phase":
+		return pl.NewValStr(h.session.GetPhaseName()), nil
+	case "error":
+		return pl.NewValStr(h.session.GetErrorDescription()), nil
+	default:
+		break
+	}
+	return h.loadVarBasic(x, n)
+}
+
+func (p *Hpl) errorStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
+	return p.session.OnStoreVar(x, n, v)
+}
+
+func (h *Hpl) errorEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
+	return h.evalCallBasic(x, n, args)
+}
+
+func (h *Hpl) errorAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
+	return h.session.OnAction(x, actionName, arg)
+}
+
+func (h *Hpl) OnError(selector string, session SessionWrapper) error {
+	if h.Policy == nil {
+		return fmt.Errorf("the Hpl engine does not have any policy binded")
+	}
+	if h.isRunning {
+		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
+	}
+	if h.respWriter != nil {
+		panic("concurrent access")
+	}
+
+	h.isRunning = true
+
+	h.session = session
+
+	h.Eval.LoadVarFn = h.errorLoadVar
+	h.Eval.StoreVarFn = h.errorStoreVar
+	h.Eval.CallFn = h.errorEvalCall
+	h.Eval.ActionFn = h.errorAction
+
+	defer func() {
+		h.isRunning = false
 		h.session = nil
 	}()
 

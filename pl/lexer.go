@@ -12,7 +12,9 @@ import (
 
 const (
 	tkId = iota
-	tkGId
+	tkSId
+	tkDId
+
 	tkRId
 	tkInt
 	tkReal
@@ -36,7 +38,6 @@ const (
 	tkScope
 	tkSemicolon
 	tkQuest
-	tkSharp
 
 	// unary
 	tkNot
@@ -115,8 +116,10 @@ func getTokenName(tk int) string {
 	switch tk {
 	case tkId:
 		return "id"
-	case tkGId:
-		return "gid"
+	case tkSId:
+		return "session_id"
+	case tkDId:
+		return "dynamic_id"
 	case tkRId:
 		return "rid"
 	case tkInt:
@@ -159,8 +162,6 @@ func getTokenName(tk int) string {
 		return ";"
 	case tkQuest:
 		return "?"
-	case tkSharp:
-		return "#"
 
 	case tkAdd:
 		return "+"
@@ -512,15 +513,29 @@ func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 	}
 
 	idType := tkId
+	hasPrefix := false
 
-	// @ prefixed token
+	// prefixed token
 	if c == '@' {
+		if t.cursor+1 == len(t.input) {
+			return t.err("prefix @ is not finished")
+		}
 		nc := t.input[t.cursor+1]
 		if nc == '"' || nc == '\'' {
 			return t.scanRId()
 		}
+
 		t.cursor++
-		idType = tkGId
+		idType = tkSId
+		hasPrefix = true
+	} else if c == '#' {
+		if t.cursor+1 == len(t.input) {
+			return t.err("prefix # is not finished")
+		}
+
+		t.cursor++
+		idType = tkDId
+		hasPrefix = true
 	} else if !unicode.IsLetter(c) && c != '_' {
 		return t.err("unrecognized token here, expect keyword or identifier")
 	}
@@ -538,63 +553,65 @@ func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 
 	idOrKeyword := buffer.String()
 
-	switch idOrKeyword {
-	case "true":
-		t.token = tkTrue
-		return tkTrue
-	case "false":
-		t.token = tkFalse
-		return tkFalse
-	case "null":
-		t.token = tkNull
-		return tkNull
-	case "let":
-		t.token = tkLet
-		return tkLet
-	case "session":
-		t.token = tkSession
-		return tkSession
-	case "when":
-		t.token = tkWhen
-		return tkWhen
-	case "import":
-		t.token = tkImport
-		return tkImport
-	case "try":
-		t.token = tkTry
-		return tkTry
-	case "if":
-		t.token = tkIf
-		return tkIf
-	case "elif":
-		t.token = tkElif
-		return tkElif
-	case "else":
-		t.token = tkElse
-		return tkElse
-	case "continue":
-		t.token = tkContinue
-		return tkContinue
-	case "break":
-		t.token = tkBreak
-		return tkBreak
-	case "next":
-		t.token = tkNext
-		return tkNext
-	case "fn":
-		t.token = tkFunction
-		return tkFunction
-	case "return":
-		t.token = tkReturn
-		return tkReturn
+	if !hasPrefix {
+		switch idOrKeyword {
+		case "true":
+			t.token = tkTrue
+			return tkTrue
+		case "false":
+			t.token = tkFalse
+			return tkFalse
+		case "null":
+			t.token = tkNull
+			return tkNull
+		case "let":
+			t.token = tkLet
+			return tkLet
+		case "session":
+			t.token = tkSession
+			return tkSession
+		case "when":
+			t.token = tkWhen
+			return tkWhen
+		case "import":
+			t.token = tkImport
+			return tkImport
+		case "try":
+			t.token = tkTry
+			return tkTry
+		case "if":
+			t.token = tkIf
+			return tkIf
+		case "elif":
+			t.token = tkElif
+			return tkElif
+		case "else":
+			t.token = tkElse
+			return tkElse
+		case "continue":
+			t.token = tkContinue
+			return tkContinue
+		case "break":
+			t.token = tkBreak
+			return tkBreak
+		case "next":
+			t.token = tkNext
+			return tkNext
+		case "fn":
+			t.token = tkFunction
+			return tkFunction
+		case "return":
+			t.token = tkReturn
+			return tkReturn
 
-		// intrinsic
-	case "template":
-		t.token = tkTemplate
-		return tkTemplate
+			// intrinsic
+		case "template":
+			t.token = tkTemplate
+			return tkTemplate
 
-	default:
-		break
+		default:
+			break
+		}
 	}
 
 	t.valueText = idOrKeyword
@@ -797,8 +814,6 @@ func (t *lexer) next() int {
 			return t.yield(tkDollar, 1)
 		case '?':
 			return t.yield(tkQuest, 1)
-		case '#':
-			return t.yield(tkSharp, 1)
 		case ';':
 			return t.yield(tkSemicolon, 1)
 		case ':':
