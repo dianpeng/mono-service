@@ -6,8 +6,8 @@ vhost:
     max_header_size: 100000
 
     service:
-      - name: "body_sign"
-        tag: "a simple body_sign services"
+      - name: !eval "'body' + '_sign'"
+        tag: !eval "str::to_upper('a very simple service')"
         router: "/impl/body-sign/:op/:method"
         method:
           - "POST"

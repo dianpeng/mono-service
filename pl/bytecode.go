@@ -142,6 +142,7 @@ const (
 	progRule = iota
 	progFunc
 	progSession
+	progExpression
 )
 
 type program struct {

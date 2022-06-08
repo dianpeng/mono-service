@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"github.com/dianpeng/mono-service/pl"
 	"gopkg.in/yaml.v3"
 	"os"
 )
@@ -102,8 +103,46 @@ func resolveEnv(node *yaml.Node) (*yaml.Node, error) {
 	value := os.Getenv(node.Value)
 	return &yaml.Node{
 		Kind:        yaml.ScalarNode,
-		Tag:         "!inc_string",
+		Tag:         "!env",
 		Value:       value,
+		Anchor:      node.Anchor,
+		Alias:       node.Alias,
+		Content:     node.Content,
+		HeadComment: node.HeadComment,
+		LineComment: node.LineComment,
+		FootComment: node.FootComment,
+		Line:        node.Line,
+		Column:      node.Column,
+	}, nil
+}
+
+func resolveEval(node *yaml.Node) (*yaml.Node, error) {
+	if node.Kind != yaml.ScalarNode {
+		return nil, fmt.Errorf("!eval on a non-scalar node")
+	}
+	v := node.Value
+
+	// now compile and run the
+	value, err := pl.EvalExpression(
+		v,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	str, err := value.ToString()
+	if err != nil {
+		return nil, err
+	}
+
+	return &yaml.Node{
+		Kind:        yaml.ScalarNode,
+		Tag:         "!eval",
+		Value:       str,
 		Anchor:      node.Anchor,
 		Alias:       node.Alias,
 		Content:     node.Content,
@@ -119,6 +158,7 @@ func init() {
 	addResolver("!inc", resolveInclude)
 	addResolver("!inc_string", resolveIncludeString)
 	addResolver("!env", resolveEnv)
+	addResolver("!eval", resolveEval)
 }
 
 func loadYaml(data string, output interface{}) error {

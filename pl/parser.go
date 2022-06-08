@@ -96,6 +96,30 @@ func (p *parser) err(xx string) error {
 	}
 }
 
+func (p *parser) parseExpression() (*Policy, error) {
+	p.stbl = newSymTable()
+	defer func() {
+		p.stbl = nil
+	}()
+
+	p.l.next()
+
+	prog := newProgram("$expression", progExpression)
+
+	// load a null on top of the stack in case the expression does nothing
+	prog.emit0(p.l, bcLoadNull)
+
+	// now parsing the expression
+	if err := p.parseExpr(prog); err != nil {
+		return nil, err
+	}
+	prog.emit0(p.l, bcHalt)
+
+	p.policy.p = append(p.policy.p, prog)
+
+	return p.policy, nil
+}
+
 func (p *parser) parse() (*Policy, error) {
 	p.l.next()
 

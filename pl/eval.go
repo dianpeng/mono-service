@@ -426,7 +426,7 @@ func (e *Evaluator) doNegate(v Val) (Val, error) {
 
 // Generate a human readable backtrace for reporting errors
 func (e *Evaluator) backtrace(curframe *program, max int) string {
-	sep := ""
+	sep := "....................."
 	var b []string
 	idx := 0
 
@@ -511,7 +511,6 @@ VM:
 				if e.ActionFn == nil {
 					return e.doErrf(prog, pc, "action %s is not allowed", actName)
 				}
-
 				if err := e.ActionFn(e, actName, val); err != nil {
 					return err
 				}
@@ -956,4 +955,19 @@ func (e *Evaluator) EvalSession(p *Policy) error {
 
 func (e *Evaluator) Eval(event string, p *Policy) error {
 	return e.doEval(event, p.p, p)
+}
+
+// Used by the config module for !eval directive. Notes the policy should just
+// contain one program inside of its .p field
+func (e *Evaluator) EvalExpr(p *Policy) (Val, error) {
+	if len(p.p) == 0 {
+		return NewValNull(), nil
+	}
+	if len(p.p) != 1 {
+		return NewValNull(), fmt.Errorf("not an expression policy")
+	}
+	if err := e.doEval("$expression", p.p, p); err != nil {
+		return NewValNull(), err
+	}
+	return e.top0(), nil
 }

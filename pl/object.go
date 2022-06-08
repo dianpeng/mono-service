@@ -465,7 +465,7 @@ func (v *Val) ToString() (string, error) {
 			return "false", nil
 		}
 	case ValNull:
-		return "", fmt.Errorf("cannot convert Null to string")
+		return "null", nil
 	case ValStr:
 		return v.String(), nil
 
@@ -476,9 +476,12 @@ func (v *Val) ToString() (string, error) {
 		return "", fmt.Errorf("cannot convert List/Map/Pair to string")
 
 	default:
-		return v.Usr().ToStringFn(v.Usr().Context)
+		if v.Usr().ToStringFn != nil {
+			return v.Usr().ToStringFn(v.Usr().Context)
+		} else {
+			return "", fmt.Errorf("cannot convert usr type %s to string", v.Id())
+		}
 	}
-	return "", nil
 }
 
 func (v *Val) Index(idx Val) (Val, error) {

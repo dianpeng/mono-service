@@ -78,3 +78,12 @@ func CompilePolicy(policy string) (*Policy, error) {
 
 	return po, nil
 }
+
+func CompilePolicyAsExpression(expr string) (*Policy, error) {
+	p := newParser(expr)
+	po, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+	return po, nil
+}

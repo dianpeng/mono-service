@@ -25,3 +25,26 @@ func unreachable(msg string) { panic(fmt.Sprintf("unreachable: %s", msg)) }
 func modFuncName(m string, f string) string {
 	return fmt.Sprintf("%s::%s", m, f)
 }
+
+// a all in one function for simplicity
+func EvalExpression(
+	expression string,
+	loadVarFn EvalLoadVar,
+	storeVarFn EvalStoreVar,
+	callFn EvalCall,
+	actionFn EvalAction,
+) (Val, error) {
+	p, err := CompilePolicyAsExpression(expression)
+	if err != nil {
+		return NewValNull(), err
+	}
+
+	e := NewEvaluator(
+		loadVarFn,
+		storeVarFn,
+		callFn,
+		actionFn,
+	)
+
+	return e.EvalExpr(p)
+}
