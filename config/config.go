@@ -1,7 +1,6 @@
 package config
 
 import (
-	"gopkg.in/yaml.v3"
 	"os"
 )
 
@@ -155,7 +154,7 @@ func (s *Service) GetConfigBoolDefault(name string, def bool) bool {
 // syntax. Simply marshal the text into a structure
 func ParseConfig(data string) (*Config, error) {
 	r := &Config{}
-	err := yaml.Unmarshal([]byte(data), &r)
+	err := loadYaml(data, &r)
 	return r, err
 }
 

@@ -252,6 +252,7 @@ func (h *VHost) httpListService(w http.ResponseWriter, _ *http.Request, _ hroute
 	for _, svc := range h.ActiveService {
 		o = append(o, map[string]interface{}{
 			"name":           svc.config.Name,
+			"tag":            svc.config.Tag,
 			"idl":            util.JSONSplitLine(svc.svc.IDL()),
 			"policy":         util.JSONSplitLine(svc.config.Policy),
 			"policyDump":     util.JSONSplitLine(svc.policy.Dump()),

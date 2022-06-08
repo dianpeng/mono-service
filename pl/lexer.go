@@ -219,7 +219,7 @@ func getTokenName(tk int) string {
 	case tkNext:
 		return "next"
 	case tkFunction:
-		return "function"
+		return "fn"
 	case tkReturn:
 		return "return"
 
@@ -581,7 +581,7 @@ func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 	case "next":
 		t.token = tkNext
 		return tkNext
-	case "function":
+	case "fn":
 		t.token = tkFunction
 		return tkFunction
 	case "return":

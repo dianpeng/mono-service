@@ -1496,7 +1496,7 @@ func TestSCall(t *testing.T) {
 	assert := assert.New(t)
 	assert.True(testString(
 		`
-function hello_world(x, y) {
+fn hello_world(x, y) {
   let xx = x + y;
   return xx;
 }
@@ -1508,7 +1508,7 @@ test{
 
 	assert.True(testInt(
 		`
-function fib(n) {
+fn fib(n) {
   return if n == 0 {
     1;
   } elif n <= 2 {
@@ -1525,19 +1525,19 @@ test{
 
 	assert.False(testInt(
 		`
-function err() {
+fn err() {
   return a_unown_variable;
 }
 
-function bar() {
+fn bar() {
   err()
 }
 
-function foo() {
+fn foo() {
   bar()
 }
 
-function xx(n) {
+fn xx(n) {
   foo()
 }
 

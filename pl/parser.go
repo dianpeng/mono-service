@@ -1546,6 +1546,8 @@ func (p *parser) parseStrInterpolationExpr(strV string, offset int, prog *progra
 
 	// share the same local variables
 	pp.stbl = p.stbl
+	pp.sessVar = p.sessVar
+	pp.policy = p.policy
 
 	// notes, we should start the lexer here, otherwise it will not work --------
 	pp.l.next()

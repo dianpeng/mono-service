@@ -53,29 +53,12 @@ vhost:
           }
 
       - name: "null"
-        tag: "url concate"
+        tag: !env "PATH"
         router: "/impl/concate"
         method:
           - "GET"
         max_session_size: 100
-        policy: |
-          session {
-            a = 10;
-            b = 20;
-            c = 200 - 1 + 1;
-          }
-
-          response => {
-            let proxy_url = ::request.header["x-proxy-url"];
-
-            let list_of_url = str::split(proxy_url, ';');
-
-            body => :c.to_string() + "\n" + proxy_url + "<>";
-
-            status => :c;
-
-            echo(:c, proxy_url);
-          }
+        policy: !inc_string "./code.pl"
 
       - name: "null"
         tag: "basic proxy"
