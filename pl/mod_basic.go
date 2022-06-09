@@ -3,7 +3,6 @@ package pl
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"strconv"
 )
 
@@ -20,10 +19,28 @@ func initModBasic() {
 				buf.WriteString(fmt.Sprintf("%T[%+v]", native, native))
 				buf.WriteString("; ")
 			}
-			log.Println(buf.String())
+			fmt.Println(buf.String())
 			return NewValNull(), nil
 		},
 	)
+
+  addF(
+    "print",
+    "",
+    "%a*",
+    func(info *intrinsicinfo, _ *Evaluator, _ string, args []Val) (Val, error) {
+      var buf []string
+      for _, x := range args {
+        str, err := x.ToString()
+        if err != nil {
+          str = fmt.Sprintf("[%s:unknown]", x.Id())
+        }
+        buf.WriteString(str)
+      }
+      fmt.Println(buf.String())
+      return NewValNull(), nil
+    },
+  )
 
 	addF(
 		"to_string",
