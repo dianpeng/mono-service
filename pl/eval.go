@@ -468,6 +468,12 @@ func (e *Evaluator) doErr(p *program, pc int, err error) error {
 }
 
 func (e *Evaluator) doEval(event string, pp []*program, policy *Policy) error {
+	// just clear the stack size if needed before every run, since we need to reuse
+	// this evaluator
+	if cap(e.Stack) > 0 {
+		e.Stack = e.Stack[:0]
+	}
+
 	// Enter into the VM with a native function call marker. This serves as a
 	// frame marker to indicate the end of the script frame which will help us
 	// to terminate the frame walk

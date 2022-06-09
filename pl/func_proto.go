@@ -1017,3 +1017,19 @@ func NewFuncProto(name string, descriptor string) (*FuncProto, error) {
 func NewModFuncProto(mod string, fname string, descriptor string) (*FuncProto, error) {
 	return NewFuncProto(modFuncName(mod, fname), descriptor)
 }
+
+func MustNewFuncProto(name string, d string) *FuncProto {
+	f, err := NewFuncProto(name, d)
+	if err != nil {
+		musterr("MustNewFuncProto", err)
+	}
+	return f
+}
+
+func MustNewModFuncProto(mod string, f string, d string) *FuncProto {
+	pp, err := NewModFuncProto(mod, f, d)
+	if err != nil {
+		musterr("MustNewModFuncProto", err)
+	}
+	return pp
+}

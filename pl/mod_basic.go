@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // all the builtin basic functions
@@ -24,23 +25,23 @@ func initModBasic() {
 		},
 	)
 
-  addF(
-    "print",
-    "",
-    "%a*",
-    func(info *intrinsicinfo, _ *Evaluator, _ string, args []Val) (Val, error) {
-      var buf []string
-      for _, x := range args {
-        str, err := x.ToString()
-        if err != nil {
-          str = fmt.Sprintf("[%s:unknown]", x.Id())
-        }
-        buf.WriteString(str)
-      }
-      fmt.Println(buf.String())
-      return NewValNull(), nil
-    },
-  )
+	addF(
+		"print",
+		"",
+		"%a*",
+		func(info *intrinsicinfo, _ *Evaluator, _ string, args []Val) (Val, error) {
+			var buf []string
+			for _, x := range args {
+				str, err := x.ToString()
+				if err != nil {
+					str = fmt.Sprintf("[%s:unknown]", x.Id())
+				}
+				buf = append(buf, str)
+			}
+			fmt.Println(strings.Join(buf, " "))
+			return NewValNull(), nil
+		},
+	)
 
 	addF(
 		"to_string",
