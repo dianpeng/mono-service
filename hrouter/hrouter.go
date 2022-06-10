@@ -23,6 +23,14 @@ func (p *Params) ByName(id string) string {
 	return p.p[id]
 }
 
+func (p *Params) Set(k, v string) {
+	p.p[k] = v
+}
+
+func (p *Params) Length() int {
+	return len(p.p)
+}
+
 func (p *Params) String() string {
 	b := new(bytes.Buffer)
 	for k, v := range p.p {

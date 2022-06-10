@@ -2,7 +2,7 @@ package hservice
 
 import (
 	"github.com/dianpeng/mono-service/config"
-	_ "github.com/dianpeng/mono-service/impl"
+	_ "github.com/dianpeng/mono-service/module"
 	"sync"
 )
 

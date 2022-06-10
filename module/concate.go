@@ -1,4 +1,4 @@
-package impl
+package module
 
 // Concate services, ie generate a merge/concate of multiple http upstream
 // content and send them as downstream response. This module allows highly

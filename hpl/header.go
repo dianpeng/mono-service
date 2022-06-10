@@ -13,6 +13,10 @@ type Header struct {
 	header http.Header
 }
 
+func ValIsHttpHeader(v pl.Val) bool {
+	return v.Id() == HttpHeaderTypeId
+}
+
 func (h *Header) Has(key string) bool {
 	_, ok := h.header[key]
 	return ok

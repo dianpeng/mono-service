@@ -15,6 +15,10 @@ type ReadableStream struct {
 	closed   bool   // whether closed or not
 }
 
+func ValIsReadableStream(v pl.Val) bool {
+	return v.Id() == ReadableStreamTypeId
+}
+
 type eofReadCloser struct{}
 
 func (e *eofReadCloser) Read(_ []byte) (int, error) {
@@ -271,8 +275,12 @@ func (h *ReadableStream) method(_ interface{}, name string, arg []pl.Val) (pl.Va
 	return pl.NewValNull(), fmt.Errorf("method: .readablestream:%s is unknown", name)
 }
 
-func (h *ReadableStream) info(_ interface{}) string {
+func (h *ReadableStream) Info(_ interface{}) string {
 	return fmt.Sprintf(".readablestream[cache=%t;close=%t]", h.HasCache(), h.IsClose())
+}
+
+func (h *ReadableStream) ToNative(_ interface{}) interface{} {
+	return h.Stream
 }
 
 func NewReadableStreamValFromStream(stream io.ReadCloser) pl.Val {
@@ -287,7 +295,7 @@ func NewReadableStreamValFromStream(stream io.ReadCloser) pl.Val {
 		func(_ interface{}) string {
 			return ".readablestream"
 		},
-		x.info,
+		x.Info,
 		nil,
 	)
 }
@@ -304,7 +312,7 @@ func NewReadableStreamValFromString(data string) pl.Val {
 		func(_ interface{}) string {
 			return ".readablestream"
 		},
-		x.info,
+		x.Info,
 		nil,
 	)
 }
@@ -321,7 +329,7 @@ func NewReadableStreamValFromBuffer(data []byte) pl.Val {
 		func(_ interface{}) string {
 			return ".readablestream"
 		},
-		x.info,
-		nil,
+		x.Info,
+		x.ToNative,
 	)
 }

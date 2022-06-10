@@ -120,7 +120,7 @@ func foreachHeaderKV(arg pl.Val, fn func(key string, val string)) bool {
 		}
 	} else if arg.Id() == "http.header" {
 		// known special user type to us, then just foreach the header
-		hdr := arg.Usr().Context.(*HplHttpHeader)
+		hdr := arg.Usr().Context.(*Header)
 		for k, v := range hdr.header {
 			for _, vv := range v {
 				fn(k, vv)
@@ -284,8 +284,8 @@ func (h *Hpl) OnAccess(selector string, req *http.Request, param hrouter.Params,
 	}
 
 	h.isRunning = true
-	h.request = NewHplHttpRequestVal(req)
-	h.params = NewHplHttpRouterParamsVal(param)
+	h.request = NewRequestVal(req)
+	h.params = NewRouterParamsVal(param)
 	h.session = session
 
 	h.Eval.LoadVarFn = h.accessLoadVar
@@ -331,8 +331,8 @@ func (h *Hpl) OnRequest(selector string, req *http.Request, param hrouter.Params
 	}
 
 	h.isRunning = true
-	h.request = NewHplHttpRequestVal(req)
-	h.params = NewHplHttpRouterParamsVal(param)
+	h.request = NewRequestVal(req)
+	h.params = NewRouterParamsVal(param)
 	h.session = session
 
 	h.Eval.LoadVarFn = h.httpRequestLoadVar
@@ -418,9 +418,9 @@ func (p *Hpl) httpResponseAction(x *pl.Evaluator, actionName string, arg pl.Val)
 		if arg.Type == pl.ValStr {
 			p.respWriter.writeBodyString(arg.String())
 		} else if arg.Id() == "http.body" {
-			body, ok := arg.Usr().Context.(*HplHttpBody)
+			body, ok := arg.Usr().Context.(*Body)
 			must(ok, "invalid body type")
-			p.respWriter.writeBodyStream(body.ToStream())
+			p.respWriter.writeBodyStream(body.Stream().Stream)
 		} else {
 			return fmt.Errorf("invalid body value type")
 		}
@@ -463,9 +463,9 @@ func (h *Hpl) OnResponse(selector string,
 
 	h.isRunning = true
 
-	h.request = NewHplHttpRequestVal(req)
+	h.request = NewRequestVal(req)
 	h.respWriter = newHplResponseWriter(resp)
-	h.params = NewHplHttpRouterParamsVal(param)
+	h.params = NewRouterParamsVal(param)
 	h.session = session
 
 	h.Eval.LoadVarFn = h.httpResponseLoadVar
@@ -559,8 +559,8 @@ func (h *Hpl) OnLog(selector string, log *alog.SessionLog, session SessionWrappe
 
 	h.isRunning = true
 
-	h.request = NewHplHttpRequestVal(log.HttpRequest)
-	h.params = NewHplHttpRouterParamsVal(log.RouterParams)
+	h.request = NewRequestVal(log.HttpRequest)
+	h.params = NewRouterParamsVal(log.RouterParams)
 	h.session = session
 	h.log = log
 

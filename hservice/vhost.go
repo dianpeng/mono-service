@@ -13,7 +13,7 @@ import (
 	"github.com/dianpeng/mono-service/hclient"
 	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/hrouter"
-	_ "github.com/dianpeng/mono-service/impl"
+	_ "github.com/dianpeng/mono-service/module"
 	"github.com/dianpeng/mono-service/phase"
 	"github.com/dianpeng/mono-service/pl"
 	"github.com/dianpeng/mono-service/service"

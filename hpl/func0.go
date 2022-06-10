@@ -12,12 +12,24 @@ import (
 	"strings"
 )
 
+type trivialReadCloser struct {
+	r io.Reader
+}
+
+func (e *trivialReadCloser) Read(b []byte) (int, error) {
+	return e.r.Read(b)
+}
+
+func (e *trivialReadCloser) Close() error {
+	return nil
+}
+
 func fnConcateHttpBody(argument []pl.Val) (pl.Val, error) {
 	var input []io.Reader
 	for idx, a := range argument {
 		if a.Id() == "http.body" {
-			body, _ := a.Usr().Context.(*HplHttpBody)
-			input = append(input, body.ToStream())
+			body, _ := a.Usr().Context.(*Body)
+			input = append(input, body.Stream().Stream)
 		} else {
 			str, err := a.ToString()
 			if err != nil {
@@ -29,7 +41,7 @@ func fnConcateHttpBody(argument []pl.Val) (pl.Val, error) {
 		}
 	}
 
-	return NewHplHttpBodyValFromStream(io.MultiReader(input...)), nil
+	return NewBodyValFromStream(&trivialReadCloser{r: io.MultiReader(input...)}), nil
 }
 
 // general HTTP request interfaces, allowing user to specify following method
@@ -50,10 +62,22 @@ func fnDoHttp(session SessionWrapper, argument []pl.Val) (pl.Val, error) {
 	}
 
 	var body io.Reader
-	if len(argument) == 4 && argument[3].Type == pl.ValStr {
-		body = strings.NewReader(argument[3].String())
-	} else {
-		body = http.NoBody
+	body = http.NoBody
+
+	if len(argument) == 4 {
+		switch argument[3].Type {
+		case pl.ValStr:
+			body = strings.NewReader(argument[3].String())
+			break
+
+		default:
+			if argument[3].Id() == HttpBodyTypeId {
+				b, _ := argument[3].Usr().Context.(*Body)
+				body = b.Stream().Stream
+				break
+			}
+			break
+		}
 	}
 
 	req, err := http.NewRequest(method.String(), url.String(), body)
@@ -83,7 +107,7 @@ func fnDoHttp(session SessionWrapper, argument []pl.Val) (pl.Val, error) {
 	}
 
 	// serialize the response back to the normal object
-	return NewHplHttpResponseVal(resp), nil
+	return NewResponseVal(resp), nil
 }
 
 // header related functions
@@ -98,7 +122,7 @@ func fnHeaderHas(argument []pl.Val) (pl.Val, error) {
 			"argument must be string")
 	}
 
-	hdr, ok := argument[0].Usr().Context.(*HplHttpHeader)
+	hdr, ok := argument[0].Usr().Context.(*Header)
 	must(ok, "must be http.header")
 
 	if vv := hdr.header.Get(argument[1].String()); vv == "" {
@@ -156,7 +180,7 @@ func fnHeaderDelete(argument []pl.Val) (pl.Val, error) {
 			"argument must be string")
 	}
 
-	hdr, ok := argument[0].Usr().Context.(*HplHttpHeader)
+	hdr, ok := argument[0].Usr().Context.(*Header)
 	must(ok, "must be http.header")
 
 	cnt := doHeaderDelete(hdr.header, argument[1].String())

@@ -1,4 +1,4 @@
-package impl
+package module
 
 import (
 	"fmt"
@@ -220,7 +220,7 @@ func (b *bodySignSession) Accept(ctx interface{}, _ *hpl.Hpl) (service.SessionRe
 		},
 		pl.DynamicVariable{
 			Key:   "signBody",
-			Value: hpl.NewHplHttpBodyValFromStream(b.r.body),
+			Value: hpl.NewBodyValFromStream(b.r.body),
 		},
 	}
 
