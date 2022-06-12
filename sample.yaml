@@ -1,3 +1,5 @@
+#!./output/bin/main --config
+
 vhost:
   - name: "first"
     endpoint: ':18080'

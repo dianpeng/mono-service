@@ -155,7 +155,7 @@ func NewUrlVal(url *url.URL) pl.Val {
 		url: url,
 	}
 	return pl.NewValUsr(
-		&x,
+		x,
 		x.Index,
 		x.IndexSet,
 		x.Dot,

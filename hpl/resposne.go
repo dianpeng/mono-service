@@ -14,6 +14,10 @@ type Response struct {
 	body     pl.Val
 }
 
+func ValIsHttpResponse(a pl.Val) bool {
+	return a.Id() == HttpResponseTypeId
+}
+
 func (h *Response) isChunked() bool {
 	for _, xx := range h.response.TransferEncoding {
 		if xx == "chunked" {
@@ -131,8 +135,8 @@ func (h *Response) method(_ interface{}, name string, _ []pl.Val) (pl.Val, error
 	return pl.NewValNull(), fmt.Errorf("http.response method %s is unknown", name)
 }
 
-func (h *Response) info(_ interface{}) string {
-	return "http.response"
+func (h *Response) Info(_ interface{}) string {
+	return HttpResponseTypeId
 }
 
 func NewResponseVal(response *http.Response) pl.Val {
@@ -158,9 +162,9 @@ func NewResponseVal(response *http.Response) pl.Val {
 		x.ToString,
 		x.ToJSON,
 		func(_ interface{}) string {
-			return "http.request"
+			return HttpResponseTypeId
 		},
-		x.info,
+		x.Info,
 		nil,
 	)
 }

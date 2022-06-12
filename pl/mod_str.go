@@ -49,20 +49,7 @@ func initModStr() {
 		strings.Count,
 	)
 
-	addrefMF(
-		"str",
-		"cut",
-		"",
-		"%s%s",
-		func(a, b string) Val {
-			before, after, found := strings.Cut(a, b)
-			if found {
-				return NewValPair(NewValStr(before), NewValStr(after))
-			} else {
-				return NewValNull()
-			}
-		},
-	)
+	initModStrCut()
 
 	addrefMF(
 		"str",

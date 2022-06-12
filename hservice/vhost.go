@@ -517,7 +517,7 @@ func (v *VHost) doPhase(asvc *vhostService, w http.ResponseWriter, req *http.Req
 	{
 		// 3.2) run the session's prepare handler to create internal structure for
 		//      using by the sessions
-		handler.setPhase(phase.PhaseSessionPrepare, "session.Prepare")
+		handler.setPhase(phase.PhaseSessionPrepare, "session.prepare")
 		if ctx, err := handler.session.Prepare(req, param); err != nil {
 			handler.errorDescription = err.Error()
 			v.doPhaseError(asvc, handler, respW, req, param, err, phase.PhaseSessionPrepare)
@@ -529,7 +529,7 @@ func (v *VHost) doPhase(asvc *vhostService, w http.ResponseWriter, req *http.Req
 
 	{
 		// 3.3) run the session accept handler
-		handler.setPhase(phase.PhaseSessionAccept, "session.Accept")
+		handler.setPhase(phase.PhaseSessionAccept, "session.accept")
 		if r, err := handler.session.Accept(sessionCtx, handler.hpl); err != nil {
 			handler.errorDescription = err.Error()
 			v.doPhaseError(asvc, handler, respW, req, param, err, phase.PhaseSessionAccept)
@@ -541,7 +541,7 @@ func (v *VHost) doPhase(asvc *vhostService, w http.ResponseWriter, req *http.Req
 
 	// 4. Generate the http response based on sessions result
 	{
-		handler.setPhase(phase.PhaseHttpResponse, "http.Response")
+		handler.setPhase(phase.PhaseHttpResponse, "http.response")
 		if err := handler.Response(respW, req, param); err != nil {
 			handler.errorDescription = err.Error()
 			v.doPhaseError(asvc, handler, respW, req, param, err, phase.PhaseHttpResponse)
@@ -554,13 +554,13 @@ func (v *VHost) doPhase(asvc *vhostService, w http.ResponseWriter, req *http.Req
 	// handler
 	{
 		// 3.4) run the session's done handler
-		handler.setPhase(phase.PhaseSessionDone, "session.Done")
+		handler.setPhase(phase.PhaseSessionDone, "session.done")
 		handler.session.Done(sessionCtx)
 	}
 
 	// 5. Lastly log generation
 	{
-		handler.setPhase(phase.PhaseAccessLog, ".AccessLog")
+		handler.setPhase(phase.PhaseAccessLog, ".access_log")
 		handler.Log(log)
 	}
 }

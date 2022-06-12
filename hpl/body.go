@@ -117,8 +117,8 @@ func newBodyValFromReadableStream(rsVal pl.Val, rs *ReadableStream) pl.Val {
 		stream:    rs,
 	}
 
-	return pl.NewValUsr(
-		&x,
+  return pl.NewValUsr(
+		x,
 		x.Index,
 		x.IndexSet,
 		x.Dot,
@@ -138,6 +138,7 @@ func NewBodyValFromStream(rawStream io.ReadCloser) pl.Val {
 	streamVal := NewReadableStreamValFromStream(rawStream)
 	stream, ok := streamVal.Usr().Context.(*ReadableStream)
 	must(ok, "must be readablestream")
+
 	return newBodyValFromReadableStream(streamVal, stream)
 }
 
@@ -153,5 +154,6 @@ func NewBodyValFromBuffer(data []byte) pl.Val {
 	streamVal := NewReadableStreamValFromBuffer(data)
 	stream, ok := streamVal.Usr().Context.(*ReadableStream)
 	must(ok, "must be readablestream")
+
 	return newBodyValFromReadableStream(streamVal, stream)
 }

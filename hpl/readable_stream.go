@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/dianpeng/mono-service/pl"
 	"io"
-	"strings"
 )
 
 type ReadableStream struct {
@@ -17,45 +16,6 @@ type ReadableStream struct {
 
 func ValIsReadableStream(v pl.Val) bool {
 	return v.Id() == ReadableStreamTypeId
-}
-
-type eofReadCloser struct{}
-
-func (e *eofReadCloser) Read(_ []byte) (int, error) {
-	return 0, io.EOF
-}
-
-func (e *eofReadCloser) Close() error {
-	return nil
-}
-
-type eofByteReadCloser struct {
-	x io.Reader
-}
-
-func neweofByteReadCloserFromString(b string) *eofByteReadCloser {
-	return &eofByteReadCloser{
-		x: strings.NewReader(b),
-	}
-}
-
-func neweofByteReadCloser(b []byte) *eofByteReadCloser {
-	return &eofByteReadCloser{
-		x: strings.NewReader(string(b)),
-	}
-}
-
-func (e *eofByteReadCloser) Read(i []byte) (int, error) {
-	if e.x == nil {
-		return 0, io.EOF
-	} else {
-		return e.x.Read(i)
-	}
-}
-
-func (e *eofByteReadCloser) Close() error {
-	e.x = nil
-	return nil
 }
 
 func NewReadableStreamFromString(data string) *ReadableStream {

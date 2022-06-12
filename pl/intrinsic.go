@@ -23,18 +23,6 @@ type intrinsicinfo struct {
 
 var intrinsicFunc []*intrinsicinfo
 
-func visnil(i reflect.Value) bool {
-	switch i.Kind() {
-	case reflect.Func,
-		reflect.Chan,
-		reflect.Interface, reflect.Map, reflect.Pointer,
-		reflect.Slice:
-		return i.IsNil()
-	default:
-		return false
-	}
-}
-
 // special helper function to unpack reflection call's return argument into
 // acceptable format (Val, error). Notes, we paniced when the return value
 // of function is not acceptable. The allowed native format of a call's return

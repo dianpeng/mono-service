@@ -9,9 +9,6 @@ import (
 	"github.com/dianpeng/mono-service/alog"
 	"github.com/dianpeng/mono-service/hrouter"
 	"github.com/dianpeng/mono-service/pl"
-
-	// library usage
-	"strings"
 )
 
 func must(cond bool, msg string) {
@@ -52,11 +49,17 @@ type SessionWrapper interface {
 
 type hplResponseWriter struct {
 	bodyIsStream bool
-	bodyStream   io.Reader
+	bodyStream   io.ReadCloser
 	bodyString   string
 	statusCode   int
+	header       http.Header
 
-	writer http.ResponseWriter
+	// do not use it
+	_writer http.ResponseWriter
+}
+
+func (h *hplResponseWriter) clearHeader() {
+	h.header = make(http.Header)
 }
 
 func (h *hplResponseWriter) writeBodyString(data string) {
@@ -64,22 +67,36 @@ func (h *hplResponseWriter) writeBodyString(data string) {
 	h.bodyString = data
 }
 
-func (h *hplResponseWriter) writeBodyStream(data io.Reader) {
+func (h *hplResponseWriter) writeBodyStream(data io.ReadCloser) {
 	h.bodyIsStream = true
 	h.bodyStream = data
 }
 
-func (h *hplResponseWriter) toBodyStream() io.Reader {
+func (h *hplResponseWriter) toBodyStream() io.ReadCloser {
 	if !h.bodyIsStream {
 		h.bodyIsStream = true
-		h.bodyStream = strings.NewReader(h.bodyString)
+		h.bodyStream = neweofByteReadCloserFromString(h.bodyString)
 	}
 	return h.bodyStream
 }
 
+func (h *hplResponseWriter) setResponse(resp *http.Response) {
+	h.statusCode = resp.StatusCode
+	h.header = resp.Header
+	h.writeBodyStream(resp.Body)
+}
+
 func (h *hplResponseWriter) finish() error {
-	h.writer.WriteHeader(h.statusCode)
-	_, _ = io.Copy(h.writer, h.toBodyStream())
+	defer func() {
+		if h.bodyIsStream {
+			h.bodyStream.Close()
+		}
+	}()
+	for k, v := range h.header {
+		h._writer.Header()[k] = v
+	}
+	h._writer.WriteHeader(h.statusCode)
+	_, _ = io.Copy(h._writer, h.toBodyStream())
 	return nil
 }
 
@@ -89,7 +106,8 @@ func newHplResponseWriter(w http.ResponseWriter) *hplResponseWriter {
 		bodyStream:   nil,
 		bodyString:   "",
 		statusCode:   200,
-		writer:       w,
+		header:       make(http.Header),
+		_writer:      w,
 	}
 }
 
@@ -105,47 +123,6 @@ type Hpl struct {
 
 	log       *alog.SessionLog
 	isRunning bool
-}
-
-func foreachHeaderKV(arg pl.Val, fn func(key string, val string)) bool {
-	if arg.Type == pl.ValList {
-		for _, v := range arg.List().Data {
-			if v.Type == pl.ValPair && v.Pair.First.Type == pl.ValStr && v.Pair.Second.Type == pl.ValStr {
-				fn(v.Pair.First.String(), v.Pair.Second.String())
-			}
-		}
-	} else if arg.Type == pl.ValPair {
-		if arg.Pair.First.Type == pl.ValStr && arg.Pair.Second.Type == pl.ValStr {
-			fn(arg.Pair.First.String(), arg.Pair.Second.String())
-		}
-	} else if arg.Id() == "http.header" {
-		// known special user type to us, then just foreach the header
-		hdr := arg.Usr().Context.(*Header)
-		for k, v := range hdr.header {
-			for _, vv := range v {
-				fn(k, vv)
-			}
-		}
-	} else {
-		return false
-	}
-
-	return true
-}
-
-func foreachStr(arg pl.Val, fn func(key string)) bool {
-	if arg.Type == pl.ValList {
-		for _, v := range arg.List().Data {
-			if v.Type == pl.ValStr {
-				fn(v.String())
-			}
-		}
-	} else if arg.Type == pl.ValStr {
-		fn(arg.String())
-	} else {
-		return false
-	}
-	return true
 }
 
 func NewHpl() *Hpl {
@@ -198,11 +175,6 @@ func (p *Hpl) evalCallBasic(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, e
 		return p.fnHttp(args)
 	case "concate_http_body":
 		return fnConcateHttpBody(args)
-	case "header_has":
-		return fnHeaderHas(args)
-	case "header_delete":
-		return fnHeaderDelete(args)
-
 	default:
 		return p.session.OnCall(x, n, args)
 	}
@@ -350,9 +322,60 @@ func (h *Hpl) OnRequest(selector string, req *http.Request, param hrouter.Params
 
 // -----------------------------------------------------------------------------
 // response phase
+
+func foreachHeaderKV(arg pl.Val, fn func(key string, val string)) bool {
+	if arg.Type == pl.ValList {
+		for _, v := range arg.List().Data {
+			if v.Type == pl.ValPair && v.Pair.First.Type == pl.ValStr && v.Pair.Second.Type == pl.ValStr {
+				fn(v.Pair.First.String(), v.Pair.Second.String())
+			}
+		}
+	} else if arg.Type == pl.ValPair {
+		if arg.Pair.First.Type == pl.ValStr && arg.Pair.Second.Type == pl.ValStr {
+			fn(arg.Pair.First.String(), arg.Pair.Second.String())
+		}
+	} else if ValIsHttpHeader(arg) {
+		// known special user type to us, then just foreach the header
+		hdr := arg.Usr().Context.(*Header)
+		for k, v := range hdr.header {
+			for _, vv := range v {
+				fn(k, vv)
+			}
+		}
+	} else {
+		return false
+	}
+
+	return true
+}
+
+func foreachStr(arg pl.Val, fn func(key string)) bool {
+	if arg.Type == pl.ValList {
+		for _, v := range arg.List().Data {
+			if v.Type == pl.ValStr {
+				fn(v.String())
+			}
+		}
+	} else if arg.Type == pl.ValStr {
+		fn(arg.String())
+	} else {
+		return false
+	}
+	return true
+}
+
 func (p *Hpl) httpResponseAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
-	// http response generation action, ie builting actions
 	switch actionName {
+
+	case "response":
+		if ValIsHttpResponse(arg) {
+			r, _ := arg.Usr().Context.(*Response)
+			p.respWriter.setResponse(r.response)
+			return nil
+		} else {
+			return fmt.Errorf("invalid argument type for action response")
+		}
+
 	case "status":
 		if arg.Type != pl.ValInt {
 			return fmt.Errorf("status action must have a int argument")
@@ -361,12 +384,28 @@ func (p *Hpl) httpResponseAction(x *pl.Evaluator, actionName string, arg pl.Val)
 		}
 		return nil
 
-	// header operations
+	case "header":
+		if ValIsHttpHeader(arg) {
+			h, _ := arg.Usr().Context.(*Header)
+			p.respWriter.header = h.header
+		} else {
+			p.respWriter.clearHeader()
+			if !foreachHeaderKV(
+				arg,
+				func(key, val string) {
+					p.respWriter.header.Add(key, val)
+				},
+			) {
+				return fmt.Errorf("invalid header value type")
+			}
+		}
+		return nil
+
 	case "header_add":
 		if !foreachHeaderKV(
 			arg,
 			func(key string, val string) {
-				p.respWriter.writer.Header().Add(key, val)
+				p.respWriter.header.Add(key, val)
 			}) {
 			return fmt.Errorf("invalid header_add value type")
 		}
@@ -376,7 +415,7 @@ func (p *Hpl) httpResponseAction(x *pl.Evaluator, actionName string, arg pl.Val)
 		if !foreachHeaderKV(
 			arg,
 			func(key string, val string) {
-				p.respWriter.writer.Header().Set(key, val)
+				p.respWriter.header.Set(key, val)
 			}) {
 			return fmt.Errorf("invalid header_set value type")
 		}
@@ -386,7 +425,7 @@ func (p *Hpl) httpResponseAction(x *pl.Evaluator, actionName string, arg pl.Val)
 		if !foreachHeaderKV(
 			arg,
 			func(key string, val string) {
-				hdr := p.respWriter.writer.Header()
+				hdr := p.respWriter.header
 				if hdr.Get(key) == "" {
 					hdr.Set(key, val)
 				}
@@ -395,31 +434,16 @@ func (p *Hpl) httpResponseAction(x *pl.Evaluator, actionName string, arg pl.Val)
 		}
 		return nil
 
-	// Delete header logic, support wildcard matching during header deletion
-	// 4 patterns are recognized
-	// 1) *-suffix
-	// 2) prefix-*
-	// 3) *-midfix-*
-	// 4) literal key
-
-	case "header_del":
-		if !foreachStr(
-			arg,
-			func(key string) {
-				hdr := p.respWriter.writer.Header()
-				doHeaderDelete(hdr, key)
-			}) {
-			return fmt.Errorf("invalid header_add value type")
-		}
-		return nil
-
-	// body operations
 	case "body":
 		if arg.Type == pl.ValStr {
 			p.respWriter.writeBodyString(arg.String())
-		} else if arg.Id() == "http.body" {
+		} else if ValIsReadableStream(arg) {
+			stream, ok := arg.Usr().Context.(*ReadableStream)
+			must(ok, "invalid body type(.readablestream)")
+			p.respWriter.writeBodyStream(stream.Stream)
+		} else if ValIsHttpBody(arg) {
 			body, ok := arg.Usr().Context.(*Body)
-			must(ok, "invalid body type")
+			must(ok, "invalid body type(http.body)")
 			p.respWriter.writeBodyStream(body.Stream().Stream)
 		} else {
 			return fmt.Errorf("invalid body value type")

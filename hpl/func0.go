@@ -12,18 +12,6 @@ import (
 	"strings"
 )
 
-type trivialReadCloser struct {
-	r io.Reader
-}
-
-func (e *trivialReadCloser) Read(b []byte) (int, error) {
-	return e.r.Read(b)
-}
-
-func (e *trivialReadCloser) Close() error {
-	return nil
-}
-
 func fnConcateHttpBody(argument []pl.Val) (pl.Val, error) {
 	var input []io.Reader
 	for idx, a := range argument {
@@ -41,7 +29,7 @@ func fnConcateHttpBody(argument []pl.Val) (pl.Val, error) {
 		}
 	}
 
-	return NewBodyValFromStream(&trivialReadCloser{r: io.MultiReader(input...)}), nil
+	return NewBodyValFromStream(neweofByteReadCloserFromStream(io.MultiReader(input...))), nil
 }
 
 // general HTTP request interfaces, allowing user to specify following method
@@ -108,81 +96,4 @@ func fnDoHttp(session SessionWrapper, argument []pl.Val) (pl.Val, error) {
 
 	// serialize the response back to the normal object
 	return NewResponseVal(resp), nil
-}
-
-// header related functions
-func fnHeaderHas(argument []pl.Val) (pl.Val, error) {
-	if len(argument) != 2 {
-		return pl.NewValNull(), fmt.Errorf("function: header_has requires 2 arguments")
-	}
-
-	if argument[0].Id() != "http.header" || argument[1].Type != pl.ValStr {
-		return pl.NewValNull(), fmt.Errorf("function: header_has's " +
-			"first argument must be header and second " +
-			"argument must be string")
-	}
-
-	hdr, ok := argument[0].Usr().Context.(*Header)
-	must(ok, "must be http.header")
-
-	if vv := hdr.header.Get(argument[1].String()); vv == "" {
-		return pl.NewValBool(false), nil
-	} else {
-		return pl.NewValBool(true), nil
-	}
-}
-
-func doHeaderDelete(hdr http.Header, key string) int {
-	prefixWildcard := strings.HasPrefix(key, "*")
-	suffixWildcard := strings.HasSuffix(key, "*")
-	cnt := 0
-
-	if prefixWildcard && suffixWildcard {
-		midfix := key[1 : len(key)-1]
-		for key, _ := range hdr {
-			if strings.Contains(key, midfix) {
-				hdr.Del(key)
-				cnt++
-			}
-		}
-	} else if prefixWildcard {
-		target := key[1:]
-		for key, _ := range hdr {
-			if strings.HasSuffix(key, target) {
-				hdr.Del(key)
-				cnt++
-			}
-		}
-	} else if suffixWildcard {
-		target := key[:len(key)-1]
-		for key, _ := range hdr {
-			if strings.HasPrefix(key, target) {
-				hdr.Del(key)
-				cnt++
-			}
-		}
-	} else {
-		hdr.Del(key)
-		cnt++
-	}
-
-	return cnt
-}
-
-func fnHeaderDelete(argument []pl.Val) (pl.Val, error) {
-	if len(argument) != 2 {
-		return pl.NewValNull(), fmt.Errorf("function: header_delete requires 2 arguments")
-	}
-
-	if argument[0].Id() != "http.header" || argument[1].Type != pl.ValStr {
-		return pl.NewValNull(), fmt.Errorf("function: header_delete's " +
-			"first argument must be header and second " +
-			"argument must be string")
-	}
-
-	hdr, ok := argument[0].Usr().Context.(*Header)
-	must(ok, "must be http.header")
-
-	cnt := doHeaderDelete(hdr.header, argument[1].String())
-	return pl.NewValInt(cnt), nil
 }
