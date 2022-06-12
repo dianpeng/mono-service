@@ -682,11 +682,54 @@ func (v *Val) DotSet(i string, val Val) error {
 	}
 }
 
+var (
+	// int#method
+	mpIntToString = MustNewFuncProto("int.to_string", "%0")
+
+	// real#method
+	mpRealToString = MustNewFuncProto("real.to_string", "%0")
+	mpRealIsNaN    = MustNewFuncProto("real.is_nan", "%0")
+	mpRealIsInf    = MustNewFuncProto("real.is_inf", "%0")
+	mpRealIsNInf   = MustNewFuncProto("real.is_ninf", "%0")
+	mpRealIsPInf   = MustNewFuncProto("real.is_pinf", "%0")
+	mpRealCell   = MustNewFuncProto("real.cell", "%0")
+	mpRealFloor  = MustNewFuncProto("real.floor", "%0")
+
+	// bool#method
+	mpBoolToString = MustNewFuncProto("bool.to_string", "%0")
+
+	// null#method
+	mpNullToString = MustNewFuncProto("null.to_string", "%0")
+
+	// str#method
+	mpStrToString = MustNewFuncProto("str.to_string", "%0")
+	mpStrLength   = MustNewFuncProto("str.length", "%0")
+	mpStrToUpper  = MustNewFuncProto("str.to_upper", "%0")
+	mpStrToLower  = MustNewFuncProto("str.to_lower", "%0")
+	mpStrSubStr = MustNewFuncProto("str.substr", "{%d}{%d%d}")
+	mpStrIndex  = MustNewFuncProto("str.index", "{%d}{%d%d}")
+
+	// list#method
+	mpListLength   = MustNewFuncProto("list.length", "%0")
+	mpListPushBack = MustNewFuncProto("list.push_back", "%a")
+	mpListPopBack  = MustNewFuncProto("list.pop_back", "%d")
+	mpListExtend   = MustNewFuncProto("list.extend", "%l")
+	mpListSlice    = MustNewFuncProto("list.slice", "{%d}{%d%d}")
+
+	// map#method
+	mpMapLength = MustNewFuncProto("map.length", "%0")
+	mpMapSet    = MustNewFuncProto("map.set", "%s%a")
+	mpMapDel    = MustNewFuncProto("map.del", "%s")
+	mpMapGet    = MustNewFuncProto("map.get", "%s%a")
+	mpMapHas    = MustNewFuncProto("map.has", "%s")
+)
+
 func (v *Val) methodInt(name string, args []Val) (Val, error) {
 	switch name {
 	case "to_string":
-		if len(args) != 0 {
-			return NewValNull(), fmt.Errorf("method: int:to_string must have 0 arguments")
+		_, err := mpIntToString.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		return NewValStr(fmt.Sprintf("%d", v.Int())), nil
 	default:
@@ -697,38 +740,45 @@ func (v *Val) methodInt(name string, args []Val) (Val, error) {
 func (v *Val) methodReal(name string, args []Val) (Val, error) {
 	switch name {
 	case "to_string":
-		if len(args) != 0 {
-			return NewValNull(), fmt.Errorf("method: real:to_string must have 0 arguments")
+		_, err := mpRealToString.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		return NewValStr(fmt.Sprintf("%f", v.Real())), nil
 	case "is_nan":
-		if len(args) != 0 {
-			return NewValNull(), fmt.Errorf("method: real:is_ana must have 0 arguments")
+		_, err := mpRealIsNaN.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		return NewValBool(math.IsNaN(v.Real())), nil
 	case "is_inf":
-		if len(args) != 0 {
-			return NewValNull(), fmt.Errorf("method: real:is_inf must have 0 arguments")
+		_, err := mpRealIsInf.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		return NewValBool(math.IsInf(v.Real(), 0)), nil
 	case "is_ninf":
-		if len(args) != 0 {
-			return NewValNull(), fmt.Errorf("method: real:is_ninf must have 0 arguments")
+		_, err := mpRealIsNInf.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		return NewValBool(math.IsInf(v.Real(), -1)), nil
 	case "is_pinf":
-		if len(args) != 0 {
-			return NewValNull(), fmt.Errorf("method: real:is_pinf must have 0 arguments")
+		_, err := mpRealIsPInf.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		return NewValBool(math.IsInf(v.Real(), 1)), nil
 	case "cell":
-		if len(args) != 0 {
-			return NewValNull(), fmt.Errorf("method: real:cell must have 0 arguments")
+		_, err := mpRealCell.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		return NewValReal(math.Ceil(v.Real())), nil
 	case "floor":
-		if len(args) != 0 {
-			return NewValNull(), fmt.Errorf("method: real:floor must have 0 arguments")
+		_, err := mpRealFloor.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		return NewValReal(math.Floor(v.Real())), nil
 
@@ -740,8 +790,9 @@ func (v *Val) methodReal(name string, args []Val) (Val, error) {
 func (v *Val) methodBool(name string, args []Val) (Val, error) {
 	switch name {
 	case "to_string":
-		if len(args) != 0 {
-			return NewValNull(), fmt.Errorf("method: bool:to_string must have 0 arguments")
+		_, err := mpBoolToString.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		var r string
 		if v.Bool() {
@@ -758,8 +809,9 @@ func (v *Val) methodBool(name string, args []Val) (Val, error) {
 func (v *Val) methodNull(name string, args []Val) (Val, error) {
 	switch name {
 	case "to_string":
-		if len(args) != 0 {
-			return NewValNull(), fmt.Errorf("method: null:to_string must have 0 arguments")
+		_, err := mpNullToString.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		return NewValStr("null"), nil
 	default:
@@ -770,38 +822,40 @@ func (v *Val) methodNull(name string, args []Val) (Val, error) {
 func (v *Val) methodStr(name string, args []Val) (Val, error) {
 	switch name {
 	case "to_string":
-		if len(args) != 0 {
-			return NewValNull(), fmt.Errorf("method: str:to_string must have 0 arguments")
+		_, err := mpStrToString.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		return *v, nil
 
-	case "len":
-		if len(args) != 0 {
-			return NewValNull(), fmt.Errorf("method: str:len must have 0 arguments")
+	case "length":
+		_, err := mpStrLength.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		return NewValInt(len(v.String())), nil
 
 	case "to_upper":
-		if len(args) != 0 {
-			return NewValNull(), fmt.Errorf("method: str:upper must have 0 arguments")
+		_, err := mpStrToUpper.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		return NewValStr(strings.ToUpper(v.String())), nil
 
 	case "to_lower":
-		if len(args) != 0 {
-			return NewValNull(), fmt.Errorf("method: str:lower must have 0 arguments")
+		_, err := mpStrToLower.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		return NewValStr(strings.ToLower(v.String())), nil
 
 	case "substr":
-		if len(args) != 2 && len(args) != 1 {
-			return NewValNull(), fmt.Errorf("method: str:substr must have 1 or 2 arguments")
-		}
-		if args[0].Type != ValInt || (len(args) == 2 && args[1].Type != ValInt) {
-			return NewValNull(), fmt.Errorf("method: str:substr argument must be integer")
+		alog, err := mpStrSubStr.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		var ret string
-		if len(args) == 2 {
+		if alog == 2 {
 			ret = v.String()[args[0].Int():args[1].Int()]
 		} else {
 			ret = v.String()[args[0].Int():]
@@ -809,13 +863,11 @@ func (v *Val) methodStr(name string, args []Val) (Val, error) {
 		return NewValStr(ret), nil
 
 	case "index":
-		if len(args) != 2 && len(args) != 1 {
-			return NewValNull(), fmt.Errorf("method: str:index must have 1 or 2 arguments")
+		alog, err := mpStrIndex.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
-		if args[0].Type != ValStr || (len(args) == 2 && args[1].Type != ValInt) {
-			return NewValNull(), fmt.Errorf("method: str:index argument must be one string and one int")
-		}
-		if len(args) == 1 {
+		if alog == 1 {
 			return NewValInt(strings.Index(v.String(), args[0].String())), nil
 		} else {
 			sub := v.String()[args[1].Int():]
@@ -834,15 +886,17 @@ func (v *Val) methodStr(name string, args []Val) (Val, error) {
 
 func (v *Val) methodList(name string, args []Val) (Val, error) {
 	switch name {
-	case "len":
-		if len(args) != 0 {
-			return NewValNull(), fmt.Errorf("method: list:len must have 0 arguments")
+	case "length":
+		_, err := mpListLength.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		return NewValInt(len(v.List().Data)), nil
 
 	case "push_back":
-		if len(args) == 0 {
-			return NewValNull(), fmt.Errorf("method: list:push_back must at least have 1 argument")
+		_, err := mpListPushBack.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		for _, x := range args {
 			v.AddList(x)
@@ -850,17 +904,11 @@ func (v *Val) methodList(name string, args []Val) (Val, error) {
 		return NewValNull(), nil
 
 	case "pop_back":
-		if len(args) != 0 && len(args) != 1 {
-			return NewValNull(), fmt.Errorf("method: list:pop_back must have 0 or 1 argument")
+		_, err := mpListPopBack.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
-		num := 1
-		if len(args) == 1 {
-			if args[0].Type != ValInt || args[0].Int() < 0 {
-				return NewValNull(), fmt.Errorf("method: list:pop_back invalid argument")
-			}
-			num = int(args[0].Int())
-		}
-
+		num := int(args[0].Int())
 		if num < len(v.List().Data) {
 			v.List().Data = v.List().Data[0 : len(v.List().Data)-num]
 		} else {
@@ -870,11 +918,9 @@ func (v *Val) methodList(name string, args []Val) (Val, error) {
 		return NewValNull(), nil
 
 	case "extend":
-		if len(args) != 1 {
-			return NewValNull(), fmt.Errorf("method: list:extend must have 1 argument")
-		}
-		if args[0].Type != ValList {
-			return NewValNull(), fmt.Errorf("method: list:extend invalid argument")
+		_, err := mpListExtend.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		for _, x := range args[0].List().Data {
 			v.AddList(x)
@@ -882,14 +928,12 @@ func (v *Val) methodList(name string, args []Val) (Val, error) {
 		return NewValNull(), nil
 
 	case "slice":
-		if len(args) != 2 && len(args) != 1 {
-			return NewValNull(), fmt.Errorf("method: list:slice must have 1 or 2 arguments")
-		}
-		if args[0].Type != ValInt || (len(args) == 2 && args[1].Type != ValInt) {
-			return NewValNull(), fmt.Errorf("method: list:slice argument must be integer")
+		alog, err := mpListSlice.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		var ret []Val
-		if len(args) == 2 {
+		if alog == 2 {
 			ret = v.List().Data[args[0].Int():args[1].Int()]
 		} else {
 			ret = v.List().Data[args[0].Int():]
@@ -903,38 +947,33 @@ func (v *Val) methodList(name string, args []Val) (Val, error) {
 
 func (v *Val) methodMap(name string, args []Val) (Val, error) {
 	switch name {
-	case "len":
-		if len(args) != 0 {
-			return NewValNull(), fmt.Errorf("method: map:len must have 0 arguments")
+	case "length":
+		_, err := mpMapLength.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		return NewValInt(len(v.Map().Data)), nil
 
 	case "set":
-		if len(args) != 2 {
-			return NewValNull(), fmt.Errorf("method: map:set must have 2 arguments")
-		}
-		if args[0].Type != ValStr {
-			return NewValNull(), fmt.Errorf("method: map:set invalid argument")
+		_, err := mpMapSet.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		v.Map().Data[args[0].String()] = args[1]
 		return NewValNull(), nil
 
 	case "del":
-		if len(args) != 1 {
-			return NewValNull(), fmt.Errorf("method: map:del must have 1 argument")
-		}
-		if args[0].Type != ValStr {
-			return NewValNull(), fmt.Errorf("method: map:del invalid argument")
+		_, err := mpMapDel.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		delete(v.Map().Data, args[0].String())
 		return NewValNull(), nil
 
 	case "get":
-		if len(args) != 1 {
-			return NewValNull(), fmt.Errorf("method: map:get must have 2 argument")
-		}
-		if args[0].Type != ValStr {
-			return NewValNull(), fmt.Errorf("method: map:get invalid argument")
+		_, err := mpMapGet.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		v, ok := v.Map().Data[args[0].String()]
 		if !ok {
@@ -944,11 +983,9 @@ func (v *Val) methodMap(name string, args []Val) (Val, error) {
 		}
 
 	case "has":
-		if len(args) != 1 {
-			return NewValNull(), fmt.Errorf("method: map:has must have 1 argument")
-		}
-		if args[0].Type != ValStr {
-			return NewValNull(), fmt.Errorf("method: map:has invalid argument")
+		_, err := mpMapHas.Check(args)
+		if err != nil {
+			return NewValNull(), err
 		}
 		_, ok := v.Map().Data[args[0].String()]
 		return NewValBool(ok), nil

@@ -15,6 +15,7 @@ vhost:
           method:
               - "POST"
         max_session_size: 500
+
         policy: |
           error => {
             dprint(phase, error);

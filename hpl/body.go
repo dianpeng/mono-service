@@ -117,7 +117,7 @@ func newBodyValFromReadableStream(rsVal pl.Val, rs *ReadableStream) pl.Val {
 		stream:    rs,
 	}
 
-  return pl.NewValUsr(
+	return pl.NewValUsr(
 		x,
 		x.Index,
 		x.IndexSet,
