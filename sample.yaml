@@ -74,13 +74,15 @@ vhost:
       - name: "null"
         tag: "basic proxy"
         router: 
-          path: "/impl/null"
+          path: "/impl/null/*"
           method:
             - "GET"
         config:
           a: "bb"
           c: "dd"
+
         max_session_size: 500
+
         policy: |
           response => {
             let proxy_url = request.header.x_proxy_url;

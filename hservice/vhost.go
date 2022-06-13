@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -570,6 +571,22 @@ func (h *VHost) Run() {
 }
 
 // router creation and preparation
+
+// check whether router is a prefix router or not
+func (h *VHost) checkRouterPathType(p string) string {
+	idx := strings.LastIndex(p, "*")
+	if idx == -1 {
+		return p
+	} else {
+		suffix := p[:idx]
+		if len(suffix) != 0 && suffix[len(suffix)-1] == '/' {
+			return fmt.Sprintf("%s{_Rest:.*}", suffix)
+		} else {
+			return fmt.Sprintf("%s/{_Rest:.*}", suffix)
+		}
+	}
+}
+
 func (h *VHost) newRouter(asvc *vhostService, rc *cfg.Router, r *mux.Router) (the_error error) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -581,7 +598,10 @@ func (h *VHost) newRouter(asvc *vhostService, rc *cfg.Router, r *mux.Router) (th
 		return fmt.Errorf("router.path is not properly configured")
 	}
 
-	rr := r.HandleFunc(rc.Path, func(w http.ResponseWriter, req *http.Request) {
+	path := h.checkRouterPathType(rc.Path)
+	var rr *mux.Route
+
+	rr = r.HandleFunc(path, func(w http.ResponseWriter, req *http.Request) {
 		h.doPhase(asvc, w, req)
 	})
 
