@@ -1,37 +1,34 @@
 # Mono Service
 
-Mono Service is a monolithical application server that tries to be an busy box
-for application logic. It tries to provide lots of common task and work out of
-the box to simplify SOA deployment. 
+MonoService is a Http application server that can be used for different use cases.
+User can picture it as a busybox but for Web/Http application services.
 
-The server itself has an extreamly extensive architecture, with lots of builtin
-modules written in native Go. And the server provides a highly integrated and
-total innovative scripting language to work around the modification of behavior
-of runtime behavior.
-
+MonoService runtime tries to include as much common Web/Http business logic into
+a single binary as possible. Additionally, it exposes a highly confiurable and
+flexible way for user to customize it into any particular use cases. It can be
+used to setup a application server in minute. A quick leaner can extend its
+functionality reliably.
 
 # Features
 
-## Extensiable Pluggin Style Module API
+## Modular Architecture
 
-MonoService can be easily extending its functionality with its core APIs in go.
-Although, there will be lots of function builtin, user still can use the Go api
-to create specific function to extend Mono Service's runtime.
+MonoService can be easily extending its functionality with its core APIs in Go.
+Although, there will be lots of builtin functions, many common use cases are
+already been coverted. But user can still use the Go api to create specific
+function to extend MonoService's runtime.
 
+## Fully Programmable Pipeline Via Newly Designed Scripting DSL
 
-## Specialized scripting DSL
-
-MonoService runtime features a entirely designed from scratch scripting engine
-called PL, ie Policy Language. Unlike most web server tries to integrate/embed
-a general purpose language. Our PL is desigend from scratch to support Http or
-application logic dynamic configuration. The langauge supports a rule based 
-code orgnization to catch different runtime event happened, also its variable has
-session awareness. Certain types of variable is awaring of http session and will
-be reset automatically when each http session are gone and hold its value during
-one exact http session. Additionally, it supports template builtin. User can
-render go template, markdown template directly inside of the code. The runtime
-also allows addition of other template engine if user wants to use. 
-
+MonoService runtime features a specifically designed from scratch scripting engine
+called PL, or Policy Language. Unlike most web server tries to integrate or embbed
+a general purpose language, like Lua. I decide to design a new language syntax to
+support Http or application logic dynamic configuration. The langauge supports
+rule based code dispatch to catch different runtime events. Additionally its
+variable lifecycle has session semantic. Certain types of variable's lifecycle is
+tied to the Http session and is visiable throughout one specific Http session.
+Other feature like, markdown/go template literal, regex literal, rule dispatching,
+etc ... Anyone who is familiar with C/Go/Rust style langauge can pick it up easily
 
 ## Multi Tenant Awareness
 
@@ -40,13 +37,44 @@ exposed by each HTTP endpoint can be configured flexibly by configuration file.
 Additionally, each group of services been exposed can be groupped together to
 form a virtual host. A vhost is been used as an representation of tenancy.
 
+# Configuration Samples
+
+## Yaml
+
+In general the configuration is written as Yaml which is a standard way in
+Cloud Native environment. To address some limitation of yaml file, runtime extends
+the yaml with some customized tag. Notes, all customized tag should be written
+as 
+
+```
+!inc "./my-file.yaml"
+!inc_string "./my-string.txt"
+!env "PATH"
+!eval "http::do('http://www.cdn.com/example.yaml', 'GET')"
+```
+
+### inc path
+
+Includes a path specified yaml file and parsed as if the content is pasted at
+the exact position
+
+### inc_string path
+
+Includes a path specified file's content as string into the original yaml
+
+### env name
+
+Return environment variable with *name* specified
+
+### eval expression
+
+Evaluate a PL expression and return its result as string into the yaml
+
 
 ## Sample
 
-sample/sample.yaml
-
+User can check sample configuration located at sample/sample.yaml to start. 
 
 ## Status
 
-Very early stage of development, stay tuned :)
-
+The project is still in very early stage of development. Stay tunned :)
