@@ -191,6 +191,7 @@ type argp struct {
 
 type argpcase struct {
 	d      []argp
+  noarg  bool
 	varlen bool
 }
 
@@ -419,8 +420,11 @@ func (f *FuncProto) compT(rList []rune, cursor int, vlen *bool) (int, protoelem,
 	case 'a':
 		opcode = PAny
 		break
-	case '0', '-':
-		return -1, protoelem{}, fmt.Errorf("%%0 or %%- cannot have any other leading type descriptors")
+  case '0':
+    opcode = PNone
+    break
+  case '-':
+		return -1, protoelem{}, fmt.Errorf("%%- cannot have any other leading type descriptors")
 	default:
 		return -1, protoelem{}, fmt.Errorf("unknown type descriptor %c", nc)
 	}
@@ -528,6 +532,7 @@ func (f *FuncProto) compCase(d string) (*argpcase, int, error) {
 	rList := []rune(d)
 	sz := len(rList)
 	argpc := &argpcase{}
+  hasnoarg := false
 
 LOOP:
 	for cursor < sz {
@@ -538,14 +543,33 @@ LOOP:
 			break LOOP
 
 		case '%':
+      if hasnoarg {
+        return nil, -1, fmt.Errorf("%%0 shows up inside of the format list, the " +
+                                   "can just contain exactly one %%0")
+      }
+
 			cc, pelem, err := f.compT(rList, cursor, &argpc.varlen)
 			if err != nil {
 				return nil, -1, err
 			}
 			cursor = cc
-			argpc.d = append(argpc.d, argp{
-				or: []protoelem{pelem},
-			})
+
+      // special cases that %0 shows up inside of the argpcase and it should
+      // just stop at the position
+      if pelem.opcode == PNone {
+        if len(argpc.d) != 0 {
+          return nil, -1, fmt.Errorf("%%0 shows up inside of the format list, the " +
+                                     "can just contain exactly one %%0")
+        }
+        hasnoarg = true
+        argpc.noarg = true
+        // notes we do not push PNone into the type list
+      } else {
+        argpc.d = append(argpc.d, argp{
+          or: []protoelem{pelem},
+        })
+      }
+
 			break
 
 		case '(':
@@ -562,6 +586,10 @@ LOOP:
 				if err != nil {
 					return nil, -1, err
 				}
+        if pelem.opcode == PNone {
+          return nil, -1, fmt.Errorf("%%0 cannot show up in type OR list")
+        }
+
 				if vlen {
 					// notes, we don't support having OR group comes with type descriptor
 					// decorated by any decorator. This makes the searching algorithm none
@@ -608,6 +636,7 @@ func (f *FuncProto) compile(d string) error {
 		f.alwayspass = true
 		return nil
 	}
+
 	rlist := []rune(d)
 	cursor := 0
 	sz := len(rlist)
@@ -734,6 +763,14 @@ func (f *FuncProto) check1(index int, exp *argp, got Val, conv convoneval) error
 func (f *FuncProto) doCheck(d *argpcase, args []Val, conv convsliceval) (int, error) {
 	alen := len(args)
 	elen := len(d.d)
+
+  if d.noarg {
+    if alen != 0 {
+      return -1, fmt.Errorf("function(method) call: %s expect 0 arguments, but got %d",
+        f.Name, alen)
+    }
+    return 0, nil
+  }
 
 	if alen < elen {
 		if d.varlen && alen == elen-1 {

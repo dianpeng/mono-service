@@ -85,7 +85,7 @@ vhost:
           response => {
             let proxy_url = request.header.x_proxy_url;
             let url = proxy_url == "" ? "https://tmall.com" : proxy_url;
-            let sub_resp = http(url, "GET");
+            let sub_resp = http::do(url, "GET");
             body => if sub_resp.status == 200 {
               sub_resp.body;
             } else {

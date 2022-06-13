@@ -164,17 +164,19 @@ func (p *Hpl) loadVarBasic(x *pl.Evaluator, n string) (pl.Val, error) {
 
 func (h *Hpl) fnHttp(args []pl.Val) (pl.Val, error) {
 	if h.session == nil {
-		return pl.NewValNull(), fmt.Errorf("function: http cannot be executed, session not bound")
+    return pl.NewValNull(), fmt.Errorf("http::do cannot be executed, session not bound")
 	}
 	return fnDoHttp(h.session, args)
 }
 
 func (p *Hpl) evalCallBasic(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
 	switch n {
-	case "http":
+  case "http::do":
 		return p.fnHttp(args)
-	case "concate_http_body":
+  case "http::concate_body":
 		return fnConcateHttpBody(args)
+  case "http::new_url":
+    return fnNewUrl(args)
 	default:
 		return p.session.OnCall(x, n, args)
 	}

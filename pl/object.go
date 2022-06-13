@@ -692,8 +692,8 @@ var (
 	mpRealIsInf    = MustNewFuncProto("real.is_inf", "%0")
 	mpRealIsNInf   = MustNewFuncProto("real.is_ninf", "%0")
 	mpRealIsPInf   = MustNewFuncProto("real.is_pinf", "%0")
-	mpRealCell   = MustNewFuncProto("real.cell", "%0")
-	mpRealFloor  = MustNewFuncProto("real.floor", "%0")
+	mpRealCell     = MustNewFuncProto("real.cell", "%0")
+	mpRealFloor    = MustNewFuncProto("real.floor", "%0")
 
 	// bool#method
 	mpBoolToString = MustNewFuncProto("bool.to_string", "%0")
@@ -706,8 +706,8 @@ var (
 	mpStrLength   = MustNewFuncProto("str.length", "%0")
 	mpStrToUpper  = MustNewFuncProto("str.to_upper", "%0")
 	mpStrToLower  = MustNewFuncProto("str.to_lower", "%0")
-	mpStrSubStr = MustNewFuncProto("str.substr", "{%d}{%d%d}")
-	mpStrIndex  = MustNewFuncProto("str.index", "{%d}{%d%d}")
+	mpStrSubStr   = MustNewFuncProto("str.substr", "{%d}{%d%d}")
+	mpStrIndex    = MustNewFuncProto("str.index", "{%d}{%d%d}")
 
 	// list#method
 	mpListLength   = MustNewFuncProto("list.length", "%0")
