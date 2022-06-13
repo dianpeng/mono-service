@@ -17,7 +17,7 @@ var (
 	fnProtoNewUrl          = pl.MustNewModFuncProto("http", "new_url", "{%0}{%s}")
 	fnProtoConcateHttpBody = pl.MustNewModFuncProto("http", "concate_body", "%a*")
 	fnProtoDo              = pl.MustNewModFuncProto("http", "do",
-		"{%s%s}{%s%s%l}{%s%s%a%s}{%s%s%a%U['http.body']}")
+		"{%s%s}{%s%s%l}{%s%s%a%s}{%s%s%a%U['http.body']}{%s%s%a%U['.readablestream']}")
 )
 
 // create an empty url for manipulation usage

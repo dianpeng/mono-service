@@ -99,7 +99,26 @@ func (h *Body) ToString(_ interface{}) (string, error) {
 	return HttpBodyTypeId, nil
 }
 
-func (h *Body) method(_ interface{}, name string, _ []pl.Val) (pl.Val, error) {
+var (
+	methodProtoString = pl.MustNewFuncProto("http.body.string", "%0")
+)
+
+func (h *Body) method(_ interface{}, name string, arg []pl.Val) (pl.Val, error) {
+	switch name {
+	case "string":
+		_, err := methodProtoString.Check(arg)
+		if err != nil {
+			return pl.NewValNull(), err
+		}
+		str, err := h.stream.ConsumeAsString()
+		if err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValStr(str), nil
+
+	default:
+		break
+	}
 	return pl.NewValNull(), fmt.Errorf("http.body unknown method %s", name)
 }
 

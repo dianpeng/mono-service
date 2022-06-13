@@ -186,7 +186,7 @@ func (h *ReadableStream) ToJSON(_ interface{}) (string, error) {
 var (
 	methodProtoReadableStreamCacheString    = pl.MustNewFuncProto(".readablestream.cacheString", "%0")
 	methodProtoReadableStreamTryCacheString = pl.MustNewFuncProto(".readablestream.tryCacheString", "%0")
-	methodProtoReadableStreamAsString       = pl.MustNewFuncProto(".readablestream.asString", "%0")
+	methodProtoReadableStreamAsString       = pl.MustNewFuncProto(".readablestream.string", "%0")
 	methodProtoReadableStreamClose          = pl.MustNewFuncProto(".readablestream.close", "%0")
 )
 
@@ -212,7 +212,7 @@ func (h *ReadableStream) method(_ interface{}, name string, arg []pl.Val) (pl.Va
 			return pl.NewValStr(string(b)), nil
 		}
 	// consume APIs
-	case "asString":
+	case "string":
 		if _, err := methodProtoReadableStreamAsString.Check(arg); err != nil {
 			return pl.NewValNull(), err
 		}
