@@ -169,7 +169,7 @@ func (h *Hpl) fnHttp(args []pl.Val) (pl.Val, error) {
 	return fnDoHttp(h.session, args)
 }
 
-func (p *Hpl) evalCallBasic(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
+func (p *Hpl) doEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
 	switch n {
 	case "http::do":
 		return p.fnHttp(args)
@@ -177,9 +177,57 @@ func (p *Hpl) evalCallBasic(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, e
 		return fnConcateHttpBody(args)
 	case "http::new_url":
 		return fnNewUrl(args)
+	case "http::new_request":
+		return fnNewRequest(args)
 	default:
 		return p.session.OnCall(x, n, args)
 	}
+}
+
+// -----------------------------------------------------------------------------
+// customize phase
+func (h *Hpl) customizeLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
+	return h.session.OnLoadVar(x, n)
+}
+
+func (p *Hpl) customizeStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
+	return p.session.OnStoreVar(x, n, v)
+}
+
+func (h *Hpl) customizeEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
+	return h.doEvalCall(x, n, args)
+}
+
+func (h *Hpl) customizeAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
+	return h.session.OnAction(x, actionName, arg)
+}
+
+func (h *Hpl) OnCustomize(selector string, session SessionWrapper) error {
+	if h.Policy == nil {
+		return fmt.Errorf("the Hpl engine does not have any policy binded")
+	}
+	if h.isRunning {
+		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
+	}
+	if h.respWriter != nil {
+		panic("concurrent access")
+	}
+
+	h.isRunning = true
+	h.session = session
+
+	h.Eval.LoadVarFn = h.customizeLoadVar
+	h.Eval.StoreVarFn = h.customizeStoreVar
+	h.Eval.CallFn = h.customizeEvalCall
+	h.Eval.ActionFn = h.customizeAction
+
+	defer func() {
+		h.isRunning = false
+		h.respWriter = nil
+		h.session = nil
+	}()
+
+	return h.Eval.Eval(selector, h.Policy)
 }
 
 // -----------------------------------------------------------------------------
@@ -193,7 +241,7 @@ func (p *Hpl) initStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 }
 
 func (h *Hpl) initEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	return h.session.OnCall(x, n, args)
+	return h.doEvalCall(x, n, args)
 }
 
 func (h *Hpl) initAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
@@ -239,7 +287,7 @@ func (h *Hpl) accessStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 }
 
 func (h *Hpl) accessEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	return h.session.OnCall(x, n, args)
+	return h.doEvalCall(x, n, args)
 }
 
 func (h *Hpl) accessAction(x *pl.Evaluator, n string, arg pl.Val) error {
@@ -286,7 +334,7 @@ func (h *Hpl) httpRequestStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 }
 
 func (h *Hpl) httpRequestEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	return h.session.OnCall(x, n, args)
+	return h.doEvalCall(x, n, args)
 }
 
 func (h *Hpl) httpRequestAction(x *pl.Evaluator, n string, arg pl.Val) error {
@@ -468,7 +516,7 @@ func (p *Hpl) httpResponseStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 }
 
 func (p *Hpl) httpResponseEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	return p.evalCallBasic(x, n, args)
+	return p.doEvalCall(x, n, args)
 }
 
 func (h *Hpl) OnResponse(selector string,
@@ -529,7 +577,7 @@ func (p *Hpl) logStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 }
 
 func (h *Hpl) logEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	return h.evalCallBasic(x, n, args)
+	return h.doEvalCall(x, n, args)
 }
 
 func (h *Hpl) logAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
@@ -623,7 +671,7 @@ func (p *Hpl) errorStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 }
 
 func (h *Hpl) errorEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	return h.evalCallBasic(x, n, args)
+	return h.doEvalCall(x, n, args)
 }
 
 func (h *Hpl) errorAction(x *pl.Evaluator, actionName string, arg pl.Val) error {

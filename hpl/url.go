@@ -16,6 +16,10 @@ func ValIsUrl(v pl.Val) bool {
 	return v.Id() == ".url"
 }
 
+func (h *Url) URL() *url.URL {
+	return h.url
+}
+
 func (h *Url) Index(_ interface{}, key pl.Val) (pl.Val, error) {
 	if key.Type != pl.ValStr {
 		return pl.NewValNull(), fmt.Errorf("invalid index, URL name must be string")

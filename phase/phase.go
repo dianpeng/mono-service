@@ -23,6 +23,9 @@ const (
 
 	// lastly log generation
 	PhaseAccessLog
+
+	// unknown phase, used for background execution
+	PhaseBackground
 )
 
 func GetPhaseName(p int) string {
@@ -45,6 +48,8 @@ func GetPhaseName(p int) string {
 		return "http.response"
 	case PhaseAccessLog:
 		return ".access_log"
+	case PhaseBackground:
+		return ".backgronud"
 	default:
 		return "<unknown>"
 	}

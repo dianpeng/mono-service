@@ -64,7 +64,7 @@ func (s *nullSession) Prepare(_ *http.Request, _ hrouter.Params) (interface{}, e
 	return nil, nil
 }
 
-func (s *nullSession) Accept(_ interface{}, _ *hpl.Hpl) (service.SessionResult, error) {
+func (s *nullSession) Accept(_ interface{}, _ *hpl.Hpl, _ hpl.SessionWrapper) (service.SessionResult, error) {
 	return service.SessionResult{
 		Event: "response",
 	}, nil

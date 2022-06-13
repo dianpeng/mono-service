@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/dianpeng/mono-service/pl"
+	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 type Request struct {
@@ -14,6 +16,14 @@ type Request struct {
 	header  pl.Val
 	url     pl.Val
 	body    pl.Val
+}
+
+func ValIsHttpRequest(v pl.Val) bool {
+	return v.Id() == HttpRequestTypeId
+}
+
+func (r *Request) HttpRequest() *http.Request {
+	return r.request
 }
 
 func (r *Request) setUrl(v pl.Val) error {
@@ -250,4 +260,56 @@ func NewRequestVal(req *http.Request) pl.Val {
 		x.Info,
 		x.ToNative,
 	)
+}
+
+func NewRequestValFromVal(
+	method string,
+	url string,
+	body pl.Val,
+) (pl.Val, error) {
+
+	switch body.Type {
+	case pl.ValStr:
+		return NewRequestValFromString(method, url, body.String())
+	default:
+		if ValIsHttpBody(body) {
+			b, _ := body.Usr().Context.(*Body)
+			return NewRequestValFromStream(method, url, b.Stream().Stream)
+		}
+		if ValIsReadableStream(body) {
+			s, _ := body.Usr().Context.(*ReadableStream)
+			return NewRequestValFromStream(method, url, s.Stream)
+		}
+
+		return pl.NewValNull(), fmt.Errorf("unknown body type: %s", body.Id())
+	}
+}
+
+func NewRequestValFromStream(
+	method string,
+	url string,
+	body io.Reader) (pl.Val, error) {
+
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return pl.NewValNull(), err
+	}
+
+	return NewRequestVal(req), nil
+}
+
+func NewRequestValFromString(
+	method string,
+	url string,
+	body string) (pl.Val, error) {
+
+	return NewRequestValFromStream(method, url, strings.NewReader(body))
+}
+
+func NewRequestValFromBuffer(
+	method string,
+	url string,
+	body []byte) (pl.Val, error) {
+
+	return NewRequestValFromStream(method, url, strings.NewReader(string(body)))
 }

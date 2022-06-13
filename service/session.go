@@ -30,7 +30,7 @@ type Session interface {
 	Prepare(*http.Request, hrouter.Params) (interface{}, error)
 
 	// Invoked when the http request is been accepted by the session handler
-	Accept(interface{}, *hpl.Hpl) (SessionResult, error)
+	Accept(interface{}, *hpl.Hpl, hpl.SessionWrapper) (SessionResult, error)
 
 	// The service session is terminated
 	Done(interface{})

@@ -27,6 +27,10 @@ func (h *Response) isChunked() bool {
 	return false
 }
 
+func (r *Response) HttpResponse() *http.Response {
+	return r.response
+}
+
 func (r *Response) setHeader(v pl.Val) error {
 	if ValIsHttpHeader(v) {
 		r.header = v

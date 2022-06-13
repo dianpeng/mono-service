@@ -15,9 +15,10 @@ import (
 
 var (
 	fnProtoNewUrl          = pl.MustNewModFuncProto("http", "new_url", "{%0}{%s}")
+	fnProtoNewRequest      = pl.MustNewModFuncProto("http", "new_request", "{%s%s}{%s%s%s}{%s%s%U['http.body']}{%s%s%U['.readablestream']}")
 	fnProtoConcateHttpBody = pl.MustNewModFuncProto("http", "concate_body", "%a*")
 	fnProtoDo              = pl.MustNewModFuncProto("http", "do",
-		"{%s%s}{%s%s%l}{%s%s%a%s}{%s%s%a%U['http.body']}{%s%s%a%U['.readablestream']}")
+		"{%U['http.request']}{%s%s}{%s%s%l}{%s%s%a%s}{%s%s%a%U['http.body']}{%s%s%a%U['.readablestream']}")
 )
 
 // create an empty url for manipulation usage
@@ -37,6 +38,21 @@ func fnNewUrl(argument []pl.Val) (pl.Val, error) {
 
 	default:
 		return NewUrlVal(&url.URL{}), nil
+	}
+}
+
+func fnNewRequest(argument []pl.Val) (pl.Val, error) {
+	alog, err := fnProtoNewRequest.Check(argument)
+	if err != nil {
+		return pl.NewValNull(), err
+	}
+
+	switch alog {
+	case 2:
+		return NewRequestValFromStream(argument[0].String(), argument[1].String(), &eofReadCloser{})
+
+	default:
+		return NewRequestValFromVal(argument[0].String(), argument[1].String(), argument[2])
 	}
 }
 
@@ -79,43 +95,52 @@ func fnDoHttp(session SessionWrapper, argument []pl.Val) (pl.Val, error) {
 		return pl.NewValNull(), err
 	}
 
-	url := argument[0].String()
-	method := argument[1].String()
+	var req *http.Request
 
-	var body io.Reader
-	body = http.NoBody
+	if alog > 1 {
+		url := argument[0].String()
+		method := argument[1].String()
 
-	if alog == 4 {
-		switch argument[3].Type {
-		case pl.ValStr:
-			body = strings.NewReader(argument[3].String())
-			break
+		var body io.Reader
+		body = http.NoBody
 
-		default:
-			must(ValIsHttpBody(argument[3]), "must be http.body")
-			b, _ := argument[3].Usr().Context.(*Body)
-			body = b.Stream().Stream
-			break
-		}
-	}
+		if alog == 4 {
+			switch argument[3].Type {
+			case pl.ValStr:
+				body = strings.NewReader(argument[3].String())
+				break
 
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		return pl.NewValNull(), fmt.Errorf("http::do cannot create request: %s", err.Error())
-	}
-
-	// check header field
-	if alog >= 3 && argument[2].Type == pl.ValList {
-		for _, hdr := range argument[2].List().Data {
-			if hdr.Type == pl.ValPair &&
-				hdr.Pair.First.Type == pl.ValStr &&
-				hdr.Pair.Second.Type == pl.ValStr {
-				req.Header.Add(hdr.Pair.First.String(), hdr.Pair.Second.String())
+			default:
+				must(ValIsHttpBody(argument[3]), "must be http.body")
+				b, _ := argument[3].Usr().Context.(*Body)
+				body = b.Stream().Stream
+				break
 			}
 		}
+
+		if hreq, err := http.NewRequest(method, url, body); err != nil {
+			return pl.NewValNull(), fmt.Errorf("http::do cannot create request: %s", err.Error())
+		} else {
+			req = hreq
+		}
+
+		// check header field
+		if alog >= 3 && argument[2].Type == pl.ValList {
+			for _, hdr := range argument[2].List().Data {
+				if hdr.Type == pl.ValPair &&
+					hdr.Pair.First.Type == pl.ValStr &&
+					hdr.Pair.Second.Type == pl.ValStr {
+					req.Header.Add(hdr.Pair.First.String(), hdr.Pair.Second.String())
+				}
+			}
+		}
+
+	} else {
+		hreq, _ := argument[0].Usr().Context.(*Request)
+		req = hreq.HttpRequest()
 	}
 
-	client, err := session.GetHttpClient(url)
+	client, err := session.GetHttpClient(req.URL.String())
 	if err != nil {
 		return pl.NewValNull(), fmt.Errorf("http::do cannot create client: %s", err.Error())
 	}

@@ -165,7 +165,7 @@ func (b *bodySignSession) Done(_ interface{}) {
 	b.res = nil
 }
 
-func (b *bodySignSession) Accept(ctx interface{}, _ *hpl.Hpl) (service.SessionResult, error) {
+func (b *bodySignSession) Accept(ctx interface{}, _ *hpl.Hpl, _ hpl.SessionWrapper) (service.SessionResult, error) {
 	param, ok := ctx.(*bodySignInput)
 	if !ok {
 		return service.SessionResult{},

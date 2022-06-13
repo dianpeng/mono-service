@@ -8,7 +8,17 @@ vhost:
     max_header_size: 100000
 
     service:
-      - name: !eval "'body' + '_sign'"
+      - name: "concate"
+        tag: "simpel concate services"
+        router: 
+          path: "/impl/concate"
+          method:
+              - "GET"
+
+        max_session_size: 500
+        policy: !inc_string "lib/concate.pl"
+
+      - name: "body_sign"
         tag: !eval "str::to_upper('a very simple service')"
 
         router: 
@@ -29,7 +39,7 @@ vhost:
 
         max_session_size: 100
 
-        policy: !inc_string "lib/concate.pl"
+        policy: !inc_string "lib/null.pl"
 
       - name: "null"
         tag: "basic proxy"

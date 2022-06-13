@@ -3,7 +3,7 @@ rule response => {
 
   let url = proxy_url == "" ? "https://tmall.com" : proxy_url;
 
-  let resp = http::do("https://www.taobao.com", "GET");
+  let resp = http::do(http::new_request("GET", "https://www.taobao.com"));
 
   let sub_resp = http::do(url, "POST", null, resp.body);
 

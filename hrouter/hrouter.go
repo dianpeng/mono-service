@@ -19,6 +19,12 @@ func NewParams(r *http.Request) Params {
 	}
 }
 
+func NewEmptyParams() Params {
+	return Params{
+		p: make(parlist),
+	}
+}
+
 func (p *Params) ByName(id string) string {
 	return p.p[id]
 }

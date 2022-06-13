@@ -1,21 +1,20 @@
-session {
-  a = 10;
-  b = 20;
-  c = 200 - 1 + 1;
+rule backend => {
+  let separator = "\n\n\n\n<!---- SEPARATOR FROM MONO SERVICE ---->\n\n\n\n";
+
+  output => [
+    http::new_url("https://www.tmall.com"), 
+    separator,
+    http::new_request("POST", "https://www.taobao.com", "Hello World")
+  ]
 }
 
-fn HelloWorld() {
-  return "hello world";
+// do nothing just
+rule check => {
+  pass => true;
 }
 
+// generate output
 rule response => {
-  let proxy_url = request.header["x-proxy-url"];
-  let list_of_url = str::split(proxy_url, ';');
-  body => "{{c.to_string()}}\n{{HelloWorld()}}\n\n\n";
-  status => c;
-  print("Hello World", c, a, b);
-}
-
-rule error => {
-  dprint(phase, error);
+  body => output;
+  status => 201;
 }
