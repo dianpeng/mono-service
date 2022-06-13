@@ -8,7 +8,7 @@ fn HelloWorld() {
   return "hello world";
 }
 
-response => {
+rule response => {
 	let proxy_url = request.header["x-proxy-url"];
 	let list_of_url = str::split(proxy_url, ';');
   body => "{{c.to_string()}}\n{{HelloWorld()}}\n\n\n";
@@ -16,6 +16,6 @@ response => {
   print("Hello World", c, a, b);
 }
 
-error => {
+rule error => {
   dprint(phase, error);
 }

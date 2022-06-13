@@ -149,7 +149,7 @@ LOOP:
 	for {
 		tk := p.l.token
 		switch tk {
-		case tkId, tkStr, tkLSqr:
+		case tkRule, tkId, tkStr, tkLSqr:
 			if err := p.parseRule(); err != nil {
 				return nil, err
 			}
@@ -327,6 +327,10 @@ func (p *parser) parseFunction() (the_error error) {
 }
 
 func (p *parser) parseRule() error {
+	if p.l.token == tkRule {
+		p.l.next()
+	}
+
 	p.stbl = newSymTable()
 	p.stbl.add("#frame")
 	defer func() {
@@ -340,25 +344,28 @@ func (p *parser) parseRule() error {
 	if p.l.token == tkStr || p.l.token == tkId {
 		name = p.l.valueText
 		p.l.next()
-	} else {
+	} else if p.l.token == tkLSqr {
 		p.l.next()
 		if p.l.token != tkStr && p.l.token != tkId {
-			return p.err("unexpected token, expect string or identifier for policy name")
+			return p.err("unexpected token, expect string or identifier for rule name")
 		}
 		name = p.l.valueText
 		if !p.l.expect(tkRSqr) {
 			return p.l.toError()
 		}
 		p.l.next()
+	} else {
+		return p.err("unexpected token here, expect a string/identifier or a [id] to " +
+			"represent rule name")
 	}
 
 	// notes the name must be none empty and also must not start with @, which is
 	// builtin event name
 	if name == "" {
-		return p.err("invalid policy name, cannot be empty string")
+		return p.err("invalid rule name, cannot be empty string")
 	}
 	if name[0] == '@' {
-		return p.err("invalid policy name, cannot start with @ which is builtin name")
+		return p.err("invalid rule name, cannot start with @ which is builtin name")
 	}
 
 	prog := newProgram(name, progRule)
@@ -374,8 +381,8 @@ func (p *parser) parseRule() error {
 		}
 		prog.emit0(p.l, bcMatch)
 	} else {
-		// bytecode for compare current event to be the same as the policy name
-		// essentially is when event == "policy_name"
+		// bytecode for compare current event to be the same as the rule name
+		// essentially is when event == "rule_name"
 		prog.emit0(p.l, bcLoadDollar)
 		idx := prog.addStr(name)
 		prog.emit1(p.l, bcLoadStr, idx)
@@ -383,8 +390,8 @@ func (p *parser) parseRule() error {
 		prog.emit0(p.l, bcMatch)
 	}
 
-	// allow an optional arrow to indicate this is a policy, this is the preferred
-	// grammar to indicate the policy definition inside
+	// allow an optional arrow to indicate this is a rule, this is the preferred
+	// grammar to indicate the rule definition inside
 	if p.l.token == tkArrow {
 		p.l.next()
 	}

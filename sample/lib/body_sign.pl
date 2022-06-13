@@ -1,11 +1,11 @@
-error => {
+rule error => {
 	dprint(phase, error);
 	status => 503;
 	body => "whatever shit: {{phase}} => {{error}}\n";
 }
 
 // sign policy, used for handling signing result
-sign => {
+rule sign => {
 	status => 200;
 	header_set => ("x-body-sign-final-result", sign);
 	header_set => ("x-body-sign-method", signMethod);
@@ -18,7 +18,7 @@ sign => {
 // policy for handling verification result
 // reject means the verification failed; pass means the verification
 // passed
-reject => {
+rule reject => {
 	status => 404;
 	header_set  => [
 		("x-body-sign-result", sign),
@@ -30,7 +30,7 @@ reject => {
 	body => signBody;
 };
 
-pass => {
+rule pass => {
 	status => 202;
 	header_set => [
 		("x-body-sign-result", sign),
@@ -39,6 +39,6 @@ pass => {
 	body => signBody;
 };
 
-log => {
+rule log => {
 	dprint(logFormat);
 }

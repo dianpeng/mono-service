@@ -1,4 +1,4 @@
-response => {
+rule response => {
 	let proxy_url = request.header.x_proxy_url;
 
 	let url = proxy_url == "" ? "https://tmall.com" : proxy_url;
