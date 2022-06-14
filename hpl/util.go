@@ -82,3 +82,43 @@ func httpHeaderDelete(hdr http.Header, key_pattern pl.Val) int {
 		},
 	)
 }
+
+func foreachHeaderKV(arg pl.Val, fn func(key string, val string)) bool {
+	switch arg.Type {
+	case pl.ValList:
+		for _, v := range arg.List().Data {
+			if v.Type == pl.ValPair && v.Pair.First.Type == pl.ValStr && v.Pair.Second.Type == pl.ValStr {
+				fn(v.Pair.First.String(), v.Pair.Second.String())
+			}
+		}
+		return true
+
+	case pl.ValPair:
+		if arg.Pair.First.Type == pl.ValStr && arg.Pair.Second.Type == pl.ValStr {
+			fn(arg.Pair.First.String(), arg.Pair.Second.String())
+		}
+		return true
+
+	case pl.ValMap:
+		for k, v := range arg.Map().Data {
+			if v.Type == pl.ValStr {
+				fn(k, v.String())
+			}
+		}
+		return true
+
+	default:
+		if ValIsHttpHeader(arg) {
+			// known special user type to us, then just foreach the header
+			hdr := arg.Usr().Context.(*Header)
+			for k, v := range hdr.header {
+				for _, vv := range v {
+					fn(k, vv)
+				}
+			}
+		}
+		break
+	}
+
+	return false
+}

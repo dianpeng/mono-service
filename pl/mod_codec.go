@@ -5,7 +5,7 @@ import (
 	"net/url"
 )
 
-func initModCodec() {
+func init() {
 	addrefMF(
 		"codec",
 		"b64_tostring",

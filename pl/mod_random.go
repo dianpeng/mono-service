@@ -9,7 +9,7 @@ import (
 
 var randomstringlettertable = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_")
 
-func initModRandom() {
+func init() {
 	addrefMF(
 		"rand",
 		"real",

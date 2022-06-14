@@ -181,24 +181,33 @@ func (h *Hpl) getHttpClientFactory() HttpClientFactory {
 	return nil
 }
 
-func (h *Hpl) fnHttp(args []pl.Val) (pl.Val, error) {
+func (h *Hpl) fnHttp(args []pl.Val,
+	entry func(HttpClientFactory, []pl.Val) (pl.Val, error)) (pl.Val, error) {
+
 	fac := h.getHttpClientFactory()
 	if fac == nil {
 		return pl.NewValNull(), fmt.Errorf("http client factory is not setup")
 	}
-	return fnDoHttp(fac, args)
+	return entry(fac, args)
 }
 
 func (p *Hpl) doEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
 	switch n {
 	case "http::do":
-		return p.fnHttp(args)
-	case "http::concate_body":
-		return fnConcateHttpBody(args)
-	case "http::new_url":
-		return fnNewUrl(args)
-	case "http::new_request":
-		return fnNewRequest(args)
+		return p.fnHttp(
+			args,
+			fnHttpDo,
+		)
+	case "http::get":
+		return p.fnHttp(
+			args,
+			fnHttpGet,
+		)
+	case "http::post":
+		return p.fnHttp(
+			args,
+			fnHttpPost,
+		)
 	default:
 		return p.session.OnCall(x, n, args)
 	}
@@ -438,47 +447,6 @@ func (h *Hpl) OnRequest(selector string, req *http.Request, param hrouter.Params
 
 // -----------------------------------------------------------------------------
 // response phase
-
-func foreachHeaderKV(arg pl.Val, fn func(key string, val string)) bool {
-	if arg.Type == pl.ValList {
-		for _, v := range arg.List().Data {
-			if v.Type == pl.ValPair && v.Pair.First.Type == pl.ValStr && v.Pair.Second.Type == pl.ValStr {
-				fn(v.Pair.First.String(), v.Pair.Second.String())
-			}
-		}
-	} else if arg.Type == pl.ValPair {
-		if arg.Pair.First.Type == pl.ValStr && arg.Pair.Second.Type == pl.ValStr {
-			fn(arg.Pair.First.String(), arg.Pair.Second.String())
-		}
-	} else if ValIsHttpHeader(arg) {
-		// known special user type to us, then just foreach the header
-		hdr := arg.Usr().Context.(*Header)
-		for k, v := range hdr.header {
-			for _, vv := range v {
-				fn(k, vv)
-			}
-		}
-	} else {
-		return false
-	}
-
-	return true
-}
-
-func foreachStr(arg pl.Val, fn func(key string)) bool {
-	if arg.Type == pl.ValList {
-		for _, v := range arg.List().Data {
-			if v.Type == pl.ValStr {
-				fn(v.String())
-			}
-		}
-	} else if arg.Type == pl.ValStr {
-		fn(arg.String())
-	} else {
-		return false
-	}
-	return true
-}
 
 func (p *Hpl) httpResponseAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
 	switch actionName {

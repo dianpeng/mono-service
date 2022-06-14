@@ -17,6 +17,10 @@ func ValIsHttpHeader(v pl.Val) bool {
 	return v.Id() == HttpHeaderTypeId
 }
 
+func (h *Header) HttpHeader() http.Header {
+	return h.header
+}
+
 func (h *Header) Has(key string) bool {
 	_, ok := h.header[key]
 	return ok
@@ -222,4 +226,24 @@ func NewHeaderVal(header http.Header) pl.Val {
 		x.Info,
 		x.ToNative,
 	)
+}
+
+func NewHeaderValFromVal(v pl.Val) (pl.Val, error) {
+	if v.Id() == HttpHeaderTypeId {
+		hdr, _ := v.Usr().Context.(*Header)
+		return NewHeaderVal(hdr.header), nil
+	}
+
+	hdr := make(http.Header)
+
+	if !foreachHeaderKV(
+		v,
+		func(k, v string) {
+			hdr.Add(k, v)
+		},
+	) {
+		return pl.NewValNull(), fmt.Errorf("unknown value type to initialize http.header", v.Id())
+	}
+
+	return NewHeaderVal(hdr), nil
 }

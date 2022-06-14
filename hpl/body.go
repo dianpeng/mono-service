@@ -176,3 +176,22 @@ func NewBodyValFromBuffer(data []byte) pl.Val {
 
 	return newBodyValFromReadableStream(streamVal, stream)
 }
+
+func NewBodyValFromVal(v pl.Val) (pl.Val, error) {
+	switch v.Type {
+	case pl.ValStr:
+		return NewBodyValFromString(v.String()), nil
+	default:
+		if ValIsReadableStream(v) {
+			x, _ := v.Usr().Context.(*ReadableStream)
+			return NewBodyValFromStream(x.Stream), nil
+		}
+		if ValIsHttpBody(v) {
+			x, _ := v.Usr().Context.(*Body)
+			return NewBodyValFromStream(x.Stream().Stream), nil
+		}
+		break
+	}
+
+	return pl.NewValNull(), fmt.Errorf("cannot create http.body from type: %s", v.Id())
+}

@@ -6,9 +6,9 @@ import (
 	"regexp"
 )
 
-type anyfunc interface{}
+type AnyFunc interface{}
 
-type intrinsicinfo struct {
+type IntrinsicInfo struct {
 	cname    string
 	pname    string
 	argproto *FuncProto
@@ -17,11 +17,15 @@ type intrinsicinfo struct {
 	entry EvalCall
 
 	// used when need reflection to wrap the actual function
-	rawfunc   anyfunc
+	rawfunc   AnyFunc
 	funcvalue *reflect.Value
 }
 
-var intrinsicFunc []*intrinsicinfo
+func (i *IntrinsicInfo) Check(a []Val) (int, error) {
+	return i.argproto.Check(a)
+}
+
+var intrinsicFunc []*IntrinsicInfo
 
 // special helper function to unpack reflection call's return argument into
 // acceptable format (Val, error). Notes, we paniced when the return value
@@ -139,7 +143,7 @@ func unpackReturn(r []reflect.Value) (Val, error) {
 // performance overhead. Using reflect makes us easy to work the binding go
 // function into the script.
 func funcWrapper(
-	info *intrinsicinfo, // info
+	info *IntrinsicInfo, // info
 	args []Val, // function arguments from script side
 ) (the_value Val, the_error error) {
 	must(info.funcvalue != nil, "the reflection entry should be initialized")
@@ -166,15 +170,15 @@ func funcWrapper(
 	return unpackReturn(retwrapper)
 }
 
-type IntrinsicCall = func(*intrinsicinfo, *Evaluator, string, []Val) (Val, error)
+type IntrinsicCall = func(*IntrinsicInfo, *Evaluator, string, []Val) (Val, error)
 
 func newiinfoEntry(
 	cname string,
 	pname string,
 	arg string,
-	entry IntrinsicCall) (*intrinsicinfo, error) {
+	entry IntrinsicCall) (*IntrinsicInfo, error) {
 
-	x := &intrinsicinfo{
+	x := &IntrinsicInfo{
 		cname: cname,
 		pname: pname,
 	}
@@ -194,9 +198,9 @@ func newiinfoReflect(
 	cname string,
 	pname string,
 	arg string,
-	f anyfunc) (*intrinsicinfo, error) {
+	f AnyFunc) (*IntrinsicInfo, error) {
 
-	x := &intrinsicinfo{
+	x := &IntrinsicInfo{
 		cname: cname,
 		pname: pname,
 	}
@@ -248,7 +252,7 @@ func addrefF(
 	cn string,
 	pn string,
 	p string,
-	f anyfunc,
+	f AnyFunc,
 ) {
 	x, err := newiinfoReflect(
 		cn,
@@ -265,7 +269,7 @@ func addrefMF(
 	fn string,
 	pn string,
 	p string,
-	f anyfunc,
+	f AnyFunc,
 ) {
 	mname := modFuncName(m, fn)
 	x, err := newiinfoReflect(
@@ -279,6 +283,22 @@ func addrefMF(
 	intrinsicFunc = append(intrinsicFunc, x)
 }
 
+func AddFunction(a0, a1, a2 string, entry IntrinsicCall) {
+	addF(a0, a1, a2, entry)
+}
+
+func AddModFunction(a0, a1, a2, a3 string, entry IntrinsicCall) {
+	addMF(a0, a1, a2, a3, entry)
+}
+
+func AddReflectionFunction(a0, a1, a2 string, f AnyFunc) {
+	addrefF(a0, a1, a2, f)
+}
+
+func AddModReflectionFunction(a0, a1, a2, a3 string, f AnyFunc) {
+	addrefMF(a0, a1, a2, a3, f)
+}
+
 // used by the compiler to generate ICall instructions
 func indexIntrinsic(name string) int {
 	for idx, v := range intrinsicFunc {
@@ -287,14 +307,4 @@ func indexIntrinsic(name string) int {
 		}
 	}
 	return -1
-}
-
-func init() {
-	initModBasic()
-	initModTime()
-	initModCodec()
-	initModStr()
-	initModRandom()
-	initModMath()
-	initModRegexp()
 }

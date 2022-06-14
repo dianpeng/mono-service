@@ -4,17 +4,13 @@ const {
 
 rule response {
   let proxy_url = request.header.x_proxy_url;
-
   let url = proxy_url == "" ? "https://tmall.com" : proxy_url;
-
   let resp = taobao;
-
-  let sub_resp = http::do(url, "GET");
-
+  let sub_resp = http::get("https://www.toutiao.com");
   let payload_buffer = sub_resp.body.stream.string();
 
   body => if sub_resp.status == 200 {
-    resp;
+    payload_buffer;
   } else {
     "the response status code is {{sub_resp.status}} which is not 200";
   };

@@ -4,7 +4,7 @@ import (
 	"math"
 )
 
-func initModMath() {
+func init() {
 	addrefMF(
 		"math",
 		"abs",

@@ -2,7 +2,7 @@ package pl
 
 import "strings"
 
-func initModStr() {
+func init() {
 
 	addrefMF(
 		"str",
@@ -106,7 +106,7 @@ func initModStr() {
 		"join",
 		"",
 		"%l%s",
-		func(info *intrinsicinfo, _ *Evaluator, _ string, args []Val) (Val, error) {
+		func(info *IntrinsicInfo, _ *Evaluator, _ string, args []Val) (Val, error) {
 			_, err := info.argproto.Check(args)
 			if err != nil {
 				return NewValNull(), err

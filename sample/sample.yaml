@@ -9,7 +9,7 @@ vhost:
 
     service:
       - name: "concate"
-        tag: "simpel concate services"
+        tag: !eval "str::to_upper('simpel concate services')"
         router: 
           path: "/impl/concate"
           method:

@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-func initModTime() {
+func init() {
 	addrefMF(
 		"time",
 		"unix",

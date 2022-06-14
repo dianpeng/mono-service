@@ -1,4 +1,4 @@
-rule backend => {
+rule generate => {
   let separator = "\n\n\n\n<!---- SEPARATOR FROM MONO SERVICE ---->\n\n\n\n";
 
   output => [

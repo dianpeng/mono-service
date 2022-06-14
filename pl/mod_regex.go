@@ -6,7 +6,7 @@ import (
 
 // heck, go's regexp library has too many crap
 
-func initModRegexp() {
+func init() {
 	addrefMF(
 		"regexp",
 		"new",

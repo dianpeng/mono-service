@@ -7,7 +7,7 @@ package module
 // Each request will be splitted into 2 different phases. And the go code will
 // drive each phase enter and leave
 
-// 1. backend
+// 1. generate
 //    In this phase, the policy engine's is responsible to generate a output
 //    via action "url" which contains a list of strings that indicates the
 //    URL a request must be made against to
@@ -482,7 +482,7 @@ func (c *concateSession) Accept(_ interface{}, h *hpl.Hpl, wrapper hpl.SessionWr
 
 	// run hpl
 	err := h.OnCustomize(
-		"backend",
+		"generate",
 		wrapper,
 	)
 

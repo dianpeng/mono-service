@@ -8,12 +8,12 @@ import (
 )
 
 // all the builtin basic functions
-func initModBasic() {
+func init() {
 	addF(
 		"dprint",
 		"",
 		"%a*",
-		func(info *intrinsicinfo, _ *Evaluator, _ string, args []Val) (Val, error) {
+		func(info *IntrinsicInfo, _ *Evaluator, _ string, args []Val) (Val, error) {
 			buf := new(bytes.Buffer)
 			for _, x := range args {
 				native := x.ToNative()
@@ -29,7 +29,7 @@ func initModBasic() {
 		"print",
 		"",
 		"%a*",
-		func(info *intrinsicinfo, _ *Evaluator, _ string, args []Val) (Val, error) {
+		func(info *IntrinsicInfo, _ *Evaluator, _ string, args []Val) (Val, error) {
 			var buf []string
 			for _, x := range args {
 				str, err := x.ToString()
@@ -47,7 +47,7 @@ func initModBasic() {
 		"to_string",
 		"",
 		"%a",
-		func(info *intrinsicinfo, _ *Evaluator, _ string, args []Val) (Val, error) {
+		func(info *IntrinsicInfo, _ *Evaluator, _ string, args []Val) (Val, error) {
 			_, err := info.argproto.Check(args)
 			if err != nil {
 				return NewValNull(), err
@@ -64,7 +64,7 @@ func initModBasic() {
 		"to_int",
 		"",
 		"{%a}{%a%d}",
-		func(info *intrinsicinfo, _ *Evaluator, _ string, args []Val) (Val, error) {
+		func(info *IntrinsicInfo, _ *Evaluator, _ string, args []Val) (Val, error) {
 			alen, err := info.argproto.Check(args)
 			if err != nil {
 				return NewValNull(), err
@@ -90,7 +90,7 @@ func initModBasic() {
 		"to_real",
 		"",
 		"{%a}{%a%f}",
-		func(info *intrinsicinfo, _ *Evaluator, _ string, args []Val) (Val, error) {
+		func(info *IntrinsicInfo, _ *Evaluator, _ string, args []Val) (Val, error) {
 			alen, err := info.argproto.Check(args)
 			if err != nil {
 				return NewValNull(), err
@@ -116,7 +116,7 @@ func initModBasic() {
 		"to_bool",
 		"",
 		"{%a}",
-		func(info *intrinsicinfo, _ *Evaluator, _ string, args []Val) (Val, error) {
+		func(info *IntrinsicInfo, _ *Evaluator, _ string, args []Val) (Val, error) {
 			_, err := info.argproto.Check(args)
 			if err != nil {
 				return NewValNull(), err
@@ -129,7 +129,7 @@ func initModBasic() {
 		"type",
 		"",
 		"{%a}",
-		func(info *intrinsicinfo, _ *Evaluator, _ string, args []Val) (Val, error) {
+		func(info *IntrinsicInfo, _ *Evaluator, _ string, args []Val) (Val, error) {
 			_, err := info.argproto.Check(args)
 			if err != nil {
 				return NewValNull(), err
@@ -142,7 +142,7 @@ func initModBasic() {
 		"len",
 		"",
 		"{%a}",
-		func(info *intrinsicinfo, _ *Evaluator, _ string, args []Val) (Val, error) {
+		func(info *IntrinsicInfo, _ *Evaluator, _ string, args []Val) (Val, error) {
 			_, err := info.argproto.Check(args)
 			if err != nil {
 				return NewValNull(), err
@@ -167,7 +167,7 @@ func initModBasic() {
 		"empty",
 		"",
 		"{%a}",
-		func(info *intrinsicinfo, _ *Evaluator, _ string, args []Val) (Val, error) {
+		func(info *IntrinsicInfo, _ *Evaluator, _ string, args []Val) (Val, error) {
 			_, err := info.argproto.Check(args)
 			if err != nil {
 				return NewValNull(), err
