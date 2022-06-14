@@ -89,7 +89,7 @@ func fnConcateHttpBody(argument []pl.Val) (pl.Val, error) {
 //   [2]: [header](list[string]),
 //   [3]: [body](string)
 // )
-func fnDoHttp(session SessionWrapper, argument []pl.Val) (pl.Val, error) {
+func fnDoHttp(factory HttpClientFactory, argument []pl.Val) (pl.Val, error) {
 	alog, err := fnProtoDo.Check(argument)
 	if err != nil {
 		return pl.NewValNull(), err
@@ -140,7 +140,7 @@ func fnDoHttp(session SessionWrapper, argument []pl.Val) (pl.Val, error) {
 		req = hreq.HttpRequest()
 	}
 
-	client, err := session.GetHttpClient(req.URL.String())
+	client, err := factory.GetHttpClient(req.URL.String())
 	if err != nil {
 		return pl.NewValNull(), fmt.Errorf("http::do cannot create client: %s", err.Error())
 	}

@@ -78,6 +78,16 @@ type VHost struct {
 	clientPool *hclient.HClientPool
 }
 
+type constHttpClientFactory struct {
+	timeout int64
+}
+
+func (c *constHttpClientFactory) GetHttpClient(url string) (hpl.HttpClient, error) {
+	return &http.Client{
+		Timeout: time.Duration(c.timeout) * time.Second,
+	}, nil
+}
+
 const (
 	responseUninit = iota
 	responseHeader
@@ -142,11 +152,31 @@ func (s *vhostService) getSessionHandler() (*sessionHandler, error) {
 	}
 }
 
-func newvhostService(vhost *VHost, svc service.Service, config *cfg.Service) (*vhostService, error) {
+func newvhostService(vhost *VHost,
+	svc service.Service,
+	config *cfg.Service,
+	vhconfig *cfg.VHost,
+) (*vhostService, error) {
+
+	// compile the policy
 	p, err := pl.CompilePolicy(config.Policy)
 	if err != nil {
 		return nil, err
 	}
+
+	// run the const initializer
+	if p.HasConst() {
+		hpl := hpl.NewHpl()
+		fac := &constHttpClientFactory{
+			timeout: cfg.NotZeroInt64(vhconfig.Resource.HttpClientTimeout, g.VHostHttpClientTimeout),
+		}
+		hpl.SetPolicy(p)
+		err := hpl.OnConst(fac)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &vhostService{
 		svc:         svc,
 		policy:      p,
@@ -676,6 +706,7 @@ func newVHost(config *cfg.VHost) (*VHost, error) {
 			vhost,
 			service,
 			svc,
+			config,
 		)
 		if err != nil {
 			return nil, err

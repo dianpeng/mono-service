@@ -55,6 +55,7 @@ type parser struct {
 	l         *lexer
 	policy    *Policy
 	stbl      *symTable
+	constVar  []string
 	sessVar   []string
 	callPatch []callentry
 }
@@ -69,6 +70,7 @@ func newParser(input string) *parser {
 const (
 	symSession = iota
 	symLocal
+	symConst
 	symDynamic
 )
 
@@ -81,7 +83,16 @@ func (p *parser) findSessionIdx(x string) int {
 	return -1
 }
 
-func (p *parser) resolveSymbol(xx string) (int, int) {
+func (p *parser) findConstIdx(x string) int {
+	for idx, n := range p.constVar {
+		if n == x {
+			return idx
+		}
+	}
+	return -1
+}
+
+func (p *parser) resolveSymbol(xx string, ignoreConst bool) (int, int) {
 	// local symbol table
 	local := p.stbl.find(xx)
 	if local != -1 {
@@ -92,6 +103,14 @@ func (p *parser) resolveSymbol(xx string) (int, int) {
 	sessVar := p.findSessionIdx(xx)
 	if sessVar != -1 {
 		return symSession, sessVar
+	}
+
+	if !ignoreConst {
+		// const symbol table
+		constVar := p.findConstIdx(xx)
+		if constVar != -1 {
+			return symConst, constVar
+		}
 	}
 
 	// lastly, it must be dynamic variable. Notes, we don't have closure for now
@@ -135,13 +154,23 @@ func (p *parser) parseExpression() (*Policy, error) {
 func (p *parser) parse() (*Policy, error) {
 	p.l.next()
 
-	// only the first statement can be session and it MUST be defined before any
-	// other statement
-	if p.l.token == tkSession {
-		if prog, err := p.parseSessionScope(); err != nil {
+	// top of the program allow user to write 2 types of special scope
+	//
+	// 1) Const scope, ie definition of const variable which is initialized once
+	//    the program is been parsed, ie right inside of the parser
+	//
+	// 2) Session Scope, which should be reinitialized once the session is done.
+	//    The definition of session is defined by user
+	//
+	if p.l.token == tkConst {
+		if err := p.parseConstScope(); err != nil {
 			return nil, err
-		} else {
-			p.policy.p = append(p.policy.p, prog)
+		}
+	}
+
+	if p.l.token == tkSession {
+		if err := p.parseSessionScope(); err != nil {
+			return nil, err
 		}
 	}
 
@@ -208,35 +237,67 @@ func (p *parser) parseSessionLoad(prog *program) error {
 	return p.parseSuffix(prog)
 }
 
-func (p *parser) parseSessionScope() (*program, error) {
+func (p *parser) parseSessionScope() error {
+	x, list, err := p.parseVarScope("@session",
+		func(_ string, prog *program, p *parser) {
+			prog.emit0(p.l, bcSetSession)
+		},
+	)
+
+	if err != nil {
+		return err
+	}
+	p.sessVar = list
+	p.policy.session = x
+	return nil
+}
+
+func (p *parser) parseConstScope() error {
+	x, list, err := p.parseVarScope("@const",
+		func(_ string, prog *program, p *parser) {
+			prog.emit0(p.l, bcSetConst)
+		},
+	)
+
+	if err != nil {
+		return err
+	}
+	p.constVar = list
+	p.policy.constProgram = x
+	return nil
+}
+
+func (p *parser) parseVarScope(rulename string,
+	gen func(string, *program, *parser)) (*program, []string, error) {
 	if !p.l.expect(tkLBra) {
-		return nil, p.l.toError()
+		return nil, nil, p.l.toError()
 	}
 	p.l.next()
 
-	prog := newProgram("@session", progSession)
+	prog := newProgram(rulename, progSession)
 	localR := prog.patch(p.l)
+	nlist := []string{}
 
 	if p.l.token != tkRBra {
 		// all the statement resides inside of it will be treated as session statement
 		// and will be allocated into a symbol table session shared
 		for {
 			if p.l.token != tkId {
-				return nil, p.err("expect a symbol to serve as session variable name")
+				return nil, nil, p.err("expect a symbol as variable name")
 			}
 			gname := p.l.valueText
 
 			if !p.l.expect(tkAssign) {
-				return nil, p.err("expect a '=' to represent session variable assignment")
+				return nil, nil, p.err("expect a '=' for variable assignment")
 			}
 			p.l.next()
 
 			if err := p.parseExpr(prog); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 
-			p.sessVar = append(p.sessVar, gname)
-			prog.emit0(p.l, bcSetSession)
+			nlist = append(nlist, gname)
+			gen(gname, prog, p)
 
 			if p.l.token == tkSemicolon {
 				p.l.next()
@@ -250,9 +311,9 @@ func (p *parser) parseSessionScope() (*program, error) {
 	// lastly halt the whole execution
 	prog.emit0(p.l, bcHalt)
 	prog.emit1At(p.l, localR, bcReserveLocal, 0)
-
 	p.l.next()
-	return prog, nil
+
+	return prog, nlist, nil
 }
 
 // parsing a user defined script function
@@ -469,7 +530,7 @@ func (p *parser) parseBasicStmt(prog *program) error {
 				return err
 			}
 
-			sym, idx := p.resolveSymbol(lexeme.sval)
+			sym, idx := p.resolveSymbol(lexeme.sval, true)
 			switch sym {
 			case symSession:
 				prog.emit1(p.l, bcStoreSession, idx)
@@ -1321,7 +1382,7 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 			// 1. session variable
 			// 2. local variable
 			// 3. dynmaic variable
-			symT, symIdx := p.resolveSymbol(name)
+			symT, symIdx := p.resolveSymbol(name, false)
 			switch symT {
 			case symSession:
 				prog.emit1(p.l, bcLoadSession, symIdx)
@@ -1330,6 +1391,9 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 			case symLocal:
 				prog.emit1(p.l, bcLoadLocal, symIdx)
 				break
+
+			case symConst:
+				prog.emit1(p.l, bcLoadConst, symIdx)
 
 			default:
 				prog.emit1(p.l, bcLoadVar, prog.addStr(name))

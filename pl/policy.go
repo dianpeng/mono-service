@@ -5,9 +5,18 @@ import (
 )
 
 type Policy struct {
+	// const initialization part of the policy, ie used througout the lifecycle
+	// of the whole policy
+	constProgram *program
+
+	// initialization status of the const variable vector. notes this field will
+	// be fed up by parser. the array contains all the initialized status of the
+	// policy code
+	constVar []Val
+
 	// initialization part of the policy, if policy does not have initialization
 	// code then this part is empty
-	g *program
+	session *program
 
 	// all the named rules, evaluation will iterate each program for execution
 	// until one is found
@@ -43,15 +52,23 @@ func (p *Policy) getFunctionIndex(name string) int {
 	return i
 }
 
+func (p *Policy) HasSession() bool {
+	return p.session != nil
+}
+
+func (p *Policy) HasConst() bool {
+	return p.constProgram != nil
+}
+
 func (p *Policy) Dump() string {
 	var b bytes.Buffer
-	b.WriteString(":function =================================\n")
+	b.WriteString("function> -------------------------------- \n")
 	for _, p := range p.fn {
 		b.WriteString(p.dump())
 		b.WriteRune('\n')
 	}
 
-	b.WriteString(":rules ====================================\n")
+	b.WriteString("rules>    -------------------------------- \n")
 	for _, p := range p.p {
 		b.WriteString(p.dump())
 		b.WriteRune('\n')
@@ -66,16 +83,6 @@ func CompilePolicy(policy string) (*Policy, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// find out the session variable
-	if len(po.p) > 0 {
-		p0 := po.p[0]
-		if p0.name == "@session" {
-			po.p = po.p[1:]
-			po.g = p0
-		}
-	}
-
 	return po, nil
 }
 

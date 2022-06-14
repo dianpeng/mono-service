@@ -82,10 +82,12 @@ const (
 
 	// this instruction can only be generated during the global scope
 	bcSetSession = 71
-
 	// this 2 instructions are used during normal policy execution
 	bcLoadSession  = 72
 	bcStoreSession = 73
+
+	bcSetConst  = 75
+	bcLoadConst = 76
 
 	// call
 	bcCall   = 81
@@ -518,6 +520,10 @@ func getBytecodeName(bc int) string {
 		return "load-session"
 	case bcStoreSession:
 		return "store-session"
+	case bcSetConst:
+		return "set-const"
+	case bcLoadConst:
+		return "load-const"
 	case bcLoadRegexp:
 		return "load-regexp"
 

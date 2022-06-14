@@ -74,6 +74,7 @@ const (
 	tkTrue
 	tkFalse
 	tkNull
+	tkConst
 	tkSession
 	tkLet
 	tkWhen
@@ -199,6 +200,8 @@ func getTokenName(tk int) string {
 		return "null"
 	case tkLet:
 		return "let"
+	case tkConst:
+		return "const"
 	case tkSession:
 		return "session"
 	case tkWhen:
@@ -296,6 +299,10 @@ func (t *lexer) position() string {
 	return fmt.Sprintf("around (%d, %d)@(```%s```)", line, col, string(t.input[start:end]))
 }
 
+func (t *lexer) tokenName() string {
+	return getTokenName(t.token)
+}
+
 func (t *lexer) e(err error) int {
 	return t.err(err.Error())
 }
@@ -312,8 +319,7 @@ func (t *lexer) expectCurrent(tk int) bool {
 	if tt == tk {
 		return true
 	} else {
-		t.err(fmt.Sprintf("expect token %s, but got %s",
-			getTokenName(tk), getTokenName(t.token)))
+		t.err(fmt.Sprintf("expect token %s, but got %s", getTokenName(tk), t.tokenName()))
 		return false
 	}
 }
@@ -573,6 +579,9 @@ func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 		case "session":
 			t.token = tkSession
 			return tkSession
+		case "const":
+			t.token = tkConst
+			return tkConst
 		case "when":
 			t.token = tkWhen
 			return tkWhen

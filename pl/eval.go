@@ -14,9 +14,8 @@ type EvalStoreVar func(*Evaluator, string, Val) error
 type EvalCall func(*Evaluator, string, []Val) (Val, error)
 type EvalAction func(*Evaluator, string, Val) error
 
-// notes on function call frame layout
-//
-// the parser will generate bytecode to allow following stack value layout
+// Notes on function call frame layout
+// The parser will generate bytecode to allow following stack value layout
 //
 // [funcframe] (a user value)
 // [arg:N]
@@ -26,8 +25,9 @@ type EvalAction func(*Evaluator, string, Val) error
 // [index:function] <-------------- framep
 
 type Evaluator struct {
-	Stack      []Val
-	Session    []Val
+	Stack   []Val
+	Session []Val
+
 	LoadVarFn  EvalLoadVar
 	StoreVarFn EvalStoreVar
 	CallFn     EvalCall
@@ -927,6 +927,21 @@ VM:
 				}
 				break
 
+			// global
+			case bcSetConst:
+				ctx := e.top0()
+				e.pop()
+				policy.constVar = append(policy.constVar, ctx)
+				break
+
+			case bcLoadConst:
+				if len(policy.constVar) <= bc.argument {
+					return e.doErrf(prog, pc, "@global is not executed")
+				} else {
+					e.push(policy.constVar[bc.argument])
+				}
+				break
+
 			case bcMatch:
 				c := e.top0()
 				if c.ToBoolean() {
@@ -950,11 +965,20 @@ VM:
 	return nil
 }
 
-func (e *Evaluator) EvalSession(p *Policy) error {
-	if p.g == nil {
+func (e *Evaluator) EvalConst(p *Policy) error {
+	if !p.HasConst() {
 		return nil
 	}
-	glb := []*program{p.g}
+	glb := []*program{p.constProgram}
+	p.constVar = nil
+	return e.doEval("@const", glb, p)
+}
+
+func (e *Evaluator) EvalSession(p *Policy) error {
+	if !p.HasSession() {
+		return nil
+	}
+	glb := []*program{p.session}
 	e.Session = nil
 	return e.doEval("@session", glb, p)
 }

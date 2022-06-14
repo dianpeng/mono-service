@@ -25,6 +25,14 @@ type HttpClient interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
+type HttpClientFactory interface {
+	GetHttpClient(url string) (HttpClient, error)
+}
+
+type ConstSessionWrapper interface {
+	HttpClientFactory
+}
+
 // Interface used by VHost to bridge SessionWrapper/Service object into the HPL
 // world. HPL knows nothing about the service/session and also hservice. HPL is
 // just a wrapper around PL but with all the http/networking utilities
@@ -40,7 +48,7 @@ type SessionWrapper interface {
 	GetErrorDescription() string
 
 	// special function used for exposing other utilities
-	GetHttpClient(url string) (HttpClient, error)
+	HttpClientFactory
 }
 
 // ----------------------------------------------------------------------------
@@ -116,10 +124,11 @@ type Hpl struct {
 	Policy *pl.Policy
 
 	// internal status during evaluation context
-	request    pl.Val
-	respWriter *hplResponseWriter
-	params     pl.Val
-	session    SessionWrapper
+	request      pl.Val
+	respWriter   *hplResponseWriter
+	params       pl.Val
+	session      SessionWrapper
+	constSession ConstSessionWrapper
 
 	log       *alog.SessionLog
 	isRunning bool
@@ -162,11 +171,22 @@ func (p *Hpl) loadVarBasic(x *pl.Evaluator, n string) (pl.Val, error) {
 	}
 }
 
-func (h *Hpl) fnHttp(args []pl.Val) (pl.Val, error) {
-	if h.session == nil {
-		return pl.NewValNull(), fmt.Errorf("http::do cannot be executed, session not bound")
+func (h *Hpl) getHttpClientFactory() HttpClientFactory {
+	if h.session != nil {
+		return h.session
 	}
-	return fnDoHttp(h.session, args)
+	if h.constSession != nil {
+		return h.constSession
+	}
+	return nil
+}
+
+func (h *Hpl) fnHttp(args []pl.Val) (pl.Val, error) {
+	fac := h.getHttpClientFactory()
+	if fac == nil {
+		return pl.NewValNull(), fmt.Errorf("http client factory is not setup")
+	}
+	return fnDoHttp(fac, args)
 }
 
 func (p *Hpl) doEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
@@ -228,6 +248,52 @@ func (h *Hpl) OnCustomize(selector string, session SessionWrapper) error {
 	}()
 
 	return h.Eval.Eval(selector, h.Policy)
+}
+
+// -----------------------------------------------------------------------------
+// const phase
+
+func (h *Hpl) constLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
+	return pl.NewValNull(), fmt.Errorf("const initialization: unknown variable %s", n)
+}
+
+func (p *Hpl) constStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
+	return fmt.Errorf("const initialization: unknown variable set %s", n)
+}
+
+func (h *Hpl) constEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
+	return h.doEvalCall(x, n, args)
+}
+
+func (h *Hpl) constAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
+	return fmt.Errorf("const initialization: unknown action %s", actionName)
+}
+
+func (h *Hpl) OnConst(session ConstSessionWrapper) error {
+	if h.Policy == nil {
+		return fmt.Errorf("the Hpl engine does not have any policy binded")
+	}
+	if h.isRunning {
+		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
+	}
+	if h.respWriter != nil {
+		panic("concurrent access")
+	}
+
+	h.isRunning = true
+	h.constSession = session
+
+	h.Eval.LoadVarFn = h.constLoadVar
+	h.Eval.StoreVarFn = h.constStoreVar
+	h.Eval.CallFn = h.constEvalCall
+	h.Eval.ActionFn = h.constAction
+
+	defer func() {
+		h.isRunning = false
+		h.constSession = nil
+	}()
+
+	return h.Eval.EvalConst(h.Policy)
 }
 
 // -----------------------------------------------------------------------------
