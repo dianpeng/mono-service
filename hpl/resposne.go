@@ -1,7 +1,6 @@
 package hpl
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/dianpeng/mono-service/pl"
 	"net/http"
@@ -123,16 +122,14 @@ func (h *Response) ToString() (string, error) {
 	return "[http response]", nil
 }
 
-func (h *Response) ToJSON() (string, error) {
-	blob, _ := json.Marshal(
+func (h *Response) ToJSON() (pl.Val, error) {
+	return pl.MarshalVal(
 		map[string]interface{}{
 			"status": h.response.Status,
 			"proto":  h.response.Proto,
 			"header": h.response.Header,
 		},
 	)
-
-	return string(blob), nil
 }
 
 func (h *Response) Method(name string, _ []pl.Val) (pl.Val, error) {

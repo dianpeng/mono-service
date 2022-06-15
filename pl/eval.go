@@ -73,7 +73,7 @@ func (ff *funcframe) frameInfo() string {
 }
 
 func (e *Evaluator) curfuncframeVal() Val {
-	return NewValUValData(&e.curframe)
+	return newValFrame(&e.curframe)
 }
 
 func (e *Evaluator) prevframepos() int {
@@ -87,8 +87,7 @@ func (e *Evaluator) localpos() int {
 
 func (e *Evaluator) prevfuncframe() *funcframe {
 	v := e.Stack[e.prevframepos()]
-	must(v.Type == ValUsr, "must be user")
-	ff, ok := v.UVal().Context().(*funcframe)
+	ff, ok := v.frame().(*funcframe)
 	must(ok, "must be frame")
 	return ff
 }
@@ -113,7 +112,7 @@ func newfuncframe(
 		framep: framep,
 		farg:   farg,
 	}
-	return ff, NewValUValData(ff)
+	return ff, newValFrame(ff)
 }
 
 func NewEvaluatorSimple() *Evaluator {
@@ -956,6 +955,8 @@ VM:
 					e.push(policy.constVar[bc.argument])
 				}
 				break
+
+				// iterator
 
 			case bcMatch:
 				c := e.top0()

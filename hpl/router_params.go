@@ -1,7 +1,6 @@
 package hpl
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/dianpeng/mono-service/hrouter"
 	"github.com/dianpeng/mono-service/pl"
@@ -43,9 +42,8 @@ func (h *RouterParams) ToString() (string, error) {
 	return h.params.String(), nil
 }
 
-func (h *RouterParams) ToJSON() (string, error) {
-	blob, _ := json.Marshal(h.params)
-	return string(blob), nil
+func (h *RouterParams) ToJSON() (pl.Val, error) {
+	return pl.MarshalVal(h.params)
 }
 
 func (h *RouterParams) Method(name string, _ []pl.Val) (pl.Val, error) {

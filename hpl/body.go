@@ -91,8 +91,12 @@ func (h *Body) DotSet(name string, val pl.Val) error {
 	return h.IndexSet(pl.NewValStr(name), val)
 }
 
-func (h *Body) ToJSON() (string, error) {
-	return fmt.Sprintf("{\"type\": \"%s\"}", HttpBodyTypeId), nil
+func (h *Body) ToJSON() (pl.Val, error) {
+	return pl.MarshalVal(
+		map[string]interface{}{
+			"type": HttpBodyTypeId,
+		},
+	)
 }
 
 func (h *Body) ToString() (string, error) {

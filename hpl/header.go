@@ -2,7 +2,6 @@ package hpl
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"github.com/dianpeng/mono-service/pl"
 	"net/http"
@@ -112,12 +111,8 @@ func (h *Header) ToString() (string, error) {
 	return b.String(), nil
 }
 
-func (h *Header) ToJSON() (string, error) {
-	blob, err := json.Marshal(h.header)
-	if err != nil {
-		return "", err
-	}
-	return string(blob), nil
+func (h *Header) ToJSON() (pl.Val, error) {
+	return pl.MarshalVal(h.header)
 }
 
 var (

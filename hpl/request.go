@@ -2,7 +2,6 @@ package hpl
 
 import (
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"github.com/dianpeng/mono-service/pl"
 	"io"
@@ -208,8 +207,8 @@ func (h *Request) ToString() (string, error) {
 	return h.Info(), nil
 }
 
-func (h *Request) ToJSON() (string, error) {
-	blob, _ := json.Marshal(
+func (h *Request) ToJSON() (pl.Val, error) {
+	return pl.MarshalVal(
 		map[string]interface{}{
 			"type":       HttpRequestTypeId,
 			"method":     h.request.Method,
@@ -222,7 +221,6 @@ func (h *Request) ToJSON() (string, error) {
 			"remoteAddr": h.request.RemoteAddr,
 		},
 	)
-	return string(blob), nil
 }
 
 func (h *Request) Method(name string, _ []pl.Val) (pl.Val, error) {

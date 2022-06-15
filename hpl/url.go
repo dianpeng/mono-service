@@ -1,7 +1,6 @@
 package hpl
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/dianpeng/mono-service/pl"
 	"net/url"
@@ -112,12 +111,12 @@ func (h *Url) ToString() (string, error) {
 	return h.url.String(), nil
 }
 
-func (h *Url) ToJSON() (string, error) {
-	blob, err := json.Marshal(h.url)
-	if err != nil {
-		return "", err
-	}
-	return string(blob), nil
+func (h *Url) ToJSON() (pl.Val, error) {
+	return pl.MarshalVal(
+		map[string]interface{}{
+			"url": h.url.String(),
+		},
+	)
 }
 
 var (

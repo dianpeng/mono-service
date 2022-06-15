@@ -21,6 +21,9 @@ const (
 	ValIter
 	ValClosure
 	ValUsr
+
+	// should not be visiable, and only be used by internal evaluator
+	valFrame
 )
 
 const (
@@ -84,7 +87,7 @@ type Usr interface {
 	DotSet(string, Val) error
 	Method(string, []Val) (Val, error)
 	ToString() (string, error)
-	ToJSON() (string, error)
+	ToJSON() (Val, error)
 	Id() string
 	Info() string
 	ToNative() interface{}
@@ -101,7 +104,7 @@ type UValDot func(interface{}, string) (Val, error)
 type UValDotSet func(interface{}, string, Val) error
 type UValMethod func(interface{}, string, []Val) (Val, error)
 type UValToString func(interface{}) (string, error)
-type UValToJSON func(interface{}) (string, error)
+type UValToJSON func(interface{}) (Val, error)
 type UValId func(interface{}) string
 type UValInfo func(interface{}) string
 type UValToNative func(interface{}) interface{}
@@ -174,11 +177,11 @@ func (u *UVal) ToString() (string, error) {
 	}
 }
 
-func (u *UVal) ToJSON() (string, error) {
+func (u *UVal) ToJSON() (Val, error) {
 	if u.toJSONFn != nil {
 		return u.toJSONFn(u.context)
 	} else {
-		return "", fmt.Errorf("user type does not support *to json* operator")
+		return NewValNull(), fmt.Errorf("user type does not support *to json* operator")
 	}
 }
 
@@ -481,6 +484,28 @@ func (v *Val) IsClosure() bool {
 	return v.Type == ValClosure
 }
 
+// val frame helper
+func (v *Val) isFrame() bool {
+	return v.Type == valFrame
+}
+
+func (v *Val) setFrame(f interface{}) {
+	v.Type = valFrame
+	v.vData = f
+}
+
+func (v *Val) frame() interface{} {
+	must(v.Type == valFrame, "must be frame")
+	return v.vData
+}
+
+func newValFrame(f interface{}) Val {
+	return Val{
+		Type:  valFrame,
+		vData: f,
+	}
+}
+
 // New function ----------------------------------------------------------------
 func NewValNull() Val {
 	return Val{
@@ -753,6 +778,9 @@ func (v *Val) ToNative() interface{} {
 	case ValClosure:
 		return v.Closure()
 
+	case valFrame:
+		return nil
+
 	default:
 		return v.Usr().ToNative()
 	}
@@ -786,6 +814,9 @@ func (v *Val) ToString() (string, error) {
 
 	case ValClosure:
 		return "closure", nil
+
+	case valFrame:
+		return "", nil
 
 	default:
 		return v.Usr().ToString()
@@ -844,6 +875,9 @@ func (v *Val) Index(idx Val) (Val, error) {
 		} else {
 			return vv, nil
 		}
+
+	case valFrame:
+		return NewValNull(), nil
 
 	default:
 		return v.Usr().Index(idx)
@@ -917,6 +951,9 @@ func (v *Val) IndexSet(idx, val Val) error {
 		v.Map().Data[i] = val
 		return nil
 
+	case valFrame:
+		return nil
+
 	default:
 		return v.Usr().IndexSet(idx, val)
 	}
@@ -947,6 +984,9 @@ func (v *Val) Dot(i string) (Val, error) {
 
 		return NewValNull(), fmt.Errorf("invalid field name, 'first'/'second' is allowed on Pair")
 
+	case valFrame:
+		return NewValNull(), nil
+
 	default:
 		return v.Usr().Dot(i)
 	}
@@ -975,6 +1015,9 @@ func (v *Val) DotSet(i string, val Val) error {
 		}
 
 		return fmt.Errorf("invalid field name, 'first'/'second' is allowed on Pair")
+
+	case valFrame:
+		return nil
 
 	default:
 		return v.Usr().DotSet(i, val)
@@ -1324,6 +1367,9 @@ func (v *Val) Method(name string, args []Val) (Val, error) {
 	case ValRegexp, ValIter, ValClosure:
 		break
 
+	case valFrame:
+		return NewValNull(), nil
+
 	default:
 		return v.methodUsr(name, args)
 	}
@@ -1355,6 +1401,8 @@ func (v *Val) Id() string {
 		return "iter"
 	case ValClosure:
 		return "closure"
+	case valFrame:
+		return "#frame"
 	default:
 		return v.Usr().Id()
 	}
@@ -1388,6 +1436,8 @@ func (v *Val) Info() string {
 		return "iter"
 	case ValClosure:
 		return "closure"
+	case valFrame:
+		return "#frame"
 	default:
 		return v.Usr().Info()
 	}

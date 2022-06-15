@@ -1,7 +1,6 @@
 package hpl
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/dianpeng/mono-service/pl"
 	"io"
@@ -178,17 +177,15 @@ func (h *ReadableStream) ToString() (string, error) {
 	}
 }
 
-func (h *ReadableStream) ToJSON() (string, error) {
+func (h *ReadableStream) ToJSON() (pl.Val, error) {
 	b, ok := h.TryCacheBuffer()
-
-	blob, _ := json.Marshal(
+	return pl.MarshalVal(
 		map[string]interface{}{
 			"content":  b,
 			"hasCache": ok,
 			"close":    h.IsClose(),
 		},
 	)
-	return string(blob), nil
 }
 
 var (
