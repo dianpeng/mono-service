@@ -2075,6 +2075,9 @@ func (p *parser) parseSCall(prog *program, index int) error {
 }
 
 func (p *parser) parseMCall(prog *program, name string) error {
+  if !p.l.expectCurrent(tkLPar) {
+    return p.l.toError()
+  }
 	return p.parseCall(prog, name, bcMCall)
 }
 
@@ -2133,18 +2136,10 @@ SUFFIX:
 			ntk := p.l.next()
 			if ntk == tkId || ntk == tkStr {
 				name := p.l.valueText
-				nntk := p.l.next()
-				if nntk == tkLPar {
-					*lastType = suffixMethod
-					// a.b(...) a method call here, just treat it as a method call
-					if err := p.parseMCall(prog, name); err != nil {
-						return err
-					}
-				} else {
-					*lastType = suffixDot
-					idx := prog.addStr(name)
-					prog.emit1(p.l, bcDot, idx)
-				}
+        *lastType = suffixDot
+        idx := prog.addStr(name)
+        prog.emit1(p.l, bcDot, idx)
+        p.l.next()
 			} else {
 				return p.err("invalid expresion, expect id or string after '.'")
 			}
@@ -2162,6 +2157,19 @@ SUFFIX:
 			}
 			p.l.next()
 			break
+
+    case tkColon:
+      if !p.l.expect(tkId) {
+        return p.l.toError()
+      }
+      p.l.next()
+
+      method := p.l.valueText
+      *lastType = suffixMethod
+      if err := p.parseMCall(prog, method); err != nil {
+        return err
+      }
+      break
 
 		default:
 			break SUFFIX
