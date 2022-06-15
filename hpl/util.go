@@ -87,15 +87,15 @@ func foreachHeaderKV(arg pl.Val, fn func(key string, val string)) bool {
 	switch arg.Type {
 	case pl.ValList:
 		for _, v := range arg.List().Data {
-			if v.Type == pl.ValPair && v.Pair.First.Type == pl.ValStr && v.Pair.Second.Type == pl.ValStr {
-				fn(v.Pair.First.String(), v.Pair.Second.String())
+			if v.Type == pl.ValPair && v.Pair().First.Type == pl.ValStr && v.Pair().Second.Type == pl.ValStr {
+				fn(v.Pair().First.String(), v.Pair().Second.String())
 			}
 		}
 		return true
 
 	case pl.ValPair:
-		if arg.Pair.First.Type == pl.ValStr && arg.Pair.Second.Type == pl.ValStr {
-			fn(arg.Pair.First.String(), arg.Pair.Second.String())
+		if arg.Pair().First.Type == pl.ValStr && arg.Pair().Second.Type == pl.ValStr {
+			fn(arg.Pair().First.String(), arg.Pair().Second.String())
 		}
 		return true
 
@@ -110,7 +110,7 @@ func foreachHeaderKV(arg pl.Val, fn func(key string, val string)) bool {
 	default:
 		if ValIsHttpHeader(arg) {
 			// known special user type to us, then just foreach the header
-			hdr := arg.Usr().Context.(*Header)
+			hdr := arg.Usr().(*Header)
 			for k, v := range hdr.header {
 				for _, vv := range v {
 					fn(k, vv)

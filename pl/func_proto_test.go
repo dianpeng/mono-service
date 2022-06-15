@@ -17,7 +17,7 @@ func newUsr(n string) Val {
 	x := &ausertype{
 		tname: n,
 	}
-	return NewValUsr(
+	return NewValUVal(
 		x,
 		nil,
 		nil,
@@ -27,6 +27,7 @@ func newUsr(n string) Val {
 		nil,
 		nil,
 		x.Id,
+		nil,
 		nil,
 		nil,
 	)

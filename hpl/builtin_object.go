@@ -87,7 +87,7 @@ func fnConcateHttpBody(info *pl.IntrinsicInfo,
 
 	for idx, a := range argument {
 		if ValIsHttpBody(a) {
-			body, _ := a.Usr().Context.(*Body)
+			body, _ := a.Usr().(*Body)
 			input = append(input, body.Stream().Stream)
 		} else {
 			str, err := a.ToString()

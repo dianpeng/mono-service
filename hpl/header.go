@@ -77,25 +77,25 @@ func (h *Header) Length() int {
 	return len(h.header)
 }
 
-func (h *Header) Index(_ interface{}, key pl.Val) (pl.Val, error) {
+func (h *Header) Index(key pl.Val) (pl.Val, error) {
 	if key.Type != pl.ValStr {
 		return pl.NewValNull(), fmt.Errorf("invalid index for http.header")
 	}
 	return pl.NewValStr(h.header.Get(key.String())), nil
 }
 
-func (h *Header) Dot(x interface{}, key string) (pl.Val, error) {
-	return h.Index(x, pl.NewValStr(key))
+func (h *Header) Dot(key string) (pl.Val, error) {
+	return h.Index(pl.NewValStr(key))
 }
 
-func (h *Header) IndexSet(x interface{}, key pl.Val, val pl.Val) error {
+func (h *Header) IndexSet(key pl.Val, val pl.Val) error {
 	if key.Type == pl.ValStr {
-		return h.DotSet(x, key.String(), val)
+		return h.DotSet(key.String(), val)
 	}
 	return fmt.Errorf("invalid index type for http.header")
 }
 
-func (h *Header) DotSet(_ interface{}, key string, val pl.Val) error {
+func (h *Header) DotSet(key string, val pl.Val) error {
 	str, err := val.ToString()
 	if err != nil {
 		return fmt.Errorf("http.header value cannot be converted to string: %s", err.Error())
@@ -104,7 +104,7 @@ func (h *Header) DotSet(_ interface{}, key string, val pl.Val) error {
 	return nil
 }
 
-func (h *Header) ToString(_ interface{}) (string, error) {
+func (h *Header) ToString() (string, error) {
 	var b bytes.Buffer
 	for key, val := range h.header {
 		b.WriteString(fmt.Sprintf("%s => %s\n", key, val))
@@ -112,7 +112,7 @@ func (h *Header) ToString(_ interface{}) (string, error) {
 	return b.String(), nil
 }
 
-func (h *Header) ToJSON(_ interface{}) (string, error) {
+func (h *Header) ToJSON() (string, error) {
 	blob, err := json.Marshal(h.header)
 	if err != nil {
 		return "", err
@@ -132,7 +132,7 @@ var (
 	methodProtoHeaderLength         = pl.MustNewFuncProto("http.header.length", "%0")
 )
 
-func (h *Header) method(_ interface{}, name string, arg []pl.Val) (pl.Val, error) {
+func (h *Header) Method(name string, arg []pl.Val) (pl.Val, error) {
 	switch name {
 	case "has":
 		if _, err := methodProtoHeaderHas.Check(arg); err != nil {
@@ -198,12 +198,20 @@ func (h *Header) method(_ interface{}, name string, arg []pl.Val) (pl.Val, error
 	return pl.NewValNull(), fmt.Errorf("method: http.header:%s is unknown", name)
 }
 
-func (h *Header) Info(_ interface{}) string {
-	return "http.header"
+func (h *Header) Info() string {
+	return HttpHeaderTypeId
 }
 
-func (h *Header) ToNative(_ interface{}) interface{} {
+func (h *Header) ToNative() interface{} {
 	return h.header
+}
+
+func (h *Header) Id() string {
+	return HttpHeaderTypeId
+}
+
+func (h *Header) NewIterator() (pl.Iter, error) {
+	return nil, fmt.Errorf("http.header does not support iterator")
 }
 
 func NewHeaderVal(header http.Header) pl.Val {
@@ -211,26 +219,12 @@ func NewHeaderVal(header http.Header) pl.Val {
 		header: header,
 	}
 
-	return pl.NewValUsr(
-		x,
-		x.Index,
-		x.IndexSet,
-		x.Dot,
-		x.DotSet,
-		x.method,
-		x.ToString,
-		x.ToJSON,
-		func(_ interface{}) string {
-			return "http.header"
-		},
-		x.Info,
-		x.ToNative,
-	)
+	return pl.NewValUsr(x)
 }
 
 func NewHeaderValFromVal(v pl.Val) (pl.Val, error) {
 	if v.Id() == HttpHeaderTypeId {
-		hdr, _ := v.Usr().Context.(*Header)
+		hdr, _ := v.Usr().(*Header)
 		return NewHeaderVal(hdr.header), nil
 	}
 

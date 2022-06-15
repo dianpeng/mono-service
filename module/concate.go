@@ -331,13 +331,13 @@ func (s *concateSession) onActionBackground(name string, val pl.Val) error {
 
 		default:
 			if hpl.ValIsHttpBody(val) {
-				body, _ := val.Usr().Context.(*hpl.Body)
+				body, _ := val.Usr().(*hpl.Body)
 				x.setStream(body.Stream().Stream)
 			} else if hpl.ValIsReadableStream(val) {
-				stream, _ := val.Usr().Context.(*hpl.ReadableStream)
+				stream, _ := val.Usr().(*hpl.ReadableStream)
 				x.setStream(stream.Stream)
 			} else if hpl.ValIsHttpResponse(val) {
-				resp, _ := val.Usr().Context.(*hpl.Response)
+				resp, _ := val.Usr().(*hpl.Response)
 				x.setResponse(resp.HttpResponse())
 			} else {
 				return fmt.Errorf("action 'rewrite''s argument must be string/stream/body/response")
@@ -362,19 +362,19 @@ func (s *concateSession) oneBackend(val pl.Val) (*concateRequest, error) {
 
 	default:
 		if hpl.ValIsUrl(val) {
-			url, _ := val.Usr().Context.(*hpl.Url)
+			url, _ := val.Usr().(*hpl.Url)
 			o.setUrl(url.URL().String())
 		} else if hpl.ValIsHttpRequest(val) {
-			req, _ := val.Usr().Context.(*hpl.Request)
+			req, _ := val.Usr().(*hpl.Request)
 			o.setRequest(req.HttpRequest())
 		} else if hpl.ValIsHttpBody(val) {
-			body, _ := val.Usr().Context.(*hpl.Body)
+			body, _ := val.Usr().(*hpl.Body)
 			o.setStream(body.Stream().Stream)
 		} else if hpl.ValIsReadableStream(val) {
-			stream, _ := val.Usr().Context.(*hpl.ReadableStream)
+			stream, _ := val.Usr().(*hpl.ReadableStream)
 			o.setStream(stream.Stream)
 		} else if hpl.ValIsHttpResponse(val) {
-			resp, _ := val.Usr().Context.(*hpl.Response)
+			resp, _ := val.Usr().(*hpl.Response)
 			o.setResponse(resp.HttpResponse())
 		} else {
 			return nil, fmt.Errorf("invalid argument for 'output' action")

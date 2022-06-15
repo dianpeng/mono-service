@@ -53,7 +53,7 @@ func fnHttpGet(factory HttpClientFactory, argument []pl.Val) (pl.Val, error) {
 		if err != nil {
 			return pl.NewValNull(), fmt.Errorf("http::get cannot create header: %s", err.Error())
 		}
-		hdr, _ := hval.Usr().Context.(*Header)
+		hdr, _ := hval.Usr().(*Header)
 		hreq.Header = hdr.HttpHeader()
 	}
 
@@ -99,7 +99,7 @@ func fnHttpPost(factory HttpClientFactory, argument []pl.Val) (pl.Val, error) {
 		}
 	}
 
-	body, _ := bodyval.Usr().Context.(*Body)
+	body, _ := bodyval.Usr().(*Body)
 
 	hreq, err := http.NewRequest(
 		"POST",
@@ -112,7 +112,7 @@ func fnHttpPost(factory HttpClientFactory, argument []pl.Val) (pl.Val, error) {
 	}
 
 	if headerval.Type != pl.ValNull {
-		hdr, _ := headerval.Usr().Context.(*Header)
+		hdr, _ := headerval.Usr().(*Header)
 		hreq.Header = hdr.HttpHeader()
 	}
 
@@ -149,7 +149,7 @@ func fnHttpDo(factory HttpClientFactory, argument []pl.Val) (pl.Val, error) {
 			if err != nil {
 				return pl.NewValNull(), fmt.Errorf("http::do cannot create body: %s", err.Error())
 			}
-			b, _ := bodyval.Usr().Context.(*Body)
+			b, _ := bodyval.Usr().(*Body)
 			body = b.Stream().Stream
 		}
 
@@ -164,11 +164,11 @@ func fnHttpDo(factory HttpClientFactory, argument []pl.Val) (pl.Val, error) {
 			if err != nil {
 				return pl.NewValNull(), fmt.Errorf("http::do cannot create header: %s", err.Error())
 			}
-			b, _ := hdrval.Usr().Context.(*Header)
+			b, _ := hdrval.Usr().(*Header)
 			req.Header = b.HttpHeader()
 		}
 	} else {
-		hreq, _ := argument[0].Usr().Context.(*Request)
+		hreq, _ := argument[0].Usr().(*Request)
 		req = hreq.HttpRequest()
 	}
 

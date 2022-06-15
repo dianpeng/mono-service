@@ -20,7 +20,7 @@ func (h *Url) URL() *url.URL {
 	return h.url
 }
 
-func (h *Url) Index(_ interface{}, key pl.Val) (pl.Val, error) {
+func (h *Url) Index(key pl.Val) (pl.Val, error) {
 	if key.Type != pl.ValStr {
 		return pl.NewValNull(), fmt.Errorf("invalid index, URL name must be string")
 	}
@@ -51,16 +51,16 @@ func (h *Url) Index(_ interface{}, key pl.Val) (pl.Val, error) {
 	}
 }
 
-func (h *Url) IndexSet(x interface{}, key pl.Val, val pl.Val) error {
+func (h *Url) IndexSet(key pl.Val, val pl.Val) error {
 	if key.Type == pl.ValStr {
-		return h.DotSet(x, key.String(), val)
+		return h.DotSet(key.String(), val)
 	} else {
 		return fmt.Errorf(".url index set type must be string")
 	}
 }
 
-func (h *Url) Dot(x interface{}, name string) (pl.Val, error) {
-	return h.Index(x, pl.NewValStr(name))
+func (h *Url) Dot(name string) (pl.Val, error) {
+	return h.Index(pl.NewValStr(name))
 }
 
 func (h *Url) SetUserInfo(userInfo string) {
@@ -77,7 +77,7 @@ func (h *Url) SetUserInfo(userInfo string) {
 	}
 }
 
-func (h *Url) DotSet(_ interface{}, key string, val pl.Val) error {
+func (h *Url) DotSet(key string, val pl.Val) error {
 	str, err := val.ToString()
 	if err != nil {
 		return fmt.Errorf(".url component set, value cannot convert to string: %s", err.Error())
@@ -108,11 +108,11 @@ func (h *Url) DotSet(_ interface{}, key string, val pl.Val) error {
 	return nil
 }
 
-func (h *Url) ToString(_ interface{}) (string, error) {
+func (h *Url) ToString() (string, error) {
 	return h.url.String(), nil
 }
 
-func (h *Url) ToJSON(_ interface{}) (string, error) {
+func (h *Url) ToJSON() (string, error) {
 	blob, err := json.Marshal(h.url)
 	if err != nil {
 		return "", err
@@ -124,7 +124,7 @@ var (
 	methodProtoUrlIsAbs = pl.MustNewFuncProto(".url.isAbs", "%0")
 )
 
-func (h *Url) method(_ interface{}, name string, args []pl.Val) (pl.Val, error) {
+func (h *Url) Method(name string, args []pl.Val) (pl.Val, error) {
 	switch name {
 	case "isAbs":
 		if _, err := methodProtoUrlIsAbs.Check(args); err != nil {
@@ -138,7 +138,7 @@ func (h *Url) method(_ interface{}, name string, args []pl.Val) (pl.Val, error) 
 	return pl.NewValNull(), fmt.Errorf("method: .url:%s is unknown", name)
 }
 
-func (h *Url) Info(_ interface{}) string {
+func (h *Url) Info() string {
 	return fmt.Sprintf(
 		".url[scheme=%s;user=%s;host=%s;path=%s;query=%s;frag=%s]",
 		h.url.Scheme,
@@ -150,27 +150,21 @@ func (h *Url) Info(_ interface{}) string {
 	)
 }
 
-func (h *Url) ToNative(_ interface{}) interface{} {
+func (h *Url) Id() string {
+	return UrlTypeId
+}
+
+func (h *Url) ToNative() interface{} {
 	return h.url
+}
+
+func (h *Url) NewIterator() (pl.Iter, error) {
+	return nil, fmt.Errorf(".url does not support iterator")
 }
 
 func NewUrlVal(url *url.URL) pl.Val {
 	x := &Url{
 		url: url,
 	}
-	return pl.NewValUsr(
-		x,
-		x.Index,
-		x.IndexSet,
-		x.Dot,
-		x.DotSet,
-		x.method,
-		x.ToString,
-		x.ToJSON,
-		func(_ interface{}) string {
-			return ".url"
-		},
-		x.Info,
-		x.ToNative,
-	)
+	return pl.NewValUsr(x)
 }

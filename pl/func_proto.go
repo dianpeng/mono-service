@@ -735,6 +735,9 @@ func (f *FuncProto) check0(exp protoelem, got Val, c convoneval) (the_return boo
 		}
 		break
 
+	case ValClosure, ValIter:
+		return false
+
 	default:
 		if exp.opcode == PUsr {
 			if exp.tname != "" {
@@ -974,7 +977,7 @@ func (f *FuncProto) pack(v Val, t opc) *reflect.Value {
 		return nil
 
 	case PUsr:
-		rv = reflect.ValueOf(v.Usr().Context)
+		rv = reflect.ValueOf(v.Usr())
 		break
 
 	case PRegexp:

@@ -8,11 +8,6 @@ import (
 	"strings"
 )
 
-// sadly go does not have a good sumtype, or at least does not expose it as
-// builtin types except using interface{}. Currently our implementation is
-// really bad but simple to use, at the cost of memory overhead. We will revisit
-// it when we have time
-
 const (
 	ValNull = iota
 	ValInt
@@ -23,50 +18,239 @@ const (
 	ValList
 	ValMap
 	ValRegexp
+	ValIter
+	ValClosure
 	ValUsr
 )
 
-// index operator for reading
+const (
+	MetaMethod = "__@method"
+
+	MetaIndex    = "__@index"
+	MetaIndexSet = "__@index_set"
+	MetaDot      = "__@dot"
+	MetaDotSet   = "__@dot_set"
+
+	MetaToString = "__@to_string"
+	MetaToJSON   = "__@to_json"
+	MetaToIter   = "__@to_iter"
+)
+
+const (
+	ClosureScript = iota
+	ClosureNative
+)
+
+func GetClosureTypeId(id int) string {
+	switch id {
+	case ClosureScript:
+		return "closure_script"
+	case ClosureNative:
+		return "closure_native"
+	default:
+		unreachable("invalid closure type")
+		return ""
+	}
+}
+
+// Closure interface, ie wrapping around the function calls
+type Closure interface {
+	Call([]Val) (Val, error)
+	Type() int
+	Id() string
+}
+
+// Iterator interface, matching against the bytecode semantic
+type Iter interface {
+	// pure function, returns whether the current iterator is valid for deference
+	// or not.
+	Has() bool
+
+	// if applicable move the iterator to next position and returns whether the
+	// status of iterator is valid *AFTER* the next
+	Next() bool
+
+	// get the value of the iterator, the first is index and second is the value
+	Deref() (Val, Val, error)
+}
+
+// Internally, all the user extending type will be defined just as a UsrVal
+// object which can be used to extending to user's own needs
+type Usr interface {
+	// Meta function supported by the runtime object model
+	Index(Val) (Val, error)
+	IndexSet(Val, Val) error
+	Dot(string) (Val, error)
+	DotSet(string, Val) error
+	Method(string, []Val) (Val, error)
+	ToString() (string, error)
+	ToJSON() (string, error)
+	Id() string
+	Info() string
+	ToNative() interface{}
+
+	// return a iterator
+	NewIterator() (Iter, error)
+
+	// support invocation operations, ie calling a user type
+}
+
 type UValIndex func(interface{}, Val) (Val, error)
-
 type UValIndexSet func(interface{}, Val, Val) error
-
-// dot operator for reading
 type UValDot func(interface{}, string) (Val, error)
-
 type UValDotSet func(interface{}, string, Val) error
-
-// method invocation
 type UValMethod func(interface{}, string, []Val) (Val, error)
-
-// to string operator
 type UValToString func(interface{}) (string, error)
-
-// to json operator
 type UValToJSON func(interface{}) (string, error)
-
-// get unique id/type information
 type UValId func(interface{}) string
-
-// get a debuggable information
 type UValInfo func(interface{}) string
-
-// convert user value back to a go native type, ie interface{}. This function
-// will never fail
 type UValToNative func(interface{}) interface{}
+type UValIter func(interface{}) (Iter, error)
 
 type UVal struct {
-	Context    interface{}
-	IndexFn    UValIndex
-	IndexSetFn UValIndexSet
-	DotFn      UValDot
-	DotSetFn   UValDotSet
-	MethodFn   UValMethod
-	ToStringFn UValToString
-	ToJSONFn   UValToJSON
-	IdFn       UValId
-	InfoFn     UValInfo
-	ToNativeFn UValToNative
+	context    interface{}
+	indexFn    UValIndex
+	indexSetFn UValIndexSet
+	dotFn      UValDot
+	dotSetFn   UValDotSet
+	methodFn   UValMethod
+	toStringFn UValToString
+	toJSONFn   UValToJSON
+	idFn       UValId
+	infoFn     UValInfo
+	toNativeFn UValToNative
+	iterFn     UValIter
+}
+
+func (u *UVal) Context() interface{} {
+	return u.context
+}
+
+func (u *UVal) Index(b Val) (Val, error) {
+	if u.indexFn != nil {
+		return u.indexFn(u.context, b)
+	} else {
+		return NewValNull(), fmt.Errorf("user type does not support *index* operation")
+	}
+}
+
+func (u *UVal) IndexSet(b Val, c Val) error {
+	if u.indexSetFn != nil {
+		return u.indexSetFn(u.context, b, c)
+	} else {
+		return fmt.Errorf("user type does not support *index set* operator")
+	}
+}
+
+func (u *UVal) Dot(b string) (Val, error) {
+	if u.dotFn != nil {
+		return u.dotFn(u.context, b)
+	} else {
+		return NewValNull(), fmt.Errorf("user type does not support *dot* operator")
+	}
+}
+
+func (u *UVal) DotSet(b string, c Val) error {
+	if u.dotSetFn != nil {
+		return u.dotSetFn(u.context, b, c)
+	} else {
+		return fmt.Errorf("user type does not support *dot set* operator")
+	}
+}
+
+func (u *UVal) Method(b string, c []Val) (Val, error) {
+	if u.methodFn != nil {
+		return u.methodFn(u.context, b, c)
+	} else {
+		return NewValNull(), fmt.Errorf("user type does not support *method* operator")
+	}
+}
+
+func (u *UVal) ToString() (string, error) {
+	if u.toStringFn != nil {
+		return u.toStringFn(u.context)
+	} else {
+		return "", fmt.Errorf("user type does not support *to string* operator")
+	}
+}
+
+func (u *UVal) ToJSON() (string, error) {
+	if u.toJSONFn != nil {
+		return u.toJSONFn(u.context)
+	} else {
+		return "", fmt.Errorf("user type does not support *to json* operator")
+	}
+}
+
+func (u *UVal) Id() string {
+	if u.idFn != nil {
+		return u.idFn(u.context)
+	} else {
+		return "[user]"
+	}
+}
+
+func (u *UVal) Info() string {
+	if u.infoFn != nil {
+		return u.infoFn(u.context)
+	} else {
+		return "[user]"
+	}
+}
+
+func (u *UVal) ToNative() interface{} {
+	if u.toNativeFn != nil {
+		return u.toNativeFn(u.context)
+	} else {
+		return u.context
+	}
+}
+
+func (u *UVal) NewIterator() (Iter, error) {
+	if u.iterFn != nil {
+		return u.iterFn(u.context)
+	} else {
+		return nil, fmt.Errorf("user type does not support iterator")
+	}
+}
+
+func NewUVal(
+	c interface{},
+	f0 UValIndex,
+	f1 UValIndexSet,
+	f2 UValDot,
+	f3 UValDotSet,
+
+	f4 UValMethod,
+	f5 UValToString,
+	f6 UValToJSON,
+	f7 UValId,
+	f8 UValInfo,
+	f9 UValToNative,
+	f10 UValIter,
+) *UVal {
+	return &UVal{
+		context:    c,
+		indexFn:    f0,
+		indexSetFn: f1,
+		dotFn:      f2,
+		dotSetFn:   f3,
+		methodFn:   f4,
+		toStringFn: f5,
+		toJSONFn:   f6,
+		idFn:       f7,
+		infoFn:     f8,
+		toNativeFn: f9,
+		iterFn:     f10,
+	}
+}
+
+func NewUValData(
+	c interface{},
+) *UVal {
+	return &UVal{
+		context: c,
+	}
 }
 
 type List struct {
@@ -95,98 +279,209 @@ type Pair struct {
 }
 
 type Val struct {
-	Type    int
-	vInt    int64
-	vReal   float64
-	vBool   bool
-	vString string
-	vRegexp *regexp.Regexp
-	Pair    *Pair
-	vList   *List
-	vMap    *Map
-	vUsr    *UVal
+	Type int
+
+	vData interface{}
 }
 
 func (v *Val) Int() int64 {
-	must(v.Type == ValInt, "must be int")
-	return v.vInt
+	x, ok := v.vData.(int64)
+	must(ok, "must be int")
+	return x
 }
 
 func (v *Val) SetInt(i int64) {
 	v.Type = ValInt
-	v.vInt = i
+	v.vData = i
 }
 
 func (v *Val) Real() float64 {
-	must(v.Type == ValReal, "must be real")
-	return v.vReal
+	x, ok := v.vData.(float64)
+	must(ok, "must be real")
+	return x
 }
 
 func (v *Val) SetReal(vv float64) {
 	v.Type = ValReal
-	v.vReal = vv
+	v.vData = vv
 }
 
 func (v *Val) Bool() bool {
-	must(v.Type == ValBool, "must be bool")
-	return v.vBool
+	x, ok := v.vData.(bool)
+	must(ok, "must be bool")
+	return x
 }
 
 func (v *Val) SetBool(vv bool) {
 	v.Type = ValBool
-	v.vBool = vv
+	v.vData = vv
 }
 
 func (v *Val) String() string {
-	must(v.Type == ValStr, "must be string")
-	return v.vString
+	x, ok := v.vData.(string)
+	must(ok, "must be string")
+	return x
 }
 
 func (v *Val) SetString(vv string) {
 	v.Type = ValStr
-	v.vString = vv
+	v.vData = vv
 }
 
 func (v *Val) Regexp() *regexp.Regexp {
-	must(v.Type == ValRegexp, "must be regexp")
-	return v.vRegexp
+	x, ok := v.vData.(*regexp.Regexp)
+	must(ok, "must be regexp")
+	return x
 }
 
 func (v *Val) SetRegexp(vv *regexp.Regexp) {
 	v.Type = ValRegexp
-	v.vRegexp = vv
+	v.vData = vv
 }
 
 func (v *Val) List() *List {
-	must(v.Type == ValList, "must be list")
-	return v.vList
+	x, ok := v.vData.(*List)
+	must(ok, "must be list")
+	return x
 }
 
 func (v *Val) SetList(vv *List) {
 	v.Type = ValList
-	v.vList = vv
+	v.vData = vv
 }
 
 func (v *Val) Map() *Map {
-	must(v.Type == ValMap, "must be map")
-	return v.vMap
+	x, ok := v.vData.(*Map)
+	must(ok, "must be map")
+	return x
 }
 
 func (v *Val) SetMap(vv *Map) {
 	v.Type = ValMap
-	v.vMap = vv
+	v.vData = vv
 }
 
-func (v *Val) Usr() *UVal {
-	must(v.Type == ValUsr, "must be usr")
-	return v.vUsr
+func (v *Val) UVal() *UVal {
+	x, ok := v.vData.(*UVal)
+	must(ok, "must be uval")
+	return x
 }
 
-func (v *Val) SetUsr(vv *UVal) {
+func (v *Val) SetUVal(u *UVal) {
 	v.Type = ValUsr
-	v.vUsr = vv
+	v.vData = u
 }
 
+func (v *Val) Usr() Usr {
+	x, ok := v.vData.(Usr)
+	must(ok, "must be user")
+	return x
+}
+
+func (v *Val) SetUsr(vv Usr) {
+	v.Type = ValUsr
+	v.vData = vv
+}
+
+func (v *Val) Pair() *Pair {
+	x, ok := v.vData.(*Pair)
+	must(ok, "must be pair")
+	return x
+}
+
+func (v *Val) SetPair(vv *Pair) {
+	v.Type = ValPair
+	v.vData = vv
+}
+
+func (v *Val) SetPairKV(first Val, second Val) {
+	v.SetPair(&Pair{
+		First:  first,
+		Second: second,
+	},
+	)
+}
+
+func (v *Val) SetIter(iter Iter) {
+	v.Type = ValIter
+	v.vData = iter
+}
+
+func (v *Val) Iter() Iter {
+	x, ok := v.vData.(Iter)
+	must(ok, "must be iterator")
+	return x
+}
+
+func (v *Val) SetClosure(closure Closure) {
+	v.Type = ValClosure
+	v.vData = closure
+}
+
+func (v *Val) Closure() Closure {
+	x, ok := v.vData.(Closure)
+	must(ok, "must be closure")
+	return x
+}
+
+func (v *Val) IsNumber() bool {
+	switch v.Type {
+	case ValInt, ValReal:
+		return true
+	default:
+		return false
+	}
+}
+
+func (v *Val) IsInt() bool {
+	return v.Type == ValInt
+}
+
+func (v *Val) IsReal() bool {
+	return v.Type == ValReal
+}
+
+func (v *Val) IsBool() bool {
+	return v.Type == ValBool
+}
+
+func (v *Val) IsNull() bool {
+	return v.Type == ValNull
+}
+
+func (v *Val) IsString() bool {
+	return v.Type == ValStr
+}
+
+func (v *Val) IsPair() bool {
+	return v.Type == ValPair
+}
+
+func (v *Val) IsList() bool {
+	return v.Type == ValList
+}
+
+func (v *Val) IsMap() bool {
+	return v.Type == ValMap
+}
+
+func (v *Val) IsRegexp() bool {
+	return v.Type == ValRegexp
+}
+
+func (v *Val) IsIter() bool {
+	return v.Type == ValIter
+}
+
+func (v *Val) IsUsr() bool {
+	return v.Type == ValUsr
+}
+
+func (v *Val) IsClosure() bool {
+	return v.Type == ValClosure
+}
+
+// New function ----------------------------------------------------------------
 func NewValNull() Val {
 	return Val{
 		Type: ValNull,
@@ -195,43 +490,43 @@ func NewValNull() Val {
 
 func NewValInt64(i int64) Val {
 	return Val{
-		Type: ValInt,
-		vInt: i,
+		Type:  ValInt,
+		vData: i,
 	}
 }
 
 func NewValInt(i int) Val {
 	return Val{
-		Type: ValInt,
-		vInt: int64(i),
+		Type:  ValInt,
+		vData: int64(i),
 	}
 }
 
 func NewValStr(s string) Val {
 	return Val{
-		Type:    ValStr,
-		vString: s,
+		Type:  ValStr,
+		vData: s,
 	}
 }
 
 func NewValReal(d float64) Val {
 	return Val{
 		Type:  ValReal,
-		vReal: d,
+		vData: d,
 	}
 }
 
 func NewValBool(b bool) Val {
 	return Val{
 		Type:  ValBool,
-		vBool: b,
+		vData: b,
 	}
 }
 
 func NewValPair(f Val, s Val) Val {
 	return Val{
 		Type: ValPair,
-		Pair: &Pair{
+		vData: &Pair{
 			First:  f,
 			Second: s,
 		},
@@ -240,15 +535,15 @@ func NewValPair(f Val, s Val) Val {
 
 func NewValRegexp(r *regexp.Regexp) Val {
 	return Val{
-		Type:    ValRegexp,
-		vRegexp: r,
+		Type:  ValRegexp,
+		vData: r,
 	}
 }
 
 func NewValListRaw(d []Val) Val {
 	return Val{
 		Type: ValList,
-		vList: &List{
+		vData: &List{
 			Data: d,
 		},
 	}
@@ -257,14 +552,14 @@ func NewValListRaw(d []Val) Val {
 func NewValList() Val {
 	return Val{
 		Type:  ValList,
-		vList: NewList(),
+		vData: NewList(),
 	}
 }
 
 func NewValMap() Val {
 	return Val{
-		Type: ValMap,
-		vMap: NewMap(),
+		Type:  ValMap,
+		vData: NewMap(),
 	}
 }
 
@@ -284,18 +579,23 @@ func NewValIntList(s []int) Val {
 	return r
 }
 
-func NewValUsrData(
-	c interface{},
-) Val {
+func NewValUsr(u Usr) Val {
 	return Val{
-		Type: ValUsr,
-		vUsr: &UVal{
-			Context: c,
-		},
+		Type:  ValUsr,
+		vData: u,
 	}
 }
 
-func NewValUsr(
+func NewValUValData(
+	c interface{},
+) Val {
+	return Val{
+		Type:  ValUsr,
+		vData: NewUValData(c),
+	}
+}
+
+func NewValUVal(
 	c interface{},
 	f0 UValIndex,
 	f1 UValIndexSet,
@@ -307,26 +607,29 @@ func NewValUsr(
 	f6 UValToJSON,
 	f7 UValId,
 	f8 UValInfo,
-	f9 UValToNative) Val {
+	f9 UValToNative,
+	f10 UValIter,
+) Val {
 	return Val{
 		Type: ValUsr,
-		vUsr: &UVal{
-			Context:    c,
-			IndexFn:    f0,
-			IndexSetFn: f1,
-			DotFn:      f2,
-			DotSetFn:   f3,
-			MethodFn:   f4,
-			ToStringFn: f5,
-			ToJSONFn:   f6,
-			IdFn:       f7,
-			InfoFn:     f8,
-			ToNativeFn: f9,
-		},
+		vData: NewUVal(
+			c,
+			f0,
+			f1,
+			f2,
+			f3,
+			f4,
+			f5,
+			f6,
+			f7,
+			f8,
+			f9,
+			f10,
+		),
 	}
 }
 
-func NewValUsrImmutable(
+func NewValUValImmutable(
 	c interface{},
 	f0 UValIndex,
 	f2 UValDot,
@@ -335,31 +638,25 @@ func NewValUsrImmutable(
 	f6 UValToJSON,
 	f7 UValId,
 	f8 UValInfo,
-	f9 UValToNative) Val {
+	f9 UValToNative,
+	f10 UValIter,
+) Val {
 	return Val{
 		Type: ValUsr,
-		vUsr: &UVal{
-			Context:    c,
-			IndexFn:    f0,
-			IndexSetFn: nil,
-			DotFn:      f2,
-			DotSetFn:   nil,
-			MethodFn:   f4,
-			ToStringFn: f5,
-			ToJSONFn:   f6,
-			IdFn:       f7,
-			InfoFn:     f8,
-			ToNativeFn: f9,
-		},
-	}
-}
-
-func (v *Val) IsNumber() bool {
-	switch v.Type {
-	case ValInt, ValReal:
-		return true
-	default:
-		return false
+		vData: NewUVal(
+			c,
+			f0,
+			nil,
+			f2,
+			nil,
+			f4,
+			f5,
+			f6,
+			f7,
+			f8,
+			f9,
+			f10,
+		),
 	}
 }
 
@@ -390,6 +687,10 @@ func (v *Val) ToBoolean() bool {
 		return len(v.List().Data) != 0
 	case ValMap:
 		return len(v.Map().Data) != 0
+	case ValIter:
+		return v.Iter().Has()
+	case ValClosure:
+		return true
 	default:
 		return false
 	}
@@ -429,26 +730,31 @@ func (v *Val) ToNative() interface{} {
 			x = append(x, xx.ToNative())
 		}
 		return x
+
 	case ValMap:
 		x := make(map[string]interface{})
 		for key, val := range v.Map().Data {
 			x[key] = val.ToNative()
 		}
 		return x
+
 	case ValPair:
 		return [2]interface{}{
-			v.Pair.First.ToNative(),
-			v.Pair.Second.ToNative(),
+			v.Pair().First.ToNative(),
+			v.Pair().Second.ToNative(),
 		}
+
 	case ValRegexp:
 		return fmt.Sprintf("[Regexp: %s]", v.Regexp().String())
 
+	case ValIter:
+		return v.Iter()
+
+	case ValClosure:
+		return v.Closure()
+
 	default:
-		if v.Usr().ToNativeFn != nil {
-			return v.Usr().ToNativeFn(v.Usr().Context)
-		} else {
-			return v.Usr().Context
-		}
+		return v.Usr().ToNative()
 	}
 }
 
@@ -475,19 +781,21 @@ func (v *Val) ToString() (string, error) {
 	case ValList, ValMap, ValPair:
 		return "", fmt.Errorf("cannot convert List/Map/Pair to string")
 
+	case ValIter:
+		return "iter", nil
+
+	case ValClosure:
+		return "closure", nil
+
 	default:
-		if v.Usr().ToStringFn != nil {
-			return v.Usr().ToStringFn(v.Usr().Context)
-		} else {
-			return "", fmt.Errorf("cannot convert usr type %s to string", v.Id())
-		}
+		return v.Usr().ToString()
 	}
 }
 
 func (v *Val) Index(idx Val) (Val, error) {
 	switch v.Type {
-	case ValInt, ValReal, ValBool, ValNull:
-		return NewValNull(), fmt.Errorf("cannot index primitive type")
+	case ValInt, ValReal, ValBool, ValNull, ValIter, ValClosure:
+		return NewValNull(), fmt.Errorf("cannot index type: %s", v.Id())
 
 	case ValRegexp:
 		return NewValNull(), fmt.Errorf("cannot index regexp")
@@ -508,10 +816,10 @@ func (v *Val) Index(idx Val) (Val, error) {
 			return NewValNull(), err
 		}
 		if i == 0 {
-			return v.Pair.First, nil
+			return v.Pair().First, nil
 		}
 		if i == 1 {
-			return v.Pair.Second, nil
+			return v.Pair().Second, nil
 		}
 
 		return NewValNull(), fmt.Errorf("invalid index, 0 or 1 is allowed on Pair")
@@ -538,15 +846,14 @@ func (v *Val) Index(idx Val) (Val, error) {
 		}
 
 	default:
-		// User
-		return v.Usr().IndexFn(v.Usr().Context, idx)
+		return v.Usr().Index(idx)
 	}
 }
 
 func (v *Val) IndexSet(idx, val Val) error {
 	switch v.Type {
-	case ValInt, ValReal, ValBool, ValNull:
-		return fmt.Errorf("cannot do subfield set by indexing on primitive type")
+	case ValInt, ValReal, ValBool, ValNull, ValIter, ValClosure:
+		return fmt.Errorf("cannot do index set on type: %s", v.Id())
 
 	case ValRegexp:
 		return fmt.Errorf("cannot do subfield set by indexing on regexp")
@@ -576,11 +883,11 @@ func (v *Val) IndexSet(idx, val Val) error {
 			return err
 		}
 		if i == 0 {
-			v.Pair.First = val
+			v.Pair().First = val
 			return nil
 		}
 		if i == 1 {
-			v.Pair.Second = val
+			v.Pair().Second = val
 			return nil
 		}
 
@@ -611,18 +918,14 @@ func (v *Val) IndexSet(idx, val Val) error {
 		return nil
 
 	default:
-		if v.Usr().IndexSetFn != nil {
-			return v.Usr().IndexSetFn(v.Usr().Context, idx, val)
-		} else {
-			return fmt.Errorf("type: %s does not support index operator mutation", v.Id())
-		}
+		return v.Usr().IndexSet(idx, val)
 	}
 }
 
 func (v *Val) Dot(i string) (Val, error) {
 	switch v.Type {
-	case ValInt, ValReal, ValBool, ValNull, ValStr, ValList:
-		return NewValNull(), fmt.Errorf("cannot apply dot operator on none Map or User type")
+	case ValInt, ValReal, ValBool, ValNull, ValStr, ValList, ValIter, ValClosure:
+		return NewValNull(), fmt.Errorf("cannot do dot on type: %s", v.Id())
 
 	case ValRegexp:
 		return NewValNull(), fmt.Errorf("cannot apply dot operator on regexp")
@@ -636,23 +939,23 @@ func (v *Val) Dot(i string) (Val, error) {
 
 	case ValPair:
 		if i == "first" {
-			return v.Pair.First, nil
+			return v.Pair().First, nil
 		}
 		if i == "second" {
-			return v.Pair.Second, nil
+			return v.Pair().Second, nil
 		}
 
 		return NewValNull(), fmt.Errorf("invalid field name, 'first'/'second' is allowed on Pair")
 
 	default:
-		return v.Usr().DotFn(v.Usr().Context, i)
+		return v.Usr().Dot(i)
 	}
 }
 
 func (v *Val) DotSet(i string, val Val) error {
 	switch v.Type {
-	case ValInt, ValReal, ValBool, ValNull, ValStr, ValList:
-		return fmt.Errorf("cannot apply dot operator on none Map or User type")
+	case ValInt, ValReal, ValBool, ValNull, ValStr, ValList, ValIter, ValClosure:
+		return fmt.Errorf("cannot do dot set on type: %s", v.Id())
 
 	case ValRegexp:
 		return fmt.Errorf("cannot apply dot operator on regexp")
@@ -663,22 +966,18 @@ func (v *Val) DotSet(i string, val Val) error {
 
 	case ValPair:
 		if i == "first" {
-			v.Pair.First = val
+			v.Pair().First = val
 			return nil
 		}
 		if i == "second" {
-			v.Pair.Second = val
+			v.Pair().Second = val
 			return nil
 		}
 
 		return fmt.Errorf("invalid field name, 'first'/'second' is allowed on Pair")
 
 	default:
-		if v.Usr().DotSetFn != nil {
-			return v.Usr().DotSetFn(v.Usr().Context, i, val)
-		} else {
-			return fmt.Errorf("type: %s does not support dot operator mutation", v.Id())
-		}
+		return v.Usr().DotSet(i, val)
 	}
 }
 
@@ -996,11 +1295,7 @@ func (v *Val) methodMap(name string, args []Val) (Val, error) {
 }
 
 func (v *Val) methodUsr(name string, args []Val) (Val, error) {
-	if v.Usr().MethodFn != nil {
-		return v.Usr().MethodFn(v.Usr().Context, name, args)
-	} else {
-		return NewValNull(), fmt.Errorf("%s:%s is unknown", v.Id(), name)
-	}
+	return v.Usr().Method(name, args)
 }
 
 func (v *Val) Method(name string, args []Val) (Val, error) {
@@ -1026,7 +1321,7 @@ func (v *Val) Method(name string, args []Val) (Val, error) {
 	case ValMap:
 		return v.methodMap(name, args)
 
-	case ValRegexp:
+	case ValRegexp, ValIter, ValClosure:
 		break
 
 	default:
@@ -1056,12 +1351,12 @@ func (v *Val) Id() string {
 		return "pair"
 	case ValRegexp:
 		return "regexp"
+	case ValIter:
+		return "iter"
+	case ValClosure:
+		return "closure"
 	default:
-		if v.Usr().IdFn != nil {
-			return v.Usr().IdFn(v.Usr().Context)
-		} else {
-			return "user"
-		}
+		return v.Usr().Id()
 	}
 }
 
@@ -1086,14 +1381,22 @@ func (v *Val) Info() string {
 	case ValMap:
 		return fmt.Sprintf("[map: %d]", len(v.Map().Data))
 	case ValPair:
-		return fmt.Sprintf("[pair: %s=>%s]", v.Pair.First.Info(), v.Pair.Second.Info())
+		return fmt.Sprintf("[pair: %s=>%s]", v.Pair().First.Info(), v.Pair().Second.Info())
 	case ValRegexp:
 		return fmt.Sprintf("[regexp: %s]", v.Regexp().String())
+	case ValIter:
+		return "iter"
+	case ValClosure:
+		return "closure"
 	default:
-		if v.Usr().InfoFn != nil {
-			return v.Usr().InfoFn(v.Usr().Context)
-		} else {
-			return fmt.Sprintf("[user: %s]", v.Id())
-		}
+		return v.Usr().Info()
 	}
+}
+
+func init() {
+	// testing whether UVal is convertable to Usr
+	uval := &UVal{}
+	var u Usr
+	u = uval
+	_ = u
 }

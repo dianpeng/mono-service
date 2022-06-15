@@ -137,7 +137,7 @@ func (h *ReadableStream) SetString(data string) {
 	h.Stream = neweofByteReadCloserFromString(data)
 }
 
-func (h *ReadableStream) Index(_ interface{}, name pl.Val) (pl.Val, error) {
+func (h *ReadableStream) Index(name pl.Val) (pl.Val, error) {
 	if name.Type != pl.ValStr {
 		return pl.NewValNull(), fmt.Errorf("invalid index, .readablestream field name must be string")
 	}
@@ -157,11 +157,19 @@ func (h *ReadableStream) Index(_ interface{}, name pl.Val) (pl.Val, error) {
 	}
 }
 
-func (h *ReadableStream) Dot(x interface{}, name string) (pl.Val, error) {
-	return h.Index(x, pl.NewValStr(name))
+func (h *ReadableStream) IndexSet(_ pl.Val, _ pl.Val) error {
+	return fmt.Errorf(".readablestream does not support index set")
 }
 
-func (h *ReadableStream) ToString(_ interface{}) (string, error) {
+func (h *ReadableStream) Dot(name string) (pl.Val, error) {
+	return h.Index(pl.NewValStr(name))
+}
+
+func (h *ReadableStream) DotSet(name string, value pl.Val) error {
+	return fmt.Errorf(".readablestream does not support dot set")
+}
+
+func (h *ReadableStream) ToString() (string, error) {
 	b, err := h.CacheBuffer()
 	if err != nil {
 		return "", err
@@ -170,7 +178,7 @@ func (h *ReadableStream) ToString(_ interface{}) (string, error) {
 	}
 }
 
-func (h *ReadableStream) ToJSON(_ interface{}) (string, error) {
+func (h *ReadableStream) ToJSON() (string, error) {
 	b, ok := h.TryCacheBuffer()
 
 	blob, _ := json.Marshal(
@@ -190,7 +198,7 @@ var (
 	methodProtoReadableStreamClose          = pl.MustNewFuncProto(".readablestream.close", "%0")
 )
 
-func (h *ReadableStream) method(_ interface{}, name string, arg []pl.Val) (pl.Val, error) {
+func (h *ReadableStream) Method(name string, arg []pl.Val) (pl.Val, error) {
 	switch name {
 	case "cacheString":
 		if _, err := methodProtoReadableStreamCacheString.Check(arg); err != nil {
@@ -235,61 +243,33 @@ func (h *ReadableStream) method(_ interface{}, name string, arg []pl.Val) (pl.Va
 	return pl.NewValNull(), fmt.Errorf("method: .readablestream:%s is unknown", name)
 }
 
-func (h *ReadableStream) Info(_ interface{}) string {
+func (h *ReadableStream) Info() string {
 	return fmt.Sprintf(".readablestream[cache=%t;close=%t]", h.HasCache(), h.IsClose())
 }
 
-func (h *ReadableStream) ToNative(_ interface{}) interface{} {
+func (h *ReadableStream) ToNative() interface{} {
 	return h.Stream
+}
+
+func (h *ReadableStream) Id() string {
+	return ReadableStreamTypeId
+}
+
+func (h *ReadableStream) NewIterator() (pl.Iter, error) {
+	return nil, fmt.Errorf(".readablestream does not support iterator")
 }
 
 func NewReadableStreamValFromStream(stream io.ReadCloser) pl.Val {
 	x := NewReadableStreamFromStream(stream)
-	return pl.NewValUsrImmutable(
-		x,
-		x.Index,
-		x.Dot,
-		x.method,
-		x.ToString,
-		x.ToJSON,
-		func(_ interface{}) string {
-			return ".readablestream"
-		},
-		x.Info,
-		nil,
-	)
+	return pl.NewValUsr(x)
 }
 
 func NewReadableStreamValFromString(data string) pl.Val {
 	x := NewReadableStreamFromString(data)
-	return pl.NewValUsrImmutable(
-		x,
-		x.Index,
-		x.Dot,
-		x.method,
-		x.ToString,
-		x.ToJSON,
-		func(_ interface{}) string {
-			return ".readablestream"
-		},
-		x.Info,
-		nil,
-	)
+	return pl.NewValUsr(x)
 }
 
 func NewReadableStreamValFromBuffer(data []byte) pl.Val {
 	x := NewReadableStreamFromBuffer(data)
-	return pl.NewValUsrImmutable(
-		x,
-		x.Index,
-		x.Dot,
-		x.method,
-		x.ToString,
-		x.ToJSON,
-		func(_ interface{}) string {
-			return ".readablestream"
-		},
-		x.Info,
-		x.ToNative,
-	)
+	return pl.NewValUsr(x)
 }

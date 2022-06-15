@@ -53,7 +53,7 @@ func (r *Response) setBody(v pl.Val) error {
 	return fmt.Errorf("http.response.body set, invalid type")
 }
 
-func (h *Response) Index(_ interface{}, name pl.Val) (pl.Val, error) {
+func (h *Response) Index(name pl.Val) (pl.Val, error) {
 	if name.Type != pl.ValStr {
 		return pl.NewValNull(), fmt.Errorf("invalid index, name must be string")
 	}
@@ -95,18 +95,18 @@ func (h *Response) Index(_ interface{}, name pl.Val) (pl.Val, error) {
 	return pl.NewValNull(), fmt.Errorf("invalid index, unknown field: %s", name.String())
 }
 
-func (h *Response) IndexSet(x interface{}, key pl.Val, value pl.Val) error {
+func (h *Response) IndexSet(key pl.Val, value pl.Val) error {
 	if key.Type != pl.ValStr {
 		return fmt.Errorf("http.response index set, invalid key type")
 	}
-	return h.DotSet(x, key.String(), value)
+	return h.DotSet(key.String(), value)
 }
 
-func (h *Response) Dot(x interface{}, name string) (pl.Val, error) {
-	return h.Index(x, pl.NewValStr(name))
+func (h *Response) Dot(name string) (pl.Val, error) {
+	return h.Index(pl.NewValStr(name))
 }
 
-func (h *Response) DotSet(_ interface{}, key string, value pl.Val) error {
+func (h *Response) DotSet(key string, value pl.Val) error {
 	switch key {
 	case "header":
 		return h.setHeader(value)
@@ -119,11 +119,11 @@ func (h *Response) DotSet(_ interface{}, key string, value pl.Val) error {
 	}
 }
 
-func (h *Response) ToString(_ interface{}) (string, error) {
+func (h *Response) ToString() (string, error) {
 	return "[http response]", nil
 }
 
-func (h *Response) ToJSON(_ interface{}) (string, error) {
+func (h *Response) ToJSON() (string, error) {
 	blob, _ := json.Marshal(
 		map[string]interface{}{
 			"status": h.response.Status,
@@ -135,12 +135,24 @@ func (h *Response) ToJSON(_ interface{}) (string, error) {
 	return string(blob), nil
 }
 
-func (h *Response) method(_ interface{}, name string, _ []pl.Val) (pl.Val, error) {
+func (h *Response) Method(name string, _ []pl.Val) (pl.Val, error) {
 	return pl.NewValNull(), fmt.Errorf("http.response method %s is unknown", name)
 }
 
-func (h *Response) Info(_ interface{}) string {
+func (h *Response) Info() string {
 	return HttpResponseTypeId
+}
+
+func (h *Response) Id() string {
+	return HttpResponseTypeId
+}
+
+func (h *Response) NewIterator() (pl.Iter, error) {
+	return nil, fmt.Errorf("http.response does not support iterator")
+}
+
+func (h *Response) ToNative() interface{} {
+	return h.response
 }
 
 func NewResponseVal(response *http.Response) pl.Val {
@@ -158,17 +170,5 @@ func NewResponseVal(response *http.Response) pl.Val {
 		body:     NewBodyValFromStream(response.Body),
 	}
 
-	return pl.NewValUsrImmutable(
-		x,
-		x.Index,
-		x.Dot,
-		x.method,
-		x.ToString,
-		x.ToJSON,
-		func(_ interface{}) string {
-			return HttpResponseTypeId
-		},
-		x.Info,
-		nil,
-	)
+	return pl.NewValUsr(x)
 }

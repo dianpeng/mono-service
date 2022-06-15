@@ -11,7 +11,7 @@ type RouterParams struct {
 	params hrouter.Params
 }
 
-func (h *RouterParams) Index(_ interface{}, name pl.Val) (pl.Val, error) {
+func (h *RouterParams) Index(name pl.Val) (pl.Val, error) {
 	if name.Type != pl.ValStr {
 		return pl.NewValNull(), fmt.Errorf("invalid index, http.router's field must be string")
 	}
@@ -19,18 +19,18 @@ func (h *RouterParams) Index(_ interface{}, name pl.Val) (pl.Val, error) {
 	return pl.NewValStr(h.params.ByName(name.String())), nil
 }
 
-func (h *RouterParams) Dot(x interface{}, name string) (pl.Val, error) {
-	return h.Index(x, pl.NewValStr(name))
+func (h *RouterParams) Dot(name string) (pl.Val, error) {
+	return h.Index(pl.NewValStr(name))
 }
 
-func (h *RouterParams) IndexSet(x interface{}, name pl.Val, value pl.Val) error {
+func (h *RouterParams) IndexSet(name pl.Val, value pl.Val) error {
 	if name.Type != pl.ValStr {
 		return fmt.Errorf("invalid index, http.router.params'key field must be string")
 	}
-	return h.DotSet(x, name.String(), value)
+	return h.DotSet(name.String(), value)
 }
 
-func (h *RouterParams) DotSet(_ interface{}, name string, value pl.Val) error {
+func (h *RouterParams) DotSet(name string, value pl.Val) error {
 	str, err := value.ToString()
 	if err != nil {
 		return fmt.Errorf("invalid index, http.router.param's key set value must be string")
@@ -39,44 +39,38 @@ func (h *RouterParams) DotSet(_ interface{}, name string, value pl.Val) error {
 	return nil
 }
 
-func (h *RouterParams) ToString(_ interface{}) (string, error) {
+func (h *RouterParams) ToString() (string, error) {
 	return h.params.String(), nil
 }
 
-func (h *RouterParams) ToJSON(_ interface{}) (string, error) {
+func (h *RouterParams) ToJSON() (string, error) {
 	blob, _ := json.Marshal(h.params)
 	return string(blob), nil
 }
 
-func (h *RouterParams) method(_ interface{}, name string, _ []pl.Val) (pl.Val, error) {
+func (h *RouterParams) Method(name string, _ []pl.Val) (pl.Val, error) {
 	return pl.NewValNull(), fmt.Errorf("method: http.router.params %s is unknown", name)
 }
 
-func (h *RouterParams) Info(_ interface{}) string {
+func (h *RouterParams) Info() string {
 	return HttpRouterParamsTypeId
 }
 
-func (h *RouterParams) ToNative(_ interface{}) interface{} {
+func (h *RouterParams) ToNative() interface{} {
 	return h.params
+}
+
+func (h *RouterParams) Id() string {
+	return HttpRouterParamsTypeId
+}
+
+func (h *RouterParams) NewIterator() (pl.Iter, error) {
+	return nil, fmt.Errorf("http.router.params does not support iterator")
 }
 
 func NewRouterParamsVal(r hrouter.Params) pl.Val {
 	x := &RouterParams{
 		params: r,
 	}
-	return pl.NewValUsr(
-		x,
-		x.Index,
-		x.IndexSet,
-		x.Dot,
-		x.DotSet,
-		x.method,
-		x.ToString,
-		x.ToJSON,
-		func(_ interface{}) string {
-			return HttpRouterParamsTypeId
-		},
-		x.Info,
-		x.ToNative,
-	)
+	return pl.NewValUsr(x)
 }

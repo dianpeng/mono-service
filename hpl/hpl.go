@@ -453,7 +453,7 @@ func (p *Hpl) httpResponseAction(x *pl.Evaluator, actionName string, arg pl.Val)
 
 	case "response":
 		if ValIsHttpResponse(arg) {
-			r, _ := arg.Usr().Context.(*Response)
+			r, _ := arg.Usr().(*Response)
 			p.respWriter.setResponse(r.response)
 			return nil
 		} else {
@@ -470,7 +470,7 @@ func (p *Hpl) httpResponseAction(x *pl.Evaluator, actionName string, arg pl.Val)
 
 	case "header":
 		if ValIsHttpHeader(arg) {
-			h, _ := arg.Usr().Context.(*Header)
+			h, _ := arg.Usr().(*Header)
 			p.respWriter.header = h.header
 		} else {
 			p.respWriter.clearHeader()
@@ -522,11 +522,11 @@ func (p *Hpl) httpResponseAction(x *pl.Evaluator, actionName string, arg pl.Val)
 		if arg.Type == pl.ValStr {
 			p.respWriter.writeBodyString(arg.String())
 		} else if ValIsReadableStream(arg) {
-			stream, ok := arg.Usr().Context.(*ReadableStream)
+			stream, ok := arg.Usr().(*ReadableStream)
 			must(ok, "invalid body type(.readablestream)")
 			p.respWriter.writeBodyStream(stream.Stream)
 		} else if ValIsHttpBody(arg) {
-			body, ok := arg.Usr().Context.(*Body)
+			body, ok := arg.Usr().(*Body)
 			must(ok, "invalid body type(http.body)")
 			p.respWriter.writeBodyStream(body.Stream().Stream)
 		} else {

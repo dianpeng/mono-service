@@ -103,7 +103,7 @@ func (h *Request) isChunked() bool {
 	return false
 }
 
-func (h *Request) Index(_ interface{}, key pl.Val) (pl.Val, error) {
+func (h *Request) Index(key pl.Val) (pl.Val, error) {
 	if key.Type != pl.ValStr {
 		return pl.NewValNull(), fmt.Errorf("invalid index, request's component must be string")
 	}
@@ -174,19 +174,19 @@ func (h *Request) Index(_ interface{}, key pl.Val) (pl.Val, error) {
 	return pl.NewValNull(), fmt.Errorf("unknown field name %s for request", key.String())
 }
 
-func (h *Request) Dot(x interface{}, name string) (pl.Val, error) {
-	return h.Index(x, pl.NewValStr(name))
+func (h *Request) Dot(name string) (pl.Val, error) {
+	return h.Index(pl.NewValStr(name))
 }
 
-func (h *Request) IndexSet(x interface{}, key pl.Val, val pl.Val) error {
+func (h *Request) IndexSet(key pl.Val, val pl.Val) error {
 	if key.Type == pl.ValStr {
-		return h.DotSet(x, key.String(), val)
+		return h.DotSet(key.String(), val)
 	} else {
 		return fmt.Errorf("http.request index set, invalid key type")
 	}
 }
 
-func (h *Request) DotSet(_ interface{}, key string, val pl.Val) error {
+func (h *Request) DotSet(key string, val pl.Val) error {
 	switch key {
 	case "header":
 		return h.setHeader(val)
@@ -204,11 +204,11 @@ func (h *Request) DotSet(_ interface{}, key string, val pl.Val) error {
 	return nil
 }
 
-func (h *Request) ToString(x interface{}) (string, error) {
-	return h.Info(x), nil
+func (h *Request) ToString() (string, error) {
+	return h.Info(), nil
 }
 
-func (h *Request) ToJSON(_ interface{}) (string, error) {
+func (h *Request) ToJSON() (string, error) {
 	blob, _ := json.Marshal(
 		map[string]interface{}{
 			"type":       HttpRequestTypeId,
@@ -225,16 +225,24 @@ func (h *Request) ToJSON(_ interface{}) (string, error) {
 	return string(blob), nil
 }
 
-func (h *Request) method(_ interface{}, name string, _ []pl.Val) (pl.Val, error) {
+func (h *Request) Method(name string, _ []pl.Val) (pl.Val, error) {
 	return pl.NewValNull(), fmt.Errorf("method: http.request:%s is unknown", name)
 }
 
-func (h *Request) Info(_ interface{}) string {
+func (h *Request) Info() string {
 	return HttpRequestTypeId
 }
 
-func (h *Request) ToNative(_ interface{}) interface{} {
+func (h *Request) ToNative() interface{} {
 	return h.request
+}
+
+func (h *Request) Id() string {
+	return HttpRequestTypeId
+}
+
+func (h *Request) NewIterator() (pl.Iter, error) {
+	return nil, fmt.Errorf("http.request does not support iterator")
 }
 
 func NewRequestVal(req *http.Request) pl.Val {
@@ -245,21 +253,7 @@ func NewRequestVal(req *http.Request) pl.Val {
 		body:    NewBodyValFromStream(req.Body),
 	}
 
-	return pl.NewValUsr(
-		x,
-		x.Index,
-		x.IndexSet,
-		x.Dot,
-		x.DotSet,
-		x.method,
-		x.ToString,
-		x.ToJSON,
-		func(_ interface{}) string {
-			return HttpRequestTypeId
-		},
-		x.Info,
-		x.ToNative,
-	)
+	return pl.NewValUsr(x)
 }
 
 func NewRequestValFromVal(
@@ -273,11 +267,11 @@ func NewRequestValFromVal(
 		return NewRequestValFromString(method, url, body.String())
 	default:
 		if ValIsHttpBody(body) {
-			b, _ := body.Usr().Context.(*Body)
+			b, _ := body.Usr().(*Body)
 			return NewRequestValFromStream(method, url, b.Stream().Stream)
 		}
 		if ValIsReadableStream(body) {
-			s, _ := body.Usr().Context.(*ReadableStream)
+			s, _ := body.Usr().(*ReadableStream)
 			return NewRequestValFromStream(method, url, s.Stream)
 		}
 
