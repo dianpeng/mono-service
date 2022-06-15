@@ -588,6 +588,21 @@ VM:
 				e.pop()
 				break
 
+			case bcDup1:
+				tos := e.top0()
+				e.push(tos)
+				break
+
+			case bcDup2:
+				// order matters
+				to1 := e.top1()
+				to0 := e.top0()
+
+				e.push(to1)
+				e.push(to0)
+
+				break
+
 			case bcTernary, bcJfalse:
 				cond := e.top0()
 				e.pop()

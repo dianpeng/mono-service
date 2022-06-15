@@ -7,7 +7,9 @@ import (
 )
 
 const (
-	bcAction = 0
+	// specifically leave this as a marker to indicate bug that we have during
+	// code generation, ie patch code is not filled up
+	bcPatch = 0
 
 	// loading a constant into the expression stack
 	bcLoadInt   = 1
@@ -46,6 +48,8 @@ const (
 	bcStoreLocal   = 22
 	bcReserveLocal = 23
 
+	bcAction = 30
+
 	// expression
 	bcAdd          = 31
 	bcSub          = 32
@@ -78,7 +82,9 @@ const (
 	bcJump    = 56
 
 	// stack manipulation
-	bcPop = 70
+	bcDup1 = 68
+	bcDup2 = 69
+	bcPop  = 70
 
 	// this instruction can only be generated during the global scope
 	bcSetSession = 71
@@ -95,6 +101,12 @@ const (
 	bcICall  = 83
 	bcSCall  = 84
 	bcReturn = 89
+
+	// iterator
+	bcNewIterator   = 90
+	bcHasIterator   = 91
+	bcDerefIterator = 92
+	bcNextIterator  = 93
 
 	// special functions
 	// render template
@@ -319,7 +331,7 @@ func (p *program) dump() string {
 	var b bytes.Buffer
 	b.WriteString(fmt.Sprintf(":program (%s)\n", p.name))
 	for idx, x := range p.bcList {
-		b.WriteString(fmt.Sprintf("%d> %s\n", idx+1, x.dumpWithProgram(p)))
+		b.WriteString(fmt.Sprintf("%d> %s\n", idx, x.dumpWithProgram(p)))
 	}
 	return b.String()
 }
@@ -416,6 +428,8 @@ func (x *bytecode) dump(resolver func(int, int) string) string {
 
 func getBytecodeName(bc int) string {
 	switch bc {
+	case bcPatch:
+		return "<patch>"
 	case bcAction:
 		return "action"
 	case bcLoadInt:
@@ -450,6 +464,14 @@ func getBytecodeName(bc int) string {
 		return "scall"
 	case bcReturn:
 		return "return"
+	case bcNewIterator:
+		return "new_iterator"
+	case bcHasIterator:
+		return "has_iterator"
+	case bcDerefIterator:
+		return "deref_iterator"
+	case bcNextIterator:
+		return "next_iterator"
 	case bcToStr:
 		return "to-str"
 	case bcConStr:
@@ -514,6 +536,10 @@ func getBytecodeName(bc int) string {
 		return "ternary"
 	case bcPop:
 		return "pop"
+	case bcDup1:
+		return "dup1"
+	case bcDup2:
+		return "dup2"
 	case bcSetSession:
 		return "set-session"
 	case bcLoadSession:

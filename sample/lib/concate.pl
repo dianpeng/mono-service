@@ -5,7 +5,7 @@ rule generate => {
     http::new_url("https://www.tmall.com"), 
     separator,
     http::new_request("POST", "https://www.taobao.com", "Hello World")
-  ]
+  ];
 }
 
 // do nothing just

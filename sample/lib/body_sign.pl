@@ -13,7 +13,7 @@ rule sign => {
   // notes, we need to use signBody, since the original body has been
   // consumed up
   body => signBody;
-};
+}
 
 // policy for handling verification result
 // reject means the verification failed; pass means the verification
@@ -28,7 +28,7 @@ rule reject => {
   // notes, we need to use signBody, since the original body has been
   // consumed up
   body => signBody;
-};
+}
 
 rule pass => {
   status => 202;
@@ -37,7 +37,7 @@ rule pass => {
     ("x-body-sign-expect", signExpect)
   ];
   body => signBody;
-};
+}
 
 rule log => {
   dprint(logFormat);

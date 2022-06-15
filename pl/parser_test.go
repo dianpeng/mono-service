@@ -62,22 +62,22 @@ pppp {
 		p := newParser(
 			`
 pppp {
-  let a = true ? 1 : 2;
-  let b = true ? (true ? 10 : 20) : 30;
+  let a = true if 1 else 2;
+  let b = true if (true if 10 else 20) else 30;
   let c = if true {
-    100
+    100;
   } else {
-    200
+    200;
   };
 
   let d = if 1 > 100 && a {
-    a + b + c
+    a + b + c;
   } elif false {
-    a * b + c
+    a * b + c;
   } elif true {
-    a + b * c
+    a + b * c;
   } else {
-    a ** b + c
+    a ** b + c;
   };
 }
 `)
@@ -97,21 +97,22 @@ func TestParser1(t *testing.T) {
 		p := newParser(`
 
 
-policy1(
-  act_int => 10,
-  act_real => 20.0,
-  act_null => null,
-  act_bool = true,
-  act_list = [1, 10, true, null],
+policy1 {
+  act_int => 10;
+  act_real => 20.0;
+  act_null => null;
+  act_bool = true;
+  act_list = [1, 10, true, null];
   act_map = {
     'a' : 100,
     'b' : 200
-  },
-  act_func = xx(10, 20),
-  act_var = $.a.b[2].c
-);
+  };
+  act_func = xx(10, 20);
+  act_var = $.a.b[2].c;
+}
 
-policy2();
+policy2 {}
+
 `)
 
 		prog, err := p.parse()
@@ -124,13 +125,13 @@ policy2();
 
 	{
 		p := newParser(`
-policy_call(
-  s1 = $,
-  s2 = $.a,
-  s3 = $.a[1],
-  s4 = $.a[2].a,
-  s5 = $[1][2][3]
-);
+policy_call{
+  s1 = $;
+  s2 = $.a;
+  s3 = $.a[1];
+  s4 = $.a[2].a;
+  s5 = $[1][2][3];
+}
 `)
 
 		prog, err := p.parse()
@@ -143,13 +144,13 @@ policy_call(
 
 	{
 		p := newParser(`
-policy_call(
-  s1 = a5,
-  s2 = a5[1],
-  s3 = a5.a[1],
-  s4 = a5.a[2].a,
-  s5 = a5[1][2][3]
-);
+policy_call{
+  s1 = a5;
+  s2 = a5[1];
+  s3 = a5.a[1];
+  s4 = a5.a[2].a;
+  s5 = a5[1][2][3];
+}
 `)
 
 		prog, err := p.parse()
@@ -163,13 +164,13 @@ policy_call(
 	// call expression nesting
 	{
 		p := newParser(`
-policy_call(
-  call0 = c(), 
-  call1 = c1(10),
-  call2 = c2(10, [], {}, 'aaaa', "Asdasdsa"),
-  call3 = c3(c4(), c5.a[1].c.d, $),
-  call4 = c4(c10(c11(), 10)).a[1].cc
-);
+policy_call{
+  call0 = c();
+  call1 = c1(10);
+  call2 = c2(10, [], {}, 'aaaa', "Asdasdsa");
+  call3 = c3(c4(), c5.a[1].c.d, $);
+  call4 = c4(c10(c11(), 10)).a[1].cc;
+}
 `)
 
 		prog, err := p.parse()
@@ -185,15 +186,15 @@ func TestParserStringInterpolation(t *testing.T) {
 	assert := assert.New(t)
 	{
 		p := newParser(`
-policy1(
-  str1 = '',
-  str2 = 'abcd',
-  str3 = 'aabc{{$}}accc',
-  str4 = 'abbccdd{{$.a.b.c}}accc',
-  str5 = 'aabbcccd{{eval().a[1]}}',
-  str6 = '{{eval(a, 10)}}',
-  str7 = '{{eval(a, 10)}}xxxx'
-);
+policy1 {
+  str1 = '';
+  str2 = 'abcd';
+  str3 = 'aabc{{$}}accc';
+  str4 = 'abbccdd{{$.a.b.c}}accc';
+  str5 = 'aabbcccd{{eval().a[1]}}';
+  str6 = '{{eval(a, 10)}}';
+  str7 = '{{eval(a, 10)}}xxxx';
+}
 `)
 
 		prog, err := p.parse()
@@ -206,11 +207,11 @@ policy1(
 
 	{
 		p := newParser(`
-policy1(
-  str1 = '{',
-  str2 = '{{{',
-  str3 = '{{{{'
-);
+policy1{
+  str1 = '{';
+  str2 = '{{{';
+  str3 = '{{{{';
+}
 `)
 
 		prog, err := p.parse()

@@ -50,6 +50,16 @@ const (
 	tkMod
 	tkPow
 
+	// agg-arithmetic
+	tkAddAssign
+	tkSubAssign
+	tkMulAssign
+	tkDivAssign
+	tkModAssign
+	tkPowAssign
+	tkInc
+	tkDec
+
 	// comparison
 	tkLt
 	tkLe
@@ -84,6 +94,7 @@ const (
 	tkElse
 	tkTry
 	tkReturn
+	tkFor
 	tkContinue
 	tkBreak
 	tkNext
@@ -106,6 +117,19 @@ type lexer struct {
 	valueInt  int64
 	valueReal float64
 	valueText string
+}
+
+func isaggassign(tk int) bool {
+	switch tk {
+	case tkAddAssign, tkSubAssign, tkMulAssign, tkDivAssign, tkPowAssign, tkModAssign, tkInc, tkDec:
+		return true
+	default:
+		return false
+	}
+}
+
+func isassign(tk int) bool {
+	return tk == tkAssign || isaggassign(tk)
 }
 
 func newLexer(input string) *lexer {
@@ -167,16 +191,32 @@ func getTokenName(tk int) string {
 
 	case tkAdd:
 		return "+"
+	case tkAddAssign:
+		return "+="
 	case tkSub:
 		return "-"
+	case tkSubAssign:
+		return "-="
 	case tkMul:
 		return "*"
+	case tkMulAssign:
+		return "*="
 	case tkPow:
 		return "**"
+	case tkPowAssign:
+		return "**="
 	case tkDiv:
 		return "/"
+	case tkDivAssign:
+		return "/="
 	case tkMod:
 		return "%"
+	case tkModAssign:
+		return "%="
+	case tkInc:
+		return "++"
+	case tkDec:
+		return "--"
 	case tkLt:
 		return "<"
 	case tkLe:
@@ -217,6 +257,8 @@ func getTokenName(tk int) string {
 	case tkElse:
 		return "else"
 
+	case tkFor:
+		return "for"
 	case tkContinue:
 		return "continue"
 	case tkBreak:
@@ -582,6 +624,9 @@ func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 		case "const":
 			t.token = tkConst
 			return tkConst
+		case "for":
+			t.token = tkFor
+			return tkFor
 		case "when":
 			t.token = tkWhen
 			return tkWhen
@@ -759,33 +804,62 @@ func (t *lexer) next() int {
 		case ' ', '\t', '\r', '\n', '\v':
 			t.cursor++
 			continue
-
 		case '+':
-			return t.yield(tkAdd, 1)
+			return t.pp2(tkAdd, tkAddAssign, tkInc, '=', '+')
+
 		case '-':
-			return t.yield(tkSub, 1)
+			return t.pp2(tkSub, tkSubAssign, tkDec, '=', '-')
+
 		case '*':
-			return t.p2(tkMul, tkPow, '*')
+			if t.cursor+1 < len(t.input) {
+				nc := t.input[t.cursor+1]
+				switch nc {
+				case '=':
+					return t.yield(tkMulAssign, 2)
+
+				case '*':
+					if t.cursor+2 < len(t.input) {
+						nnc := t.input[t.cursor+2]
+						if nnc == '=' {
+							return t.yield(tkPowAssign, 3)
+						}
+					}
+					return t.yield(tkPow, 2)
+
+				default:
+					break
+				}
+			}
+			return t.yield(tkMul, 1)
+
 		case '/':
 			if t.cursor+1 < len(t.input) {
 				nc := t.input[t.cursor+1]
-				if nc == '/' {
+				switch nc {
+				case '/':
 					t.cursor += 2
 					t.scanComment()
 					continue
-				} else if nc == '*' {
+
+				case '*':
 					t.cursor += 2
 					if !t.scanCommentBlock() {
 						return t.token
 					} else {
 						continue
 					}
+					break
+
+				case '=':
+					return t.yield(tkDivAssign, 2)
+				default:
+					break
 				}
 			}
 			return t.yield(tkDiv, 1)
 
 		case '%':
-			return t.yield(tkMod, 1)
+			return t.p2(tkMod, tkModAssign, '=')
 
 		case '=':
 			return t.pp2(tkAssign, tkArrow, tkEq, '>', '=')
