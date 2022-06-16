@@ -18,7 +18,7 @@ Although, there will be lots of builtin functions, many common use cases are
 already been coverted. But user can still use the Go api to create specific
 function to extend MonoService's runtime.
 
-## Fully Programmable Pipeline Via Newly Designed Scripting DSL
+## Programmable Pipeline
 
 MonoService runtime features a specifically designed from scratch scripting engine
 called PL, or Policy Language. Unlike most web server tries to integrate or embbed
@@ -30,7 +30,7 @@ tied to the Http session and is visiable throughout one specific Http session.
 Other feature like, markdown/go template literal, regex literal, rule dispatching,
 etc ... Anyone who is familiar with C/Go/Rust style langauge can pick it up easily
 
-## Multi Tenant Awareness
+## Multi Tenancy Awareness
 
 The MonoService runtime is desigened with multi tenancy in mind. The service
 exposed by each HTTP endpoint can be configured flexibly by configuration file.
