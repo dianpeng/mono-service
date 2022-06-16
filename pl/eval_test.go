@@ -1902,6 +1902,21 @@ func TestTryExpr(t *testing.T) {
 	assert.True(testString(
 		`
 	  test{
+	    let a = try foo() else {
+        try bar() else {
+          try q() else {
+            "hello world";
+          };
+        };
+      };
+
+	    output => a;
+	  }
+	  `, "hello world"))
+
+	assert.True(testString(
+		`
+	  test{
 	    let a = try foo() else let reason reason;
 	    output => a;
 	  }

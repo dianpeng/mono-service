@@ -37,7 +37,13 @@ exposed by each HTTP endpoint can be configured flexibly by configuration file.
 Additionally, each group of services been exposed can be groupped together to
 form a virtual host. A vhost is been used as an representation of tenancy.
 
-# Configuration Samples
+# Configuration
+
+## DSL (Policy Language)
+
+See document for DSL features:
+
+[a relative link](doc/pl.md)
 
 ## Yaml
 
