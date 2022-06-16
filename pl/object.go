@@ -26,6 +26,24 @@ const (
 	valFrame
 )
 
+func IsPrimitiveType(t int) bool {
+	switch t {
+	case ValInt, ValNull, ValReal, ValStr, ValBool:
+		return true
+	default:
+		return false
+	}
+}
+
+func IsValueType(t int) bool {
+	switch t {
+	case ValInt, ValNull, ValReal, ValStr, ValBool, ValPair, ValList, ValMap, ValRegexp:
+		return true
+	default:
+		return false
+	}
+}
+
 const (
 	MetaMethod = "__@method"
 
@@ -58,9 +76,12 @@ func GetClosureTypeId(id int) string {
 
 // Closure interface, ie wrapping around the function calls
 type Closure interface {
-	Call([]Val) (Val, error)
 	Type() int
+	ToString() (string, error)
+	ToJSON() (Val, error)
 	Id() string
+	Info() string
+	Dump() string
 }
 
 // Iterator interface, matching against the bytecode semantic
@@ -98,192 +119,8 @@ type Usr interface {
 	// support invocation operations, ie calling a user type
 }
 
-type UValIndex func(interface{}, Val) (Val, error)
-type UValIndexSet func(interface{}, Val, Val) error
-type UValDot func(interface{}, string) (Val, error)
-type UValDotSet func(interface{}, string, Val) error
-type UValMethod func(interface{}, string, []Val) (Val, error)
-type UValToString func(interface{}) (string, error)
-type UValToJSON func(interface{}) (Val, error)
-type UValId func(interface{}) string
-type UValInfo func(interface{}) string
-type UValToNative func(interface{}) interface{}
-type UValIter func(interface{}) (Iter, error)
-
-type UVal struct {
-	context    interface{}
-	indexFn    UValIndex
-	indexSetFn UValIndexSet
-	dotFn      UValDot
-	dotSetFn   UValDotSet
-	methodFn   UValMethod
-	toStringFn UValToString
-	toJSONFn   UValToJSON
-	idFn       UValId
-	infoFn     UValInfo
-	toNativeFn UValToNative
-	iterFn     UValIter
-}
-
-func (u *UVal) Context() interface{} {
-	return u.context
-}
-
-func (u *UVal) Index(b Val) (Val, error) {
-	if u.indexFn != nil {
-		return u.indexFn(u.context, b)
-	} else {
-		return NewValNull(), fmt.Errorf("user type does not support *index* operation")
-	}
-}
-
-func (u *UVal) IndexSet(b Val, c Val) error {
-	if u.indexSetFn != nil {
-		return u.indexSetFn(u.context, b, c)
-	} else {
-		return fmt.Errorf("user type does not support *index set* operator")
-	}
-}
-
-func (u *UVal) Dot(b string) (Val, error) {
-	if u.dotFn != nil {
-		return u.dotFn(u.context, b)
-	} else {
-		return NewValNull(), fmt.Errorf("user type does not support *dot* operator")
-	}
-}
-
-func (u *UVal) DotSet(b string, c Val) error {
-	if u.dotSetFn != nil {
-		return u.dotSetFn(u.context, b, c)
-	} else {
-		return fmt.Errorf("user type does not support *dot set* operator")
-	}
-}
-
-func (u *UVal) Method(b string, c []Val) (Val, error) {
-	if u.methodFn != nil {
-		return u.methodFn(u.context, b, c)
-	} else {
-		return NewValNull(), fmt.Errorf("user type does not support *method* operator")
-	}
-}
-
-func (u *UVal) ToString() (string, error) {
-	if u.toStringFn != nil {
-		return u.toStringFn(u.context)
-	} else {
-		return "", fmt.Errorf("user type does not support *to string* operator")
-	}
-}
-
-func (u *UVal) ToJSON() (Val, error) {
-	if u.toJSONFn != nil {
-		return u.toJSONFn(u.context)
-	} else {
-		return NewValNull(), fmt.Errorf("user type does not support *to json* operator")
-	}
-}
-
-func (u *UVal) Id() string {
-	if u.idFn != nil {
-		return u.idFn(u.context)
-	} else {
-		return "[user]"
-	}
-}
-
-func (u *UVal) Info() string {
-	if u.infoFn != nil {
-		return u.infoFn(u.context)
-	} else {
-		return "[user]"
-	}
-}
-
-func (u *UVal) ToNative() interface{} {
-	if u.toNativeFn != nil {
-		return u.toNativeFn(u.context)
-	} else {
-		return u.context
-	}
-}
-
-func (u *UVal) NewIterator() (Iter, error) {
-	if u.iterFn != nil {
-		return u.iterFn(u.context)
-	} else {
-		return nil, fmt.Errorf("user type does not support iterator")
-	}
-}
-
-func NewUVal(
-	c interface{},
-	f0 UValIndex,
-	f1 UValIndexSet,
-	f2 UValDot,
-	f3 UValDotSet,
-
-	f4 UValMethod,
-	f5 UValToString,
-	f6 UValToJSON,
-	f7 UValId,
-	f8 UValInfo,
-	f9 UValToNative,
-	f10 UValIter,
-) *UVal {
-	return &UVal{
-		context:    c,
-		indexFn:    f0,
-		indexSetFn: f1,
-		dotFn:      f2,
-		dotSetFn:   f3,
-		methodFn:   f4,
-		toStringFn: f5,
-		toJSONFn:   f6,
-		idFn:       f7,
-		infoFn:     f8,
-		toNativeFn: f9,
-		iterFn:     f10,
-	}
-}
-
-func NewUValData(
-	c interface{},
-) *UVal {
-	return &UVal{
-		context: c,
-	}
-}
-
-type List struct {
-	Data []Val
-}
-
-func NewList() *List {
-	return &List{
-		Data: make([]Val, 0, 0),
-	}
-}
-
-type Map struct {
-	Data map[string]Val
-}
-
-func NewMap() *Map {
-	return &Map{
-		Data: make(map[string]Val),
-	}
-}
-
-type Pair struct {
-	First  Val
-	Second Val
-}
-
 type Val struct {
-	Type int
-
+	Type  int
 	vData interface{}
 }
 
@@ -620,6 +457,21 @@ func NewValUValData(
 	}
 }
 
+func newValScriptFunction(
+	p *program) Val {
+	return Val{
+		Type:  ValClosure,
+		vData: newScriptFunc(p),
+	}
+}
+
+func newValSFunc(sfunc *scriptFunc) Val {
+	return Val{
+		Type:  ValClosure,
+		vData: sfunc,
+	}
+}
+
 func NewValUVal(
 	c interface{},
 	f0 UValIndex,
@@ -750,24 +602,13 @@ func (v *Val) ToNative() interface{} {
 	case ValNull:
 		return nil
 	case ValList:
-		var x []interface{}
-		for _, xx := range v.List().Data {
-			x = append(x, xx.ToNative())
-		}
-		return x
+		return v.List().ToNative()
 
 	case ValMap:
-		x := make(map[string]interface{})
-		for key, val := range v.Map().Data {
-			x[key] = val.ToNative()
-		}
-		return x
+		return v.Map().ToNative()
 
 	case ValPair:
-		return [2]interface{}{
-			v.Pair().First.ToNative(),
-			v.Pair().Second.ToNative(),
-		}
+		return v.Pair().ToNative()
 
 	case ValRegexp:
 		return fmt.Sprintf("[Regexp: %s]", v.Regexp().String())
@@ -813,7 +654,7 @@ func (v *Val) ToString() (string, error) {
 		return "iter", nil
 
 	case ValClosure:
-		return "closure", nil
+		return v.Closure().ToString()
 
 	case valFrame:
 		return "", nil
@@ -842,39 +683,13 @@ func (v *Val) Index(idx Val) (Val, error) {
 		return NewValStr(v.String()[i : i+1]), nil
 
 	case ValPair:
-		i, err := idx.ToIndex()
-		if err != nil {
-			return NewValNull(), err
-		}
-		if i == 0 {
-			return v.Pair().First, nil
-		}
-		if i == 1 {
-			return v.Pair().Second, nil
-		}
-
-		return NewValNull(), fmt.Errorf("invalid index, 0 or 1 is allowed on Pair")
+		return v.Pair().Index(idx)
 
 	case ValList:
-		i, err := idx.ToIndex()
-		if err != nil {
-			return NewValNull(), err
-		}
-		if i >= len(v.List().Data) {
-			return NewValNull(), fmt.Errorf("index out of range")
-		}
-		return v.List().Data[i], nil
+		return v.List().Index(idx)
 
 	case ValMap:
-		i, err := idx.ToString()
-		if err != nil {
-			return NewValNull(), err
-		}
-		if vv, ok := v.Map().Data[i]; !ok {
-			return NewValNull(), fmt.Errorf("%s key not found", i)
-		} else {
-			return vv, nil
-		}
+		return v.Map().Index(idx)
 
 	case valFrame:
 		return NewValNull(), nil
@@ -912,44 +727,13 @@ func (v *Val) IndexSet(idx, val Val) error {
 		return nil
 
 	case ValPair:
-		i, err := idx.ToIndex()
-		if err != nil {
-			return err
-		}
-		if i == 0 {
-			v.Pair().First = val
-			return nil
-		}
-		if i == 1 {
-			v.Pair().Second = val
-			return nil
-		}
-
-		return fmt.Errorf("invalid index, 0 or 1 is allowed on Pair")
+		return v.Pair().IndexSet(idx, val)
 
 	case ValList:
-		i, err := idx.ToIndex()
-		if err != nil {
-			return err
-		}
-
-		if i >= len(v.List().Data) {
-			for j := len(v.List().Data); j < i; j++ {
-				v.List().Data = append(v.List().Data, NewValNull())
-			}
-			v.List().Data = append(v.List().Data, val)
-		} else {
-			v.List().Data[i] = val
-		}
-		return nil
+		return v.List().IndexSet(idx, val)
 
 	case ValMap:
-		i, err := idx.ToString()
-		if err != nil {
-			return err
-		}
-		v.Map().Data[i] = val
-		return nil
+		return v.Map().IndexSet(idx, val)
 
 	case valFrame:
 		return nil
@@ -968,21 +752,10 @@ func (v *Val) Dot(i string) (Val, error) {
 		return NewValNull(), fmt.Errorf("cannot apply dot operator on regexp")
 
 	case ValMap:
-		if vv, ok := v.Map().Data[i]; !ok {
-			return NewValNull(), fmt.Errorf("%s key not found", i)
-		} else {
-			return vv, nil
-		}
+		return v.Map().Dot(i)
 
 	case ValPair:
-		if i == "first" {
-			return v.Pair().First, nil
-		}
-		if i == "second" {
-			return v.Pair().Second, nil
-		}
-
-		return NewValNull(), fmt.Errorf("invalid field name, 'first'/'second' is allowed on Pair")
+		return v.Pair().Dot(i)
 
 	case valFrame:
 		return NewValNull(), nil
@@ -1001,20 +774,10 @@ func (v *Val) DotSet(i string, val Val) error {
 		return fmt.Errorf("cannot apply dot operator on regexp")
 
 	case ValMap:
-		v.Map().Data[i] = val
-		return nil
+		return v.Map().DotSet(i, val)
 
 	case ValPair:
-		if i == "first" {
-			v.Pair().First = val
-			return nil
-		}
-		if i == "second" {
-			v.Pair().Second = val
-			return nil
-		}
-
-		return fmt.Errorf("invalid field name, 'first'/'second' is allowed on Pair")
+		return v.Pair().DotSet(i, val)
 
 	case valFrame:
 		return nil
@@ -1050,20 +813,6 @@ var (
 	mpStrToLower  = MustNewFuncProto("str.to_lower", "%0")
 	mpStrSubStr   = MustNewFuncProto("str.substr", "{%d}{%d%d}")
 	mpStrIndex    = MustNewFuncProto("str.index", "{%d}{%d%d}")
-
-	// list#method
-	mpListLength   = MustNewFuncProto("list.length", "%0")
-	mpListPushBack = MustNewFuncProto("list.push_back", "%a")
-	mpListPopBack  = MustNewFuncProto("list.pop_back", "%d")
-	mpListExtend   = MustNewFuncProto("list.extend", "%l")
-	mpListSlice    = MustNewFuncProto("list.slice", "{%d}{%d%d}")
-
-	// map#method
-	mpMapLength = MustNewFuncProto("map.length", "%0")
-	mpMapSet    = MustNewFuncProto("map.set", "%s%a")
-	mpMapDel    = MustNewFuncProto("map.del", "%s")
-	mpMapGet    = MustNewFuncProto("map.get", "%s%a")
-	mpMapHas    = MustNewFuncProto("map.has", "%s")
 )
 
 func (v *Val) methodInt(name string, args []Val) (Val, error) {
@@ -1226,117 +975,6 @@ func (v *Val) methodStr(name string, args []Val) (Val, error) {
 	}
 }
 
-func (v *Val) methodList(name string, args []Val) (Val, error) {
-	switch name {
-	case "length":
-		_, err := mpListLength.Check(args)
-		if err != nil {
-			return NewValNull(), err
-		}
-		return NewValInt(len(v.List().Data)), nil
-
-	case "push_back":
-		_, err := mpListPushBack.Check(args)
-		if err != nil {
-			return NewValNull(), err
-		}
-		for _, x := range args {
-			v.AddList(x)
-		}
-		return NewValNull(), nil
-
-	case "pop_back":
-		_, err := mpListPopBack.Check(args)
-		if err != nil {
-			return NewValNull(), err
-		}
-		num := int(args[0].Int())
-		if num < len(v.List().Data) {
-			v.List().Data = v.List().Data[0 : len(v.List().Data)-num]
-		} else {
-			v.List().Data = make([]Val, 0, 0)
-		}
-
-		return NewValNull(), nil
-
-	case "extend":
-		_, err := mpListExtend.Check(args)
-		if err != nil {
-			return NewValNull(), err
-		}
-		for _, x := range args[0].List().Data {
-			v.AddList(x)
-		}
-		return NewValNull(), nil
-
-	case "slice":
-		alog, err := mpListSlice.Check(args)
-		if err != nil {
-			return NewValNull(), err
-		}
-		var ret []Val
-		if alog == 2 {
-			ret = v.List().Data[args[0].Int():args[1].Int()]
-		} else {
-			ret = v.List().Data[args[0].Int():]
-		}
-		return NewValListRaw(ret), nil
-
-	default:
-		return NewValNull(), fmt.Errorf("method: list:%s is unknown", name)
-	}
-}
-
-func (v *Val) methodMap(name string, args []Val) (Val, error) {
-	switch name {
-	case "length":
-		_, err := mpMapLength.Check(args)
-		if err != nil {
-			return NewValNull(), err
-		}
-		return NewValInt(len(v.Map().Data)), nil
-
-	case "set":
-		_, err := mpMapSet.Check(args)
-		if err != nil {
-			return NewValNull(), err
-		}
-		v.Map().Data[args[0].String()] = args[1]
-		return NewValNull(), nil
-
-	case "del":
-		_, err := mpMapDel.Check(args)
-		if err != nil {
-			return NewValNull(), err
-		}
-		delete(v.Map().Data, args[0].String())
-		return NewValNull(), nil
-
-	case "get":
-		_, err := mpMapGet.Check(args)
-		if err != nil {
-			return NewValNull(), err
-		}
-		v, ok := v.Map().Data[args[0].String()]
-		if !ok {
-			return args[1], nil
-		} else {
-			return v, nil
-		}
-
-	case "has":
-		_, err := mpMapHas.Check(args)
-		if err != nil {
-			return NewValNull(), err
-		}
-		_, ok := v.Map().Data[args[0].String()]
-		return NewValBool(ok), nil
-
-	default:
-		return NewValNull(), fmt.Errorf("method: list:%s is unknown", name)
-	}
-}
-
 func (v *Val) methodUsr(name string, args []Val) (Val, error) {
 	return v.Usr().Method(name, args)
 }
@@ -1359,10 +997,10 @@ func (v *Val) Method(name string, args []Val) (Val, error) {
 		return v.methodStr(name, args)
 
 	case ValList:
-		return v.methodList(name, args)
+		return v.List().Method(name, args)
 
 	case ValMap:
-		return v.methodMap(name, args)
+		return v.Map().Method(name, args)
 
 	case ValRegexp, ValIter, ValClosure:
 		break
@@ -1400,7 +1038,7 @@ func (v *Val) Id() string {
 	case ValIter:
 		return "iter"
 	case ValClosure:
-		return "closure"
+		return v.Closure().Id()
 	case valFrame:
 		return "#frame"
 	default:
@@ -1425,17 +1063,18 @@ func (v *Val) Info() string {
 	case ValStr:
 		return fmt.Sprintf("[string: %s]", v.String())
 	case ValList:
-		return fmt.Sprintf("[list: %d]", len(v.List().Data))
+		return v.List().Info()
 	case ValMap:
-		return fmt.Sprintf("[map: %d]", len(v.Map().Data))
+		return v.Map().Info()
+
 	case ValPair:
-		return fmt.Sprintf("[pair: %s=>%s]", v.Pair().First.Info(), v.Pair().Second.Info())
+		return v.Pair().Info()
 	case ValRegexp:
 		return fmt.Sprintf("[regexp: %s]", v.Regexp().String())
 	case ValIter:
 		return "iter"
 	case ValClosure:
-		return "closure"
+		return v.Closure().Info()
 	case valFrame:
 		return "#frame"
 	default:
@@ -1443,10 +1082,14 @@ func (v *Val) Info() string {
 	}
 }
 
-func init() {
+func checkstatic() {
 	// testing whether UVal is convertable to Usr
 	uval := &UVal{}
 	var u Usr
 	u = uval
 	_ = u
+}
+
+func init() {
+	checkstatic()
 }

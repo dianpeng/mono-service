@@ -2,6 +2,8 @@ package pl
 
 import (
 	"bytes"
+	"fmt"
+	"strings"
 )
 
 type Policy struct {
@@ -28,6 +30,30 @@ type Policy struct {
 	fn []*program
 }
 
+func (p *Policy) nextAnonymousFuncName() string {
+	return fmt.Sprintf("[anonymous_function_%d]", len(p.fn))
+}
+
+func (p *Policy) GetAnonymousFunctionSize() int {
+	cnt := 0
+	for _, x := range p.fn {
+		if strings.HasPrefix(x.name, "[anonymous_function_") {
+			cnt++
+		}
+	}
+	return cnt
+}
+
+func (p *Policy) allAnonymousFunction() []*program {
+	o := []*program{}
+	for _, x := range p.fn {
+		if strings.HasPrefix(x.name, "[anonymous_function_") {
+			o = append(o, x)
+		}
+	}
+	return o
+}
+
 func (p *Policy) getfromlist(name string, l []*program) (*program, int) {
 	for idx, pp := range l {
 		if pp.name == name {
@@ -50,6 +76,18 @@ func (p *Policy) getFunction(name string) *program {
 func (p *Policy) getFunctionIndex(name string) int {
 	_, i := p.getfromlist(name, p.fn)
 	return i
+}
+
+// Get a script function from the imported policy, if the function cannot be
+// found then the function returns an null value, otherwise a Closure is
+// returned which can be invoked later on
+func (p *Policy) GetFunction(name string) Val {
+	prog := p.getFunction(name)
+	if prog != nil {
+		return newValScriptFunction(prog)
+	} else {
+		return NewValNull()
+	}
 }
 
 func (p *Policy) HasSession() bool {

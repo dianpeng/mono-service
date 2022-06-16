@@ -96,10 +96,12 @@ const (
 	bcLoadConst = 76
 
 	// call
-	bcCall   = 81
-	bcMCall  = 82
-	bcICall  = 83
-	bcSCall  = 84
+	bcCall  = 81
+	bcMCall = 82
+	bcICall = 83
+	bcSCall = 84
+	bcVCall = 85 // variable call, ie calling a function that is loaded into
+	// a dynamic variable which cannot be resolved
 	bcReturn = 89
 
 	// iterator
@@ -107,6 +109,11 @@ const (
 	bcHasIterator   = 91
 	bcDerefIterator = 92
 	bcNextIterator  = 93
+
+	// uvpalue/closure
+	bcNewClosure   = 95
+	bcLoadUpvalue  = 96
+	bcStoreUpvalue = 97
 
 	// exception
 	bcPushException = 101
@@ -167,11 +174,17 @@ const (
 	progExpression
 )
 
+type upvalue struct {
+	index   int
+	onStack bool
+}
+
 type program struct {
 	name      string
 	localSize int
 	argSize   int // if this program is a function call, then this indicates
 	// size of the arguments required for calling the function
+
 	tbReal     []float64
 	tbInt      []int64
 	tbStr      []string
@@ -182,6 +195,9 @@ type program struct {
 	bcList   bytecodeList
 	dbgList  sourcelocList
 	progtype int
+
+	// used when the program is a function, ie for capturing its upvalue
+	upvalue []upvalue
 }
 
 func newProgram(n string, t int) *program {
@@ -198,6 +214,14 @@ func newProgramEmpty(n string, t int) *program {
 		argument: 0,
 	})
 	return pp
+}
+
+func (p *program) freeCall() bool {
+	return len(p.upvalue) == 0
+}
+
+func (p *program) upvalueSize() int {
+	return len(p.upvalue)
 }
 
 // constant table manipulation
@@ -564,6 +588,13 @@ func getBytecodeName(bc int) string {
 		return "push-exception"
 	case bcPopException:
 		return "pop-exception"
+
+	case bcNewClosure:
+		return "new-closure"
+	case bcStoreUpvalue:
+		return "store-upvalue"
+	case bcLoadUpvalue:
+		return "load-upvalue"
 
 	// special functions
 	case bcTemplate:

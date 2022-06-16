@@ -309,6 +309,146 @@ func (a *actionOutput) mapAt(idx string) *Map {
 	return x.Map()
 }
 
+func TestMCall(t *testing.T) {
+	assert := assert.New(t)
+	{
+		assert.True(testString(
+			`
+    test{
+      let a = {};
+      a:set("a", 10);
+      a:set("b", 20);
+      output => (a.a + a.b):to_string();
+    }
+    `, "30"))
+	}
+}
+
+func TestVCall(t *testing.T) {
+	assert := assert.New(t)
+
+	{
+		assert.True(testString(
+			`
+    test{
+      let obj = {
+        a : fn() {
+          return "hello";
+        },
+        b : fn() {
+          return "world";
+        }
+      };
+      output => obj.a() + " " + obj.b();
+    }
+    `, "hello world"))
+	}
+
+	{
+		assert.True(testString(
+			`
+      test{
+        output => (fn() { return 10:to_string(); })();
+      }
+    `, "10"))
+	}
+	{
+		assert.False(testString(
+			`
+    test{
+      output => 10();
+    }
+    `, ""))
+		assert.False(testString(
+			`
+    test{
+      output => ""();
+    }
+    `, ""))
+		assert.False(testString(
+			`
+    test{
+      output => {}();
+    }
+    `, ""))
+		assert.False(testString(
+			`
+    test{
+      output => []();
+    }
+    `, ""))
+	}
+}
+
+func TestUpvalue(t *testing.T) {
+	assert := assert.New(t)
+
+	{
+		assert.True(testString(
+			`
+    fn foo() {
+      let a = "hello world";
+      return fn() {
+        return a;
+      };
+    }
+    test{
+
+      output => foo()();
+    }
+    `, "hello world"))
+	}
+
+	// multiple collapsing
+	{
+		assert.True(testString(
+			`
+    fn foo() {
+      let a = "hello world";
+      return fn() {
+        return fn() {
+          return fn() {
+            return a;
+          };
+        };
+      };
+    }
+    test{
+
+      output => foo()()()();
+    }
+    `, "hello world"))
+	}
+
+	{
+		assert.True(testString(
+			`
+    fn foo(flag) {
+      let a = "hello world";
+      let b = "Hello World";
+
+      return fn() {
+        return fn() {
+          if flag {
+            return fn() {
+              return a;
+            };
+          } else {
+            return b;
+          }
+        };
+      };
+    }
+
+    test{
+      let lhs = foo(true)()()();
+      let rhs = foo(false)()();
+      output => lhs + rhs;
+    }
+    `, "hello worldHello World"))
+	}
+}
+
 func TestTryStatement(t *testing.T) {
 	assert := assert.New(t)
 

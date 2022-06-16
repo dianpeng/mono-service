@@ -54,6 +54,7 @@ type funcframe struct {
 	framep int
 	farg   int
 	excep  []exception
+	sfunc  *scriptFunc
 }
 
 func dupFuncFrameForErr(fr *funcframe) *funcframe {
@@ -148,6 +149,7 @@ func newfuncframe(
 	framep int,
 	farg int,
 	excep []exception,
+	sfunc *scriptFunc,
 ) (*funcframe, Val) {
 	ff := &funcframe{
 		pc:     pc,
@@ -155,6 +157,7 @@ func newfuncframe(
 		framep: framep,
 		farg:   farg,
 		excep:  excep,
+		sfunc:  sfunc,
 	}
 	return ff, newValFrame(ff)
 }
@@ -803,10 +806,10 @@ FUNC:
 			e.push(ret)
 			break
 
-		// script function call and return
-		case bcSCall:
+			// script function call and return
+		case bcSCall, bcVCall:
 			paramSize := bc.argument
-			funcIndex := e.topN(paramSize)
+			funcIndexOrEntry := e.topN(paramSize)
 
 			// create the frame marker for the scriptting call
 			_, newFV := newfuncframe(
@@ -815,20 +818,38 @@ FUNC:
 				e.curframe.framep,
 				e.curframe.farg,
 				e.curframe.excep,
+				e.curframe.sfunc,
 			)
 
 			// setup new calling frame
 			e.push(newFV)
 
+			var sfunc *scriptFunc
+
 			// enter into the new call
-			newCall := policy.fn[int(funcIndex.Int())]
-			prog = newCall
+			if bc.opcode == bcSCall {
+				idx := funcIndexOrEntry.Int()
+				newCall := policy.fn[int(idx)]
+				prog = newCall
+				must(prog.freeCall(), "must be freecall")
+			} else {
+				if funcIndexOrEntry.IsClosure() {
+					fn, ok := funcIndexOrEntry.Closure().(*scriptFunc)
+					must(ok, "must be a script function")
+					prog = fn.prog
+					sfunc = fn
+				} else {
+					return rrErrf(prog, pc, "object must be function, but got type: %s",
+						funcIndexOrEntry.Id())
+				}
+			}
 
 			e.curframe.prog = prog
 			e.curframe.pc = 0
 			e.curframe.framep = len(e.Stack) - paramSize - 2
 			e.curframe.farg = paramSize
 			e.curframe.excep = nil
+			e.curframe.sfunc = sfunc
 
 			// make sure to reset the PC when entering into the new function
 			pc = 0
@@ -845,6 +866,29 @@ FUNC:
 
 			// return value push back to the stack
 			e.push(rv)
+			break
+
+		case bcNewClosure:
+			fn := policy.fn[bc.argument]
+			sfunc := newScriptFunc(fn)
+			for _, uv := range fn.upvalue {
+				if uv.onStack {
+					sfunc.upvalue = append(sfunc.upvalue, e.Stack[e.localslot(uv.index)])
+				} else {
+					sfunc.upvalue = append(sfunc.upvalue, e.curframe.sfunc.upvalue[uv.index])
+				}
+			}
+
+			e.push(newValSFunc(sfunc))
+			break
+
+		case bcLoadUpvalue:
+			e.push(e.curframe.sfunc.upvalue[bc.argument])
+			break
+
+		case bcStoreUpvalue:
+			e.curframe.sfunc.upvalue[bc.argument] = e.top0()
+			e.pop()
 			break
 
 		case bcToStr:
@@ -1058,6 +1102,9 @@ func (e *Evaluator) doEval(event string, pp []*program, policy *Policy) error {
 	// mark exception to be null, ie no exception
 	e.curexcep = NewValNull()
 
+	// assign a null scriptFunc
+	e.curframe.sfunc = &scriptFunc{}
+
 	// Enter into the VM with a native function call marker. This serves as a
 	// frame marker to indicate the end of the script frame which will help us
 	// to terminate the frame walk
@@ -1070,6 +1117,7 @@ func (e *Evaluator) doEval(event string, pp []*program, policy *Policy) error {
 		0,
 		0,
 		nil,
+		&scriptFunc{},
 	)
 	e.push(entryV)
 
@@ -1083,6 +1131,7 @@ func (e *Evaluator) doEval(event string, pp []*program, policy *Policy) error {
 		e.curframe.pc = pc
 		e.curframe.framep = 0
 		e.curframe.farg = 0
+		e.curframe.sfunc.prog = prog
 
 	RECOVER:
 		rr := e.runP(event, prog, pc, policy)

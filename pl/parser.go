@@ -20,6 +20,7 @@ const (
 const (
 	entryFunc = iota
 	entryRule
+	entryVar
 	entryExpr
 )
 
@@ -44,10 +45,16 @@ type lexicalScope struct {
 	eType   int
 	scpType int
 	parent  *lexicalScope
+	isTop   bool
 
 	// patch information for generating loop related information
 	brklist []int
 	cntlist []int
+
+	// prog field, only used when isTop is true, modify upvalue when performing
+	// upvalue collapsing
+	prog *program
+	next *lexicalScope
 }
 
 func newLexicalScope(t int, p *lexicalScope) *lexicalScope {
@@ -67,6 +74,11 @@ func newLexicalScope(t int, p *lexicalScope) *lexicalScope {
 		eType:   et,
 		scpType: t,
 		parent:  p,
+		isTop:   false,
+	}
+
+	if p != nil {
+		p.next = x
 	}
 	return x
 }
@@ -153,6 +165,7 @@ func newParser(input string) *parser {
 const (
 	symSession = iota
 	symLocal
+	symUpval
 	symConst
 	symDynamic
 )
@@ -168,9 +181,11 @@ func (p *parser) enterLoopScope() *lexicalScope {
 	return p.enterScope(scpLoop)
 }
 
-func (p *parser) enterNormalScopeTop(et int) *lexicalScope {
+func (p *parser) enterNormalScopeTop(et int, prog *program) *lexicalScope {
 	pp := p.enterScope(scpNormal)
 	pp.eType = et
+	pp.isTop = true
+	pp.prog = prog
 	return pp
 }
 
@@ -181,6 +196,9 @@ func (p *parser) enterNormalScope() *lexicalScope {
 func (p *parser) leaveScope() *lexicalScope {
 	pp := p.stbl.parent
 	p.stbl = pp
+	if p.stbl != nil {
+		p.stbl.next = nil
+	}
 	return pp
 }
 
@@ -272,30 +290,124 @@ func (p *parser) mustAddLocalVar(x string) int {
 	return idx
 }
 
-func (p *parser) findLocal(n string) int {
-	x := p.stbl
+// local variable name resolution
+func (p *parser) findLocalAt(n string, scp *lexicalScope) (int, *lexicalScope) {
+	x := scp
+
 	for x != nil {
 		idx := x.find(n)
 		if idx != symError {
-			return idx
+			return idx, x
+		}
+		if x.isTop {
+			break
 		}
 		x = x.parent
 	}
-	return symError
+	return symError, x
 }
 
-func (p *parser) findLocalVar(n string) int {
-	x := p.stbl
+func (p *parser) findLocalVarAt(n string, scp *lexicalScope) (int, *lexicalScope) {
+	x := scp
 	for x != nil {
 		idx := x.findVar(n)
 		if idx != symError {
-			return idx
+			return idx, x
+		}
+		if x.isTop {
+			break
 		}
 		x = x.parent
 	}
-	return symError
+	return symError, x
 }
 
+func (p *parser) findLocal(n string) int {
+	x, _ := p.findLocalAt(n, p.stbl)
+	return x
+}
+
+func (p *parser) findLocalVar(n string) int {
+	x, _ := p.findLocalVarAt(n, p.stbl)
+	return x
+}
+
+func (p *parser) findNearestUpcall(fr *lexicalScope) (*lexicalScope, *lexicalScope) {
+	for {
+		if fr.isTop {
+			return fr.parent, fr
+		}
+		fr = fr.parent
+	}
+	return nil, nil
+}
+
+func (p *parser) funcScope(fr *lexicalScope) *lexicalScope {
+	_, r := p.findNearestUpcall(fr)
+	return r
+}
+
+// upvalue name resolution
+func (p *parser) findUpval(n string) int {
+	start, currentTop := p.findNearestUpcall(p.stbl)
+	cur := start
+	idx := -1
+
+	for cur != nil {
+		i, top := p.findLocalAt(n, cur)
+		if i >= 0 {
+			idx = i
+			break
+		}
+		cur = top.parent
+	}
+
+	if idx == -1 {
+		return -1
+	}
+
+	nextFuncScope := func(s *lexicalScope) *lexicalScope {
+		x := s.next
+		for {
+			must(x != nil, "invalid scope")
+			if x.isTop {
+				return x
+			}
+			x = x.next
+		}
+		return nil
+	}
+
+	// collapse the upvalue from multiple function's upvalue stack
+
+	patchScope := nextFuncScope(cur)
+	onStack := true
+
+	for {
+		patchScope.prog.upvalue = append(patchScope.prog.upvalue,
+			upvalue{
+				index:   idx,
+				onStack: onStack,
+			},
+		)
+
+		// only first scope is on stack
+		onStack = false
+
+		// update the index
+		idx = len(patchScope.prog.upvalue) - 1
+
+		if patchScope == currentTop {
+			break
+		} else {
+			patchScope = nextFuncScope(patchScope)
+		}
+	}
+
+	return idx
+}
+
+// session variable name resolution
 func (p *parser) findSessionIdx(x string) int {
 	for idx, n := range p.sessVar {
 		if n == x {
@@ -314,10 +426,10 @@ func (p *parser) findConstIdx(x string) int {
 	return symError
 }
 
+// symbol resolution, ie binding
 func (p *parser) resolveSymbol(xx string, ignoreConst bool, forWrite bool) (int, int) {
 	// local symbol table, based on for-read/for-write to handle local cases, since
 	// local symbol can be const value
-
 	if forWrite {
 		local := p.findLocalVar(xx)
 		if local == symInvalidConst || local >= 0 {
@@ -328,6 +440,13 @@ func (p *parser) resolveSymbol(xx string, ignoreConst bool, forWrite bool) (int,
 		if local != symError {
 			return symLocal, local
 		}
+	}
+
+	// notes, upvalue capture are all none constant. Constant is just syntax sugar
+	// for local variables
+	upval := p.findUpval(xx)
+	if upval >= 0 {
+		return symUpval, upval
 	}
 
 	// session symbol table
@@ -357,15 +476,12 @@ func (p *parser) err(xx string) error {
 }
 
 func (p *parser) parseExpression() (*Policy, error) {
-	p.enterNormalScopeTop(entryExpr)
-
+	p.l.next()
+	prog := newProgram("$expression", progExpression)
+	p.enterNormalScopeTop(entryExpr, prog)
 	defer func() {
 		p.leaveScope()
 	}()
-
-	p.l.next()
-
-	prog := newProgram("$expression", progExpression)
 
 	// load a null on top of the stack in case the expression does nothing
 	prog.emit0(p.l, bcLoadNull)
@@ -417,7 +533,9 @@ LOOP:
 			break
 
 		case tkFunction:
-			if err := p.parseFunction(); err != nil {
+			// eat the fn token, parseFunction expect after the fn keyword
+			p.l.next()
+			if _, err := p.parseFunction(false); err != nil {
 				return nil, err
 			}
 			break
@@ -490,6 +608,12 @@ func (p *parser) parseVarScope(rulename string,
 	p.l.next()
 
 	prog := newProgram(rulename, progSession)
+
+	p.enterNormalScopeTop(entryVar, prog)
+	defer func() {
+		p.leaveScope()
+	}()
+
 	localR := prog.patch(p.l)
 	nlist := []string{}
 
@@ -537,24 +661,29 @@ func (p *parser) parseVarScope(rulename string,
 // function name'(' arg-list ')'
 // function's argument are been treated just like local variables, since they
 // will be put into the stack by the caller
-func (p *parser) parseFunction() (the_error error) {
-	must(p.l.token == tkFunction, "must be function")
-	p.enterNormalScopeTop(entryFunc)
+func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
+	funcName := ""
 
+	// if it is not an anonymous function
+	if !anony {
+		if !p.l.expectCurrent(tkId) {
+			return "", p.l.toError()
+		}
+		funcName = p.l.valueText
+		p.l.next()
+	} else {
+		funcName = p.policy.nextAnonymousFuncName()
+	}
+	if !p.l.expectCurrent(tkLPar) {
+		return "", p.l.toError()
+	}
+
+	prog := newProgram(funcName, progFunc)
+	p.enterNormalScopeTop(entryFunc, prog)
 	defer func() {
 		p.leaveScope()
 	}()
 
-	// function name
-	if !p.l.expect(tkId) {
-		return p.l.toError()
-	}
-	funcName := p.l.valueText
-	if !p.l.expect(tkLPar) {
-		return p.l.toError()
-	}
-
-	prog := newProgram(funcName, progFunc)
 	localR := prog.patch(p.l)
 	p.policy.fn = append(p.policy.fn, prog)
 	defer func() {
@@ -569,11 +698,11 @@ func (p *parser) parseFunction() (the_error error) {
 		argcnt := 0
 		for {
 			if !p.l.expectCurrent(tkId) {
-				return p.l.toError()
+				return "", p.l.toError()
 			}
 			idx := p.addLocalVar(p.l.valueText)
 			if idx == symError {
-				return p.err("argument name duplicated")
+				return "", p.err("argument name duplicated")
 			}
 			p.l.next()
 			argcnt++
@@ -583,7 +712,7 @@ func (p *parser) parseFunction() (the_error error) {
 			} else if p.l.token == tkRPar {
 				break
 			} else {
-				return p.err("expect a ')' or ',' inside of function argument list")
+				return "", p.err("expect a ')' or ',' inside of function argument list")
 			}
 		}
 
@@ -596,7 +725,7 @@ func (p *parser) parseFunction() (the_error error) {
 
 	// now parsing the function body
 	if err := p.parseBody(prog); err != nil {
-		return err
+		return "", err
 	}
 
 	// always generate a return nil at the end of the function
@@ -605,19 +734,13 @@ func (p *parser) parseFunction() (the_error error) {
 	prog.localSize = p.maxLocal - 1
 	prog.emit1At(p.l, localR, bcReserveLocal, p.maxLocal-1)
 
-	return nil
+	return funcName, nil
 }
 
 func (p *parser) parseRule() error {
 	if p.l.token == tkRule {
 		p.l.next()
 	}
-
-	p.enterNormalScopeTop(entryRule)
-	p.mustAddLocalVar("#frame")
-	defer func() {
-		p.leaveScope()
-	}()
 
 	var name string
 
@@ -651,6 +774,12 @@ func (p *parser) parseRule() error {
 	}
 
 	prog := newProgram(name, progRule)
+	p.enterNormalScopeTop(entryRule, prog)
+	p.mustAddLocalVar("#frame")
+	defer func() {
+		p.leaveScope()
+	}()
+
 	localR := prog.patch(p.l)
 
 	// check whether we have a conditional when, otherwise generate default match
@@ -732,6 +861,11 @@ func (p *parser) parseSymbolAssign(prog *program,
 		case symLocal:
 			must(symIdx >= 0, "must be valid index")
 			prog.emit1(p.l, bcLoadLocal, symIdx)
+			break
+
+		case symUpval:
+			must(symIdx >= 0, "must be valid index")
+			prog.emit1(p.l, bcLoadUpvalue, symIdx)
 			break
 
 		default:
@@ -828,9 +962,15 @@ func (p *parser) parseSymbolAssign(prog *program,
 	case symSession:
 		prog.emit1(p.l, bcStoreSession, symIdx)
 		break
+
 	case symLocal:
 		prog.emit1(p.l, bcStoreLocal, symIdx)
 		break
+
+	case symUpval:
+		prog.emit1(p.l, bcStoreUpvalue, symIdx)
+		break
+
 	default:
 		prog.emit1(p.l, bcStoreVar, prog.addStr(symName))
 		break
@@ -1676,6 +1816,15 @@ func (p *parser) parseBody(prog *program) error {
 		case tkSemicolon:
 			break
 
+    case tkLBra:
+      p.enterNormalScope()
+      if err := p.parseBody(prog); err != nil {
+        return err
+      }
+      p.leaveScope()
+      hasSep = false
+      break
+
 		case tkLet:
 			if err := p.parseVarDecl(prog, symtVar); err != nil {
 				return err
@@ -2106,6 +2255,16 @@ func (p *parser) parsePrimary(prog *program, l lexeme) error {
 		prog.emit0(p.l, bcLoadNull)
 		break
 
+	case tkFunction:
+		funcName, err := p.parseFunction(true)
+		if err != nil {
+			return err
+		}
+		scallIdx := p.policy.getFunctionIndex(funcName)
+		must(scallIdx != -1, "the function(anonymouse) must be existed")
+		prog.emit1(p.l, bcNewClosure, scallIdx)
+		break
+
 	case tkRegex:
 		idx, err := prog.addRegexp(l.sval)
 		if err != nil {
@@ -2249,25 +2408,20 @@ func (p *parser) parseICall(prog *program, index int) error {
 // [argN-1]
 // [arg1]
 // [functionIndex]
-func (p *parser) parseSCall(prog *program, index int) error {
-	{
-		idx := prog.addInt(int64(index))
-		prog.emit1(p.l, bcLoadInt, idx)
-	}
-
-	pcnt, err := p.parseCallArgs(prog)
-	if err != nil {
-		return err
-	}
-	prog.emit1(p.l, bcSCall, pcnt)
-	return nil
-}
-
 func (p *parser) parseMCall(prog *program, name string) error {
 	if !p.l.expectCurrent(tkLPar) {
 		return p.l.toError()
 	}
 	return p.parseCall(prog, name, bcMCall)
+}
+
+func (p *parser) parseVCall(prog *program) error {
+	pcnt, err := p.parseCallArgs(prog)
+	if err != nil {
+		return err
+	}
+	prog.emit1(p.l, bcVCall, pcnt)
+	return nil
 }
 
 func (p *parser) parseFreeCall(prog *program, name string) error {
@@ -2360,6 +2514,12 @@ SUFFIX:
 			}
 			break
 
+		case tkLPar:
+			if err := p.parseVCall(prog); err != nil {
+				return err
+			}
+			break
+
 		default:
 			break SUFFIX
 		}
@@ -2421,6 +2581,10 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 				prog.emit1(p.l, bcLoadLocal, symIdx)
 				break
 
+			case symUpval:
+				prog.emit1(p.l, bcLoadUpvalue, symIdx)
+				break
+
 			case symConst:
 				prog.emit1(p.l, bcLoadConst, symIdx)
 
@@ -2433,7 +2597,7 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 
 		// check whether we have suffix experssion
 		switch p.l.token {
-		case tkDot, tkLSqr:
+		case tkDot, tkLSqr, tkLPar:
 			break
 
 		default:
