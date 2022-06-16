@@ -37,6 +37,13 @@ type Evaluator struct {
 
 	// current frame, ie the one that is been executing
 	curframe funcframe
+	curexcep Val
+}
+
+type exception struct {
+	// where should this exception goes to
+	handlerPc int
+	stackSize int
 }
 
 // internal structure which we used to record the current frame and information
@@ -46,6 +53,16 @@ type funcframe struct {
 	prog   *program
 	framep int
 	farg   int
+	excep  []exception
+}
+
+func dupFuncFrameForErr(fr *funcframe) *funcframe {
+	return &funcframe{
+		pc:     fr.pc,
+		prog:   fr.prog,
+		framep: fr.framep,
+		farg:   fr.farg,
+	}
 }
 
 func (ff *funcframe) isTop() bool {
@@ -74,6 +91,31 @@ func (ff *funcframe) frameInfo() string {
 
 func (e *Evaluator) curfuncframeVal() Val {
 	return newValFrame(&e.curframe)
+}
+
+func (e *Evaluator) hasExcepHandler() bool {
+	return len(e.curframe.excep) == 0
+}
+
+func (e *Evaluator) curExcep() *exception {
+	sz := len(e.curframe.excep)
+	if sz != 0 {
+		return &e.curframe.excep[sz-1]
+	} else {
+		return nil
+	}
+}
+
+func (e *Evaluator) pushExcep(pc int, stackSize int) {
+	e.curframe.excep = append(e.curframe.excep, exception{
+		handlerPc: pc,
+		stackSize: stackSize,
+	})
+}
+
+func (e *Evaluator) popExcep() {
+	sz := len(e.curframe.excep)
+	e.curframe.excep = e.curframe.excep[:sz-1]
 }
 
 func (e *Evaluator) prevframepos() int {
@@ -105,12 +147,14 @@ func newfuncframe(
 	prog *program,
 	framep int,
 	farg int,
+	excep []exception,
 ) (*funcframe, Val) {
 	ff := &funcframe{
 		pc:     pc,
 		prog:   prog,
 		framep: framep,
 		farg:   farg,
+		excep:  excep,
 	}
 	return ff, newValFrame(ff)
 }
@@ -149,6 +193,10 @@ func (e *Evaluator) popN(cnt int) {
 func (e *Evaluator) popTo(size int) {
 	must(len(e.Stack) >= size, "invalid popTo size")
 	e.Stack = e.Stack[:size]
+}
+
+func (e *Evaluator) stackSize() int {
+	return len(e.Stack)
 }
 
 func (e *Evaluator) push(v Val) {
@@ -423,47 +471,581 @@ func (e *Evaluator) doNegate(v Val) (Val, error) {
 	}
 }
 
-// Generate a human readable backtrace for reporting errors
-func (e *Evaluator) backtrace(curframe *program, max int) string {
+// Generate a human readable backtrace for reporting errors. Notes the backtrace
+// list should be given by the caller since when we really need to return error
+// it means the function frame has already been poped up
+type btlist []*funcframe
+
+func (e *Evaluator) backtrace(curframe *program, max int, bt btlist) string {
 	sep := "....................."
 	var b []string
-	idx := 0
 
-	for {
-		cf := &e.curframe
-		if cf.isTop() {
-			break
-		}
-
+	for idx, cf := range bt {
 		b = append(b, fmt.Sprintf("%d>%s\n%s\n%s\n", idx, sep, cf.frameInfo(), sep))
-		idx++
 
 		if idx == max {
 			b = append(b, ".........\n")
 			break
 		}
-
-		// pop it up
-		e.popfuncframe(e.prevfuncframe())
 	}
-
 	return strings.Join(b, "")
 }
 
-func (e *Evaluator) doErrf(p *program, pc int, format string, a ...interface{}) error {
-	must(e.curframe.prog == p, "must be compatible")
-	e.curframe.pc = pc
-
+func (e *Evaluator) doErr(bt btlist, p *program, pc int, err error) error {
 	dbg := p.dbgList[pc]
-	msg := fmt.Sprintf(format, a...)
 	return fmt.Errorf("policy(%s), %s has error: %s\n%s",
-		p.name, dbg.where(), msg, e.backtrace(p, 10))
+		p.name, dbg.where(), err.Error(), e.backtrace(p, 10, bt))
 }
 
-func (e *Evaluator) doErr(p *program, pc int, err error) error {
-	dbg := p.dbgList[pc]
-	return fmt.Errorf("policy(%s), %s has error: %s\n%s",
-		p.name, dbg.where(), err.Error(), e.backtrace(p, 10))
+// Return 3 tuple elements
+// [1]: whether we see a match
+// [2]: the program stops the execution, notes due to call, we can enter into
+//      other script function
+// [3]: the pc that stops the execution
+// [4]: the error if we have
+
+type runresult struct {
+	match bool
+	prog  *program
+	pc    int
+	e     error
+}
+
+func rrErr(p *program, pc int, e error) runresult {
+	return runresult{
+		match: true,
+		prog:  p,
+		pc:    pc,
+		e:     e,
+	}
+}
+
+func rrErrf(p *program, pc int, format string, a ...interface{}) runresult {
+	return rrErr(p, pc, fmt.Errorf(format, a...))
+}
+
+func rrUnmatch() runresult {
+	return runresult{
+		match: false,
+	}
+}
+
+func rrDone() runresult {
+	return runresult{
+		match: true,
+	}
+}
+
+func (rr *runresult) isDone() bool {
+	return rr.match && rr.e == nil
+}
+
+func (e *Evaluator) runP(event string,
+	prog *program,
+	pc int,
+	policy *Policy,
+) runresult {
+	// actual loop to interpret the internal policy, the policy selection code
+	// is been fused inside of the bytecode body and terminated by bcMatch bc
+	// make sure the function has enough slot for local variable
+
+	// script function entry label, the bcSCall will setup stack layout and
+	// jump(goto) this label for rexecution. prog will be swapped with the
+	// function program
+FUNC:
+	for ; ; pc++ {
+		bc := prog.bcList[pc]
+
+		switch bc.opcode {
+		case bcAction:
+			actName := prog.idxStr(bc.argument)
+			val := e.top0()
+			if e.ActionFn == nil {
+				return rrErrf(prog, pc, "action %s is not allowed", actName)
+			}
+
+			if err := e.ActionFn(e, actName, val); err != nil {
+				return rrErr(prog, pc, err)
+			}
+			e.pop()
+			break
+
+			// arithmetic
+		case bcAdd,
+			bcSub,
+			bcMul,
+			bcDiv,
+			bcMod,
+			bcPow,
+			bcLt,
+			bcLe,
+			bcGt,
+			bcGe,
+			bcEq,
+			bcNe,
+			bcRegexpMatch,
+			bcRegexpNMatch:
+
+			lhs := e.top1()
+			rhs := e.top0()
+			e.popN(2)
+			v, err := e.doBin(lhs, rhs, bc.opcode)
+			if err != nil {
+				return rrErr(prog, pc, err)
+			}
+			e.push(v)
+			break
+
+		case bcNot:
+			t := e.top0()
+			e.pop()
+			e.push(NewValBool(!t.ToBoolean()))
+			break
+
+		case bcNegate:
+			t := e.top0()
+			e.pop()
+			v, err := e.doNegate(t)
+			if err != nil {
+				return rrErr(prog, pc, err)
+			}
+			e.push(v)
+			break
+
+		// jump
+		case bcOr:
+			cond := e.top0()
+			if cond.ToBoolean() {
+				pc = bc.argument - 1
+			} else {
+				e.pop()
+			}
+			break
+
+		case bcAnd:
+			cond := e.top0()
+			if !cond.ToBoolean() {
+				pc = bc.argument - 1
+			} else {
+				e.pop()
+			}
+			break
+
+		case bcPop:
+			e.pop()
+			break
+
+		case bcDup1:
+			tos := e.top0()
+			e.push(tos)
+			break
+
+		case bcDup2:
+			// order matters
+			to1 := e.top1()
+			to0 := e.top0()
+
+			e.push(to1)
+			e.push(to0)
+
+			break
+
+		case bcTernary, bcJfalse:
+			cond := e.top0()
+			e.pop()
+			if !cond.ToBoolean() {
+				pc = bc.argument - 1
+			}
+			break
+
+		case bcJump:
+			pc = bc.argument - 1
+			break
+
+		// other constant loading etc ...
+		case bcLoadInt:
+			e.push(NewValInt64(prog.idxInt(bc.argument)))
+			break
+
+		case bcLoadReal:
+			e.push(NewValReal(prog.idxReal(bc.argument)))
+			break
+
+		case bcLoadStr:
+			e.push(NewValStr(prog.idxStr(bc.argument)))
+			break
+
+		case bcLoadRegexp:
+			e.push(NewValRegexp(prog.idxRegexp(bc.argument)))
+			break
+
+		case bcLoadTrue:
+			e.push(NewValBool(true))
+			break
+
+		case bcLoadFalse:
+			e.push(NewValBool(false))
+			break
+
+		case bcLoadNull:
+			e.push(NewValNull())
+			break
+
+		case bcNewList:
+			e.push(NewValList())
+			break
+
+		case bcAddList:
+			cnt := bc.argument
+			l := e.topN(cnt)
+			must(l.Type == ValList, "must be list")
+			for ii := len(e.Stack) - cnt; ii < len(e.Stack); ii++ {
+				l.AddList(e.Stack[ii])
+			}
+			e.popN(cnt)
+			break
+
+		case bcNewMap:
+			e.push(NewValMap())
+			break
+
+		case bcAddMap:
+			cnt := bc.argument
+			m := e.topN(cnt * 2)
+			must(m.Type == ValMap, "must be map")
+			for ii := len(e.Stack) - cnt*2; ii < len(e.Stack); {
+				name := e.Stack[ii]
+				must(name.Type == ValStr, "must be string")
+				val := e.Stack[ii+1]
+				m.AddMap(name.String(), val)
+				ii = ii + 2
+			}
+			e.popN(cnt * 2)
+			break
+
+		case bcNewPair:
+			t0 := e.top1()
+			t1 := e.top0()
+			e.popN(2)
+			e.push(NewValPair(t0, t1))
+			break
+
+		case bcCall:
+			paramSize := bc.argument
+
+			// prepare argument list slice
+			argStart := len(e.Stack) - paramSize
+			argEnd := len(e.Stack)
+			arg := e.Stack[argStart:argEnd]
+
+			funcName := e.topN(paramSize)
+			must(funcName.Type == ValStr,
+				fmt.Sprintf("function name must be string but %s", funcName.Id()))
+
+			var r Val
+			var err error
+
+			if e.CallFn != nil {
+				r, err = e.CallFn(e, funcName.String(), arg)
+			} else {
+				err = fmt.Errorf("function %s is not found", funcName.String())
+			}
+			if err != nil {
+				return rrErr(prog, pc, err)
+			}
+			e.popN(paramSize + 1)
+			e.push(r)
+			break
+
+		case bcICall:
+			paramSize := bc.argument
+
+			// prepare argument list slice
+			argStart := len(e.Stack) - paramSize
+			argEnd := len(e.Stack)
+			arg := e.Stack[argStart:argEnd]
+
+			funcIndex := e.topN(paramSize)
+
+			must(funcIndex.Type == ValInt,
+				fmt.Sprintf("function indext must be indext but %s", funcIndex.Id()))
+
+			must(funcIndex.Int() >= 0,
+				fmt.Sprintf("function index must be none negative"))
+
+			fentry := intrinsicFunc[funcIndex.Int()]
+			r, err := fentry.entry(e, "$intrinsic$", arg)
+			if err != nil {
+				return rrErr(prog, pc, err)
+			}
+			e.popN(paramSize + 1)
+			e.push(r)
+			break
+
+		case bcMCall:
+			paramSize := bc.argument
+			methodName := e.topN(paramSize)
+			must(methodName.Type == ValStr,
+				fmt.Sprintf("method name must be string but %s", methodName.Id()))
+
+			// prepare argument list slice
+			argStart := len(e.Stack) - paramSize
+			argEnd := len(e.Stack)
+			arg := e.Stack[argStart:argEnd]
+
+			recv := e.topN(paramSize + 1)
+			ret, err := recv.Method(methodName.String(), arg)
+			if err != nil {
+				return rrErr(prog, pc, err)
+			}
+
+			e.popN(paramSize + 2)
+			e.push(ret)
+			break
+
+		// script function call and return
+		case bcSCall:
+			paramSize := bc.argument
+			funcIndex := e.topN(paramSize)
+
+			// create the frame marker for the scriptting call
+			_, newFV := newfuncframe(
+				pc+1, // next pc
+				prog,
+				e.curframe.framep,
+				e.curframe.farg,
+				e.curframe.excep,
+			)
+
+			// setup new calling frame
+			e.push(newFV)
+
+			// enter into the new call
+			newCall := policy.fn[int(funcIndex.Int())]
+			prog = newCall
+
+			e.curframe.prog = prog
+			e.curframe.pc = 0
+			e.curframe.framep = len(e.Stack) - paramSize - 2
+			e.curframe.farg = paramSize
+			e.curframe.excep = nil
+
+			// make sure to reset the PC when entering into the new function
+			pc = 0
+
+			goto FUNC
+
+		case bcReturn:
+			rv := e.top0()
+
+			prevcf := e.prevfuncframe()
+
+			// return back to the caller
+			pc, prog = e.popfuncframe(prevcf)
+
+			// return value push back to the stack
+			e.push(rv)
+			break
+
+		case bcToStr:
+			top := e.top0()
+			str, err := top.ToString()
+			if err != nil {
+				return rrErr(prog, pc, err)
+			}
+			e.pop()
+			e.push(NewValStr(str))
+			break
+
+		case bcConStr:
+			sz := bc.argument
+			var b bytes.Buffer
+			for ii := len(e.Stack) - sz; ii < len(e.Stack); ii++ {
+				v := e.Stack[ii]
+				must(v.Type == ValStr, "must be string during concatenation")
+				b.WriteString(v.String())
+			}
+			e.popN(sz)
+			e.push(NewValStr(b.String()))
+			break
+
+		case bcLoadVar:
+			vname := prog.idxStr(bc.argument)
+			if e.LoadVarFn == nil {
+				return rrErrf(prog, pc, "dynamic variable: %s is not fonud", vname)
+			}
+			val, err := e.LoadVarFn(e, vname)
+			if err != nil {
+				return rrErr(prog, pc, err)
+			}
+			e.push(val)
+			break
+
+		case bcStoreVar:
+			top := e.top0()
+			e.pop()
+			vname := prog.idxStr(bc.argument)
+			if e.StoreVarFn == nil {
+				return rrErrf(prog, pc, "dynamic variable: %s is not fonud", vname)
+			}
+			if err := e.StoreVarFn(e, vname, top); err != nil {
+				return rrErr(prog, pc, err)
+			}
+			break
+
+		case bcLoadDollar:
+			e.push(NewValStr(event))
+			break
+
+		case bcIndex:
+			ee := e.top1()
+			er := e.top0()
+			val, err := ee.Index(er)
+			if err != nil {
+				return rrErr(prog, pc, err)
+			}
+			e.popN(2)
+			e.push(val)
+			break
+
+		case bcIndexSet:
+			recv := e.top2()
+			index := e.top1()
+			value := e.top0()
+			e.popN(3)
+
+			if err := recv.IndexSet(index, value); err != nil {
+				return rrErr(prog, pc, err)
+			}
+			break
+
+		case bcDot:
+			ee := e.top0()
+			vname := prog.idxStr(bc.argument)
+			val, err := ee.Dot(vname)
+			if err != nil {
+				return rrErr(prog, pc, err)
+			}
+			e.pop()
+			e.push(val)
+			break
+
+		case bcDotSet:
+			recv := e.top1()
+			value := e.top0()
+			e.popN(2)
+
+			if err := recv.DotSet(prog.idxStr(bc.argument), value); err != nil {
+				return rrErr(prog, pc, err)
+			}
+			break
+
+		case bcReserveLocal:
+			sz := bc.argument
+			if sz > 0 {
+				for i := 0; i < sz; i++ {
+					e.Stack = append(e.Stack, NewValNull())
+				}
+			}
+			break
+
+		case bcStoreLocal:
+			e.Stack[e.localslot(bc.argument)] = e.top0()
+			e.pop()
+			break
+
+		case bcLoadLocal:
+			e.push(e.Stack[e.localslot(bc.argument)])
+			break
+
+		// special functions, ie intrinsic
+		case bcTemplate:
+			ctx := e.top0()
+			e.pop()
+			tmp := prog.idxTemplate(bc.argument)
+			data, err := tmp.Execute(ctx)
+			if err != nil {
+				return rrErr(prog, pc, err)
+			}
+
+			e.push(NewValStr(data))
+			break
+
+		// session
+		case bcSetSession:
+			ctx := e.top0()
+			e.pop()
+			e.Session = append(e.Session, ctx)
+			break
+
+		case bcLoadSession:
+			if len(e.Session) <= bc.argument {
+				return rrErrf(prog, pc, "@session is not executed")
+			} else {
+				e.push(e.Session[bc.argument])
+			}
+			break
+
+		case bcStoreSession:
+			if len(e.Session) <= bc.argument {
+				return rrErrf(prog, pc, "@session is not executed")
+			} else {
+				e.Session[bc.argument] = e.top0()
+				e.pop()
+			}
+			break
+
+		// exception
+		case bcPushException:
+			e.pushExcep(
+				bc.argument,
+				e.stackSize(),
+			)
+			break
+
+		case bcPopException:
+			e.popExcep()
+			break
+
+		case bcLoadException:
+			e.push(e.curexcep)
+			break
+
+		// global
+		case bcSetConst:
+			ctx := e.top0()
+			e.pop()
+			policy.constVar = append(policy.constVar, ctx)
+			break
+
+		case bcLoadConst:
+			if len(policy.constVar) <= bc.argument {
+				return rrErrf(prog, pc, "@global is not executed")
+			} else {
+				e.push(policy.constVar[bc.argument])
+			}
+			break
+
+		// iterator
+
+		case bcMatch:
+			c := e.top0()
+			if c.ToBoolean() {
+				e.pop()
+			} else {
+				// leave the frame untouched
+				e.popTo(e.curframe.framep + 2)
+				return rrUnmatch()
+			}
+			break
+
+		case bcHalt:
+			return rrDone()
+
+		default:
+			log.Fatalf("invalid unknown bytecode %d", bc.opcode)
+		}
+	}
 }
 
 func (e *Evaluator) doEval(event string, pp []*program, policy *Policy) error {
@@ -472,6 +1054,9 @@ func (e *Evaluator) doEval(event string, pp []*program, policy *Policy) error {
 	if cap(e.Stack) > 0 {
 		e.Stack = e.Stack[:0]
 	}
+
+	// mark exception to be null, ie no exception
+	e.curexcep = NewValNull()
 
 	// Enter into the VM with a native function call marker. This serves as a
 	// frame marker to indicate the end of the script frame which will help us
@@ -484,498 +1069,75 @@ func (e *Evaluator) doEval(event string, pp []*program, policy *Policy) error {
 		nil,
 		0,
 		0,
+		nil,
 	)
 	e.push(entryV)
 
-	// VM execution
-VM:
+	pc := 0
+
 	for _, prog := range pp {
+
 		// point to currently executing program, notes the PC field is not updated
-		// until the VM breaks, ie when enter into doErr/doErrf
+		// until the VM breaks
 		e.curframe.prog = prog
-		e.curframe.pc = 0
+		e.curframe.pc = pc
 		e.curframe.framep = 0
 		e.curframe.farg = 0
 
-		// script function entry label, the bcSCall will setup stack layout and
-		// jump(goto) this label for rexecution. prog will be swapped with the
-		// function program
-	FUNC:
-		// actual loop to interpret the internal policy, the policy selection code
-		// is been fused inside of the bytecode body and terminated by bcMatch bc
-		// make sure the function has enough slot for local variable
+	RECOVER:
+		rr := e.runP(event, prog, pc, policy)
 
-	MATCH:
-		for pc := 0; ; pc++ {
-			bc := prog.bcList[pc]
+		// not matched, try to find the next program in the list
+		if !rr.match {
+			pc = 0
+			continue
+		}
 
-			switch bc.opcode {
-			case bcAction:
-				actName := prog.idxStr(bc.argument)
-				val := e.top0()
-				if e.ActionFn == nil {
-					return e.doErrf(prog, pc, "action %s is not allowed", actName)
-				}
-				if err := e.ActionFn(e, actName, val); err != nil {
-					return err
-				}
-				e.pop()
-				break
+		// finish execution
+		if rr.isDone() {
+			return nil
+		}
 
-				// arithmetic
-			case bcAdd,
-				bcSub,
-				bcMul,
-				bcDiv,
-				bcMod,
-				bcPow,
-				bcLt,
-				bcLe,
-				bcGt,
-				bcGe,
-				bcEq,
-				bcNe,
-				bcRegexpMatch,
-				bcRegexpNMatch:
+		// -------------------------------------------------------------------------
+		// ******************* Stack Unwind and Exception Handling *****************
+		// -------------------------------------------------------------------------
+		// perform error recovery until we hit one and then re-evaluate the frame
+		// again. We will have to stackwalk all the function that is on the stack
+		// and find out the correct handler to resume the execution accordingly
+		// -------------------------------------------------------------------------
+		bt := btlist{dupFuncFrameForErr(&e.curframe)}
 
-				lhs := e.top1()
-				rhs := e.top0()
-				e.popN(2)
-				v, err := e.doBin(lhs, rhs, bc.opcode)
-				if err != nil {
-					return e.doErr(prog, pc, err)
-				}
-				e.push(v)
-				break
+		for !e.curframe.isTop() {
+			cf := &e.curframe
 
-			case bcNot:
-				t := e.top0()
-				e.pop()
-				e.push(NewValBool(!t.ToBoolean()))
-				break
+			// now check whether the current frame has exception or not
+			if xp := e.curExcep(); xp != nil {
+				// try to handle it, we haven't used a table based exception handler
+				// but rely on bytecode so the current exception must be the exception
+				// that is matched
 
-			case bcNegate:
-				t := e.top0()
-				e.pop()
-				v, err := e.doNegate(t)
-				if err != nil {
-					return e.doErr(prog, pc, err)
-				}
-				e.push(v)
-				break
+				e.popTo(xp.stackSize)
+				pc = xp.handlerPc
+				prog = cf.prog
+				cf.pc = pc
 
-			// jump
-			case bcOr:
-				cond := e.top0()
-				if cond.ToBoolean() {
-					pc = bc.argument - 1
-				} else {
-					e.pop()
-				}
-				break
+				// currently just convert error to a string
+				e.curexcep = NewValStr(rr.e.Error())
 
-			case bcAnd:
-				cond := e.top0()
-				if !cond.ToBoolean() {
-					pc = bc.argument - 1
-				} else {
-					e.pop()
-				}
-				break
-
-			case bcPop:
-				e.pop()
-				break
-
-			case bcDup1:
-				tos := e.top0()
-				e.push(tos)
-				break
-
-			case bcDup2:
-				// order matters
-				to1 := e.top1()
-				to0 := e.top0()
-
-				e.push(to1)
-				e.push(to0)
-
-				break
-
-			case bcTernary, bcJfalse:
-				cond := e.top0()
-				e.pop()
-				if !cond.ToBoolean() {
-					pc = bc.argument - 1
-				}
-				break
-
-			case bcJump:
-				pc = bc.argument - 1
-				break
-
-			// other constant loading etc ...
-			case bcLoadInt:
-				e.push(NewValInt64(prog.idxInt(bc.argument)))
-				break
-
-			case bcLoadReal:
-				e.push(NewValReal(prog.idxReal(bc.argument)))
-				break
-
-			case bcLoadStr:
-				e.push(NewValStr(prog.idxStr(bc.argument)))
-				break
-
-			case bcLoadRegexp:
-				e.push(NewValRegexp(prog.idxRegexp(bc.argument)))
-				break
-
-			case bcLoadTrue:
-				e.push(NewValBool(true))
-				break
-
-			case bcLoadFalse:
-				e.push(NewValBool(false))
-				break
-
-			case bcLoadNull:
-				e.push(NewValNull())
-				break
-
-			case bcNewList:
-				e.push(NewValList())
-				break
-
-			case bcAddList:
-				cnt := bc.argument
-				l := e.topN(cnt)
-				must(l.Type == ValList, "must be list")
-				for ii := len(e.Stack) - cnt; ii < len(e.Stack); ii++ {
-					l.AddList(e.Stack[ii])
-				}
-				e.popN(cnt)
-				break
-
-			case bcNewMap:
-				e.push(NewValMap())
-				break
-
-			case bcAddMap:
-				cnt := bc.argument
-				m := e.topN(cnt * 2)
-				must(m.Type == ValMap, "must be map")
-				for ii := len(e.Stack) - cnt*2; ii < len(e.Stack); {
-					name := e.Stack[ii]
-					must(name.Type == ValStr, "must be string")
-					val := e.Stack[ii+1]
-					m.AddMap(name.String(), val)
-					ii = ii + 2
-				}
-				e.popN(cnt * 2)
-				break
-
-			case bcNewPair:
-				t0 := e.top1()
-				t1 := e.top0()
-				e.popN(2)
-				e.push(NewValPair(t0, t1))
-				break
-
-			case bcCall:
-				paramSize := bc.argument
-
-				// prepare argument list slice
-				argStart := len(e.Stack) - paramSize
-				argEnd := len(e.Stack)
-				arg := e.Stack[argStart:argEnd]
-
-				funcName := e.topN(paramSize)
-				must(funcName.Type == ValStr,
-					fmt.Sprintf("function name must be string but %s", funcName.Id()))
-
-				var r Val
-				var err error
-
-				if e.CallFn != nil {
-					r, err = e.CallFn(e, funcName.String(), arg)
-				} else {
-					err = e.doErrf(prog, pc, "function %s is not found", funcName.String())
-				}
-				if err != nil {
-					return e.doErr(prog, pc, err)
-				}
-				e.popN(paramSize + 1)
-				e.push(r)
-				break
-
-			case bcICall:
-				paramSize := bc.argument
-
-				// prepare argument list slice
-				argStart := len(e.Stack) - paramSize
-				argEnd := len(e.Stack)
-				arg := e.Stack[argStart:argEnd]
-
-				funcIndex := e.topN(paramSize)
-				must(funcIndex.Type == ValInt,
-					fmt.Sprintf("function indext must be indext but %s", funcIndex.Id()))
-
-				must(funcIndex.Int() >= 0,
-					fmt.Sprintf("function index must be none negative"))
-
-				fentry := intrinsicFunc[funcIndex.Int()]
-				r, err := fentry.entry(e, "$intrinsic$", arg)
-				if err != nil {
-					return e.doErr(prog, pc, err)
-				}
-				e.popN(paramSize + 1)
-				e.push(r)
-				break
-
-			case bcMCall:
-				paramSize := bc.argument
-				methodName := e.topN(paramSize)
-				must(methodName.Type == ValStr,
-					fmt.Sprintf("method name must be string but %s", methodName.Id()))
-
-				// prepare argument list slice
-				argStart := len(e.Stack) - paramSize
-				argEnd := len(e.Stack)
-				arg := e.Stack[argStart:argEnd]
-
-				recv := e.topN(paramSize + 1)
-				ret, err := recv.Method(methodName.String(), arg)
-				if err != nil {
-					return e.doErr(prog, pc, err)
+				// okay recover the frame
+				goto RECOVER
+			} else {
+				pframe := e.prevfuncframe()
+				if !pframe.isTop() {
+					bt = append(bt, pframe)
 				}
 
-				e.popN(paramSize + 2)
-				e.push(ret)
-				break
-
-			// script function call and return
-			case bcSCall:
-				paramSize := bc.argument
-				funcIndex := e.topN(paramSize)
-
-				// create the frame marker for the scriptting call
-				_, newFV := newfuncframe(
-					pc+1, // next pc
-					prog,
-					e.curframe.framep,
-					e.curframe.farg,
-				)
-
-				// setup new calling frame
-				e.push(newFV)
-
-				// enter into the new call
-				newCall := policy.fn[int(funcIndex.Int())]
-				prog = newCall
-
-				e.curframe.prog = prog
-				e.curframe.pc = 0
-				e.curframe.framep = len(e.Stack) - paramSize - 2
-				e.curframe.farg = paramSize
-
-				goto FUNC
-
-			case bcReturn:
-				rv := e.top0()
-
-				prevcf := e.prevfuncframe()
-
-				// return back to the caller
-				pc, prog = e.popfuncframe(prevcf)
-
-				// return value push back to the stack
-				e.push(rv)
-				break
-
-			case bcToStr:
-				top := e.top0()
-				str, err := top.ToString()
-				if err != nil {
-					return e.doErr(prog, pc, err)
-				}
-				e.pop()
-				e.push(NewValStr(str))
-				break
-
-			case bcConStr:
-				sz := bc.argument
-				var b bytes.Buffer
-				for ii := len(e.Stack) - sz; ii < len(e.Stack); ii++ {
-					v := e.Stack[ii]
-					must(v.Type == ValStr, "must be string during concatenation")
-					b.WriteString(v.String())
-				}
-				e.popN(sz)
-				e.push(NewValStr(b.String()))
-				break
-
-			case bcLoadVar:
-				vname := prog.idxStr(bc.argument)
-				if e.LoadVarFn == nil {
-					return e.doErrf(prog, pc, "dynamic variable: %s is not fonud", vname)
-				}
-				val, err := e.LoadVarFn(e, vname)
-				if err != nil {
-					return e.doErr(prog, pc, err)
-				}
-				e.push(val)
-				break
-
-			case bcStoreVar:
-				top := e.top0()
-				e.pop()
-				vname := prog.idxStr(bc.argument)
-				if e.StoreVarFn == nil {
-					return e.doErrf(prog, pc, "dynamic variable: %s is not fonud", vname)
-				}
-				if err := e.StoreVarFn(e, vname, top); err != nil {
-					return err
-				}
-				break
-
-			case bcLoadDollar:
-				e.push(NewValStr(event))
-				break
-
-			case bcIndex:
-				ee := e.top1()
-				er := e.top0()
-				val, err := ee.Index(er)
-				if err != nil {
-					return e.doErr(prog, pc, err)
-				}
-				e.popN(2)
-				e.push(val)
-				break
-
-			case bcIndexSet:
-				recv := e.top2()
-				index := e.top1()
-				value := e.top0()
-				e.popN(3)
-
-				if err := recv.IndexSet(index, value); err != nil {
-					return err
-				}
-				break
-
-			case bcDot:
-				ee := e.top0()
-				vname := prog.idxStr(bc.argument)
-				val, err := ee.Dot(vname)
-				if err != nil {
-					return e.doErr(prog, pc, err)
-				}
-				e.pop()
-				e.push(val)
-				break
-
-			case bcDotSet:
-				recv := e.top1()
-				value := e.top0()
-				e.popN(2)
-
-				if err := recv.DotSet(prog.idxStr(bc.argument), value); err != nil {
-					return err
-				}
-				break
-
-			case bcReserveLocal:
-				sz := bc.argument
-				if sz > 0 {
-					for i := 0; i < sz; i++ {
-						e.Stack = append(e.Stack, NewValNull())
-					}
-				}
-				break
-
-			case bcStoreLocal:
-				e.Stack[e.localslot(bc.argument)] = e.top0()
-				e.pop()
-				break
-
-			case bcLoadLocal:
-				e.push(e.Stack[e.localslot(bc.argument)])
-				break
-
-			// special functions, ie intrinsic
-			case bcTemplate:
-				ctx := e.top0()
-				e.pop()
-				tmp := prog.idxTemplate(bc.argument)
-				data, err := tmp.Execute(ctx)
-				if err != nil {
-					return e.doErr(prog, pc, err)
-				}
-
-				e.push(NewValStr(data))
-				break
-
-			// session
-			case bcSetSession:
-				ctx := e.top0()
-				e.pop()
-				e.Session = append(e.Session, ctx)
-				break
-
-			case bcLoadSession:
-				if len(e.Session) <= bc.argument {
-					return e.doErrf(prog, pc, "@session is not executed")
-				} else {
-					e.push(e.Session[bc.argument])
-				}
-				break
-
-			case bcStoreSession:
-				if len(e.Session) <= bc.argument {
-					return e.doErrf(prog, pc, "@session is not executed")
-				} else {
-					e.Session[bc.argument] = e.top0()
-					e.pop()
-				}
-				break
-
-			// global
-			case bcSetConst:
-				ctx := e.top0()
-				e.pop()
-				policy.constVar = append(policy.constVar, ctx)
-				break
-
-			case bcLoadConst:
-				if len(policy.constVar) <= bc.argument {
-					return e.doErrf(prog, pc, "@global is not executed")
-				} else {
-					e.push(policy.constVar[bc.argument])
-				}
-				break
-
-				// iterator
-
-			case bcMatch:
-				c := e.top0()
-				if c.ToBoolean() {
-					e.pop()
-				} else {
-					// leave the frame untouched
-					e.popTo(e.curframe.framep + 2)
-					break MATCH
-				}
-				break
-
-			case bcHalt:
-				break VM
-
-			default:
-				log.Fatalf("invalid unknown bytecode %d", bc.opcode)
+				// unwind current frame and go back to the previous frame to check whether
+				// we have exception handler or not
+				e.popfuncframe(pframe)
 			}
 		}
+		return e.doErr(bt, rr.prog, rr.pc, rr.e)
 	}
 
 	return nil

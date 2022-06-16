@@ -88,7 +88,10 @@ const (
 	tkSession
 	tkLet
 	tkWhen
+	tkCase
 	tkImport
+	tkExport
+	tkExtern
 	tkIf
 	tkElif
 	tkElse
@@ -244,10 +247,16 @@ func getTokenName(tk int) string {
 		return "const"
 	case tkSession:
 		return "session"
+	case tkExtern:
+		return "extern"
 	case tkWhen:
 		return "when"
+	case tkCase:
+		return "case"
 	case tkImport:
 		return "import"
+	case tkExport:
+		return "export"
 	case tkTry:
 		return "try"
 	case tkIf:
@@ -558,6 +567,46 @@ func (t *lexer) scanRId() int {
 	}
 }
 
+var lexerkeyword = map[string]int{
+	"true":  tkTrue,
+	"false": tkFalse,
+	"null":  tkNull,
+
+	"const":   tkConst,
+	"session": tkSession,
+	"extern":  tkExtern,
+
+	"import": tkImport,
+	"export": tkExport,
+
+	"let": tkLet,
+
+	/* when case */
+	"when": tkWhen,
+	"case": tkCase,
+
+	/* if else branch */
+	"if":   tkIf,
+	"elif": tkElif, // we have real else if, instead of nested else + if
+	"else": tkElse,
+
+	/* for loops */
+	"for":      tkFor,
+	"continue": tkContinue,
+	"break":    tkBreak,
+	"next":     tkNext,
+
+	/* other control flow */
+	"try":    tkTry,
+	"return": tkReturn,
+
+	"fn":   tkFunction,
+	"rule": tkRule,
+
+	/* intrinsic keywords */
+	"template": tkTemplate,
+}
+
 func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 	if tk, ok := t.tryPrefixString(c); ok {
 		return tk
@@ -605,72 +654,10 @@ func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 	idOrKeyword := buffer.String()
 
 	if !hasPrefix {
-		switch idOrKeyword {
-		case "true":
-			t.token = tkTrue
-			return tkTrue
-		case "false":
-			t.token = tkFalse
-			return tkFalse
-		case "null":
-			t.token = tkNull
-			return tkNull
-		case "let":
-			t.token = tkLet
-			return tkLet
-		case "session":
-			t.token = tkSession
-			return tkSession
-		case "const":
-			t.token = tkConst
-			return tkConst
-		case "for":
-			t.token = tkFor
-			return tkFor
-		case "when":
-			t.token = tkWhen
-			return tkWhen
-		case "import":
-			t.token = tkImport
-			return tkImport
-		case "try":
-			t.token = tkTry
-			return tkTry
-		case "if":
-			t.token = tkIf
-			return tkIf
-		case "elif":
-			t.token = tkElif
-			return tkElif
-		case "else":
-			t.token = tkElse
-			return tkElse
-		case "continue":
-			t.token = tkContinue
-			return tkContinue
-		case "break":
-			t.token = tkBreak
-			return tkBreak
-		case "next":
-			t.token = tkNext
-			return tkNext
-		case "fn":
-			t.token = tkFunction
-			return tkFunction
-		case "rule":
-			t.token = tkRule
-			return tkRule
-		case "return":
-			t.token = tkReturn
-			return tkReturn
-
-			// intrinsic
-		case "template":
-			t.token = tkTemplate
-			return tkTemplate
-
-		default:
-			break
+		id, ok := lexerkeyword[idOrKeyword]
+		if ok {
+			t.token = id
+			return id
 		}
 	}
 

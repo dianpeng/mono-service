@@ -108,12 +108,20 @@ const (
 	bcDerefIterator = 92
 	bcNextIterator  = 93
 
-	// special functions
-	// render template
-	bcTemplate = 100
+	// exception
+	bcPushException = 101
+	bcPopException  = 102
+
+	// load the exception object/reason(currently should be just a string) into
+	// tos
+	bcLoadException = 103
 
 	// extensions
-	bcLoadRegexp = 200
+	bcLoadRegexp = 150
+
+	// special functions
+	// render template
+	bcTemplate = 200
 
 	// halt the machine
 	bcMatch = 254
@@ -465,13 +473,13 @@ func getBytecodeName(bc int) string {
 	case bcReturn:
 		return "return"
 	case bcNewIterator:
-		return "new_iterator"
+		return "new-iterator"
 	case bcHasIterator:
-		return "has_iterator"
+		return "has-iterator"
 	case bcDerefIterator:
-		return "deref_iterator"
+		return "deref-iterator"
 	case bcNextIterator:
-		return "next_iterator"
+		return "next-iterator"
 	case bcToStr:
 		return "to-str"
 	case bcConStr:
@@ -552,6 +560,10 @@ func getBytecodeName(bc int) string {
 		return "load-const"
 	case bcLoadRegexp:
 		return "load-regexp"
+	case bcPushException:
+		return "push-exception"
+	case bcPopException:
+		return "pop-exception"
 
 	// special functions
 	case bcTemplate:

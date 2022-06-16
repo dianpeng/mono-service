@@ -23,8 +23,24 @@ const (
 	entryExpr
 )
 
+const (
+	symtConst = iota
+	symtVar
+)
+
+const (
+	// symbol not found or symbol duplicate
+	symError        = -1
+	symInvalidConst = -2
+)
+
+type syminfo struct {
+	name string
+	dec  int
+}
+
 type lexicalScope struct {
-	tbl     []string
+	tbl     []syminfo
 	eType   int
 	scpType int
 	parent  *lexicalScope
@@ -62,23 +78,50 @@ func (s *lexicalScope) localSize() int {
 	return len(s.tbl)
 }
 
-// if not found, returns -1, otherwise the symbol's index will be returned
+func (s *lexicalScope) add(x string, st int) int {
+	idx := s.find(x)
+	if idx != symError {
+		return idx
+	}
+	s.tbl = append(s.tbl, syminfo{
+		name: x,
+		dec:  st,
+	})
+	return len(s.tbl) - 1
+}
+
+func (s *lexicalScope) addVar(x string) int {
+	return s.add(x, symtVar)
+}
+
+func (s *lexicalScope) addConst(x string) int {
+	return s.add(x, symtConst)
+}
+
 func (s *lexicalScope) find(x string) int {
 	for idx, xx := range s.tbl {
-		if xx == x {
+		if xx.name == x {
 			return idx
 		}
 	}
-	return -1
+	return symError
 }
 
-func (s *lexicalScope) add(x string) int {
+// returns -1 means the symbol is not found
+// returns -2 means the symbol is const
+func (s *lexicalScope) findVar(x string) int {
 	idx := s.find(x)
-	if idx != -1 {
-		return idx
+	if idx == symError {
+		return symError
 	}
-	s.tbl = append(s.tbl, x)
-	return len(s.tbl) - 1
+	if s.tbl[idx].dec == symtConst {
+		return symInvalidConst
+	}
+	return idx
+}
+
+func (s *lexicalScope) findConst(x string) int {
+	return s.find(x)
 }
 
 // simulate linker to resolve call types after all the code has been parsed
@@ -205,28 +248,27 @@ func (p *parser) isEntryExpr() bool {
 	return p.stbl.eType == entryExpr
 }
 
-func (p *parser) addOrFindLocal(x string) int {
-	idx := p.findLocal(x)
-	if idx != -1 {
-		return idx
-	}
-
-	p.maxLocal++
-	return p.stbl.add(x)
-}
-
-func (p *parser) addLocal(x string) int {
+func (p *parser) addLocalVar(x string) int {
 	idx := p.stbl.find(x)
-	if idx != -1 {
+	if idx != symError {
 		return idx
 	}
 	p.maxLocal++
-	return p.stbl.add(x)
+	return p.stbl.addVar(x)
 }
 
-func (p *parser) mustAddLocal(x string) int {
-	idx := p.addLocal(x)
-	must(idx != -1, x)
+func (p *parser) addLocalConst(x string) int {
+	idx := p.stbl.find(x)
+	if idx != symError {
+		return idx
+	}
+	p.maxLocal++
+	return p.stbl.addConst(x)
+}
+
+func (p *parser) mustAddLocalVar(x string) int {
+	idx := p.addLocalVar(x)
+	must(idx != symError, x)
 	return idx
 }
 
@@ -234,12 +276,24 @@ func (p *parser) findLocal(n string) int {
 	x := p.stbl
 	for x != nil {
 		idx := x.find(n)
-		if idx != -1 {
+		if idx != symError {
 			return idx
 		}
 		x = x.parent
 	}
-	return -1
+	return symError
+}
+
+func (p *parser) findLocalVar(n string) int {
+	x := p.stbl
+	for x != nil {
+		idx := x.findVar(n)
+		if idx != symError {
+			return idx
+		}
+		x = x.parent
+	}
+	return symError
 }
 
 func (p *parser) findSessionIdx(x string) int {
@@ -248,7 +302,7 @@ func (p *parser) findSessionIdx(x string) int {
 			return idx
 		}
 	}
-	return -1
+	return symError
 }
 
 func (p *parser) findConstIdx(x string) int {
@@ -257,32 +311,41 @@ func (p *parser) findConstIdx(x string) int {
 			return idx
 		}
 	}
-	return -1
+	return symError
 }
 
-func (p *parser) resolveSymbol(xx string, ignoreConst bool) (int, int) {
-	// local symbol table
-	local := p.findLocal(xx)
-	if local != -1 {
-		return symLocal, local
+func (p *parser) resolveSymbol(xx string, ignoreConst bool, forWrite bool) (int, int) {
+	// local symbol table, based on for-read/for-write to handle local cases, since
+	// local symbol can be const value
+
+	if forWrite {
+		local := p.findLocalVar(xx)
+		if local == symInvalidConst || local >= 0 {
+			return symLocal, local
+		}
+	} else {
+		local := p.findLocal(xx)
+		if local != symError {
+			return symLocal, local
+		}
 	}
 
 	// session symbol table
 	sessVar := p.findSessionIdx(xx)
-	if sessVar != -1 {
+	if sessVar != symError {
 		return symSession, sessVar
 	}
 
 	if !ignoreConst {
 		// const symbol table
 		constVar := p.findConstIdx(xx)
-		if constVar != -1 {
+		if constVar != symError {
 			return symConst, constVar
 		}
 	}
 
 	// lastly, it must be dynamic variable. Notes, we don't have closure for now
-	return symDynamic, -1
+	return symDynamic, symError
 }
 
 func (p *parser) err(xx string) error {
@@ -378,9 +441,10 @@ LOOP:
 
 func (p *parser) parseSessionLoad(prog *program) error {
 	must(p.l.token == tkSId, "must be sesion id")
+
 	gname := p.l.valueText
 	idx := p.findSessionIdx(gname)
-	if idx == -1 {
+	if idx == symError {
 		return p.err(fmt.Sprintf("unknown session %s", gname))
 	}
 	p.l.next()
@@ -507,8 +571,8 @@ func (p *parser) parseFunction() (the_error error) {
 			if !p.l.expectCurrent(tkId) {
 				return p.l.toError()
 			}
-			idx := p.addLocal(p.l.valueText)
-			if idx == -1 {
+			idx := p.addLocalVar(p.l.valueText)
+			if idx == symError {
 				return p.err("argument name duplicated")
 			}
 			p.l.next()
@@ -528,7 +592,7 @@ func (p *parser) parseFunction() (the_error error) {
 	p.l.next()
 
 	// reserve a frame slot
-	p.mustAddLocal("#frame")
+	p.mustAddLocalVar("#frame")
 
 	// now parsing the function body
 	if err := p.parseBody(prog); err != nil {
@@ -550,7 +614,7 @@ func (p *parser) parseRule() error {
 	}
 
 	p.enterNormalScopeTop(entryRule)
-	p.mustAddLocal("#frame")
+	p.mustAddLocalVar("#frame")
 	defer func() {
 		p.leaveScope()
 	}()
@@ -791,8 +855,12 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme) error {
 		switch lexeme.token {
 		// unbounded token/symbol, require resolution
 		case tkId:
-			sym, idx := p.resolveSymbol(lexeme.sval, true)
+			sym, idx := p.resolveSymbol(lexeme.sval, true, true)
 			must(sym != symConst, "must not be const")
+
+			if sym == symLocal && idx == symInvalidConst {
+				return p.err(fmt.Sprintf("local variable %s is const, cannot be assigned to", lexeme.sval))
+			}
 
 			return p.parseSymbolAssign(prog,
 				lexeme.sval,
@@ -803,7 +871,7 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme) error {
 			// session store
 		case tkSId:
 			idx := p.findSessionIdx(lexeme.sval)
-			if idx == -1 {
+			if idx == symError {
 				return p.err(fmt.Sprintf("session %s variable not existed", lexeme.sval))
 			}
 
@@ -818,7 +886,7 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme) error {
 			return p.parseSymbolAssign(prog,
 				lexeme.sval,
 				symDynamic,
-				-1,
+				symError,
 			)
 
 		default:
@@ -973,6 +1041,93 @@ func (p *parser) parseStmt(prog *program) error {
 	}
 }
 
+// exception handling
+// we have 2 types of exception use cases,
+// 1) expression try else,
+//    ie 'try foo() else 10', when foo() has error, then the 10 will be returned
+//
+// 2) statement try else style
+//    ie
+//    try {
+//      ...
+//    } else [let] id {
+//    }
+
+func (p *parser) parseTry(prog *program,
+	tryGen func(*program) error,
+	elseGen func(*program) error,
+) error {
+	must(p.l.token == tkTry, "must be try")
+
+	// add a frame of exception
+	pushexp := prog.patch(p.l)
+
+	// eat the try
+	p.l.next()
+
+	// generate try body
+	if err := tryGen(prog); err != nil {
+		return err
+	}
+
+	// patch the enter exception
+	prog.emit1At(p.l, pushexp, bcPushException, prog.label())
+
+	// exception region finished
+	prog.emit0(p.l, bcPopException)
+
+	// else branch
+	if !p.l.expectCurrent(tkElse) {
+		return p.l.toError()
+	}
+	p.l.next()
+
+	// optionally let, which allow user to capture the exception/error
+	if p.l.token == tkLet || p.l.token == tkId {
+		var idx int
+		if p.l.token == tkLet {
+			if !p.l.expect(tkId) {
+				return p.l.toError()
+			}
+			idx = p.addLocalVar(p.l.valueText)
+			if idx == symError {
+				return p.err(fmt.Sprintf("duplicate local variable: %s", p.l.valueText))
+			}
+			p.l.next()
+		} else {
+			idx = p.findLocalVar(p.l.valueText)
+			if idx == symError {
+				return p.err(fmt.Sprintf("local variable not found: %s", p.l.valueText))
+			} else if idx == symConst {
+				return p.err(fmt.Sprintf("local variable is const: %s", p.l.valueText))
+			}
+			p.l.next()
+		}
+		must(idx >= 0, "must be valid index")
+
+		prog.emit0(p.l, bcLoadException)
+		prog.emit1(p.l, bcStoreLocal, idx)
+	}
+
+	if err := elseGen(prog); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *parser) parseTryStmt(prog *program) error {
+	parseChunk := func(prog *program) error {
+		p.enterNormalScope()
+		if err := p.parseBody(prog); err != nil {
+			return err
+		}
+		p.leaveScope()
+		return nil
+	}
+	return p.parseTry(prog, parseChunk, parseChunk)
+}
+
 func (p *parser) parseBranch(prog *program,
 	bodyGen func(*program) error, /* invoked whenever a branch body is needed */
 	dangling func(*program) error, /* invoked whenever a branch does have dangling,
@@ -1096,23 +1251,30 @@ func (p *parser) parseBranchStmt(prog *program) error {
 	)
 }
 
-func (p *parser) parseLet(prog *program) error {
+func (p *parser) parseVarDecl(prog *program, symt int) error {
 	if !p.l.expect(tkId) {
 		return p.l.toError()
 	}
 
-	idx := p.addLocal(p.l.valueText)
-	if idx == -1 {
-		return p.err("duplicate local variable via let")
+	var idx int
+	if symt == symtVar {
+		idx = p.addLocalVar(p.l.valueText)
+	} else {
+		idx = p.addLocalConst(p.l.valueText)
 	}
-
-	if !p.l.expect(tkAssign) {
-		return p.err("let variable must be initialized, expect '=' here")
+	if idx == symError {
+		return p.err("duplicate local variable via let")
 	}
 	p.l.next()
 
-	if err := p.parseExpr(prog); err != nil {
-		return err
+	if p.l.token == tkAssign {
+		p.l.next()
+		if err := p.parseExpr(prog); err != nil {
+			return err
+		}
+	} else {
+		// default value to be null
+		prog.emit0(p.l, bcLoadNull)
 	}
 
 	prog.emit1(p.l, bcStoreLocal, idx)
@@ -1188,10 +1350,10 @@ func (p *parser) parseIteratorLoop(prog *program, key string) error {
 	//    of the loop body
 	p.enterLoopScope()
 
-	keyIdx := p.mustAddLocal(key)
-	valIdx := p.addLocal(val)
+	keyIdx := p.mustAddLocalVar(key)
+	valIdx := p.addLocalVar(val)
 
-	if valIdx == -1 {
+	if valIdx == symError {
 		return p.err("duplicate local variable name in iterator style loop")
 	}
 
@@ -1361,7 +1523,7 @@ func (p *parser) parseTripCountLoopFull(prog *program, key string) error {
 		return err
 	}
 
-	keyIdx := p.mustAddLocal(key)
+	keyIdx := p.mustAddLocalVar(key)
 	prog.emit1(p.l, bcStoreLocal, keyIdx)
 
 	if !p.l.expectCurrent(tkSemicolon) {
@@ -1515,7 +1677,13 @@ func (p *parser) parseBody(prog *program) error {
 			break
 
 		case tkLet:
-			if err := p.parseLet(prog); err != nil {
+			if err := p.parseVarDecl(prog, symtVar); err != nil {
+				return err
+			}
+			break
+
+		case tkConst:
+			if err := p.parseVarDecl(prog, symtConst); err != nil {
 				return err
 			}
 			break
@@ -1527,10 +1695,11 @@ func (p *parser) parseBody(prog *program) error {
 			hasSep = false
 			break
 
-		case tkReturn:
-			if err := p.parseReturn(prog); err != nil {
+		case tkTry:
+			if err := p.parseTryStmt(prog); err != nil {
 				return err
 			}
+			hasSep = false
 			break
 
 		case tkFor:
@@ -1548,6 +1717,12 @@ func (p *parser) parseBody(prog *program) error {
 
 		case tkContinue:
 			if err := p.parseContinue(prog); err != nil {
+				return err
+			}
+			break
+
+		case tkReturn:
+			if err := p.parseReturn(prog); err != nil {
 				return err
 			}
 			break
@@ -1580,14 +1755,27 @@ func (p *parser) parseExpr(prog *program) error {
 	switch p.l.token {
 	case tkIf:
 		return p.parseBranchExpr(prog)
+	case tkTry:
+		return p.parseTryExpr(prog)
 	default:
 		return p.parseTernary(prog)
 	}
 }
 
+func (p *parser) parseTryExpr(prog *program) error {
+	parseChunk := func(prog *program) error {
+		if p.l.token == tkLBra {
+			return p.parseExprBody(prog)
+		} else {
+			return p.parseExpr(prog)
+		}
+	}
+	return p.parseTry(prog, parseChunk, parseChunk)
+}
+
 func (p *parser) parseBranchExpr(prog *program) error {
 	return p.parseBranch(prog,
-		p.parseBranchBodyExpr,
+		p.parseExprBody,
 		func(prog *program) error {
 			prog.emit0(p.l, bcLoadNull)
 			return nil
@@ -1601,17 +1789,18 @@ func (p *parser) parseBranchExpr(prog *program) error {
 // instead of expression to avoid nested if in if's condition. Since the if
 // body has mandatory bracket, it means we can nest if inside and it is still
 // fine to maintain
-
-func (p *parser) parseBranchBodyExprStmt(prog *program) (bool, error) {
+func (p *parser) parseExprStmt(prog *program) (bool, error) {
 	switch p.l.token {
 	case tkLet:
-		return false, p.parseLet(prog)
+		return false, p.parseVarDecl(prog, symtVar)
+	case tkConst:
+		return false, p.parseVarDecl(prog, symtConst)
 	default:
 		return true, p.parseExpr(prog)
 	}
 }
 
-func (p *parser) parseBranchBodyExpr(prog *program) error {
+func (p *parser) parseExprBody(prog *program) error {
 	if !p.l.expectCurrent(tkLBra) {
 		return p.l.toError()
 	}
@@ -1621,7 +1810,7 @@ func (p *parser) parseBranchBodyExpr(prog *program) error {
 
 	p.enterNormalScope()
 
-	if p, err := p.parseBranchBodyExprStmt(prog); err != nil {
+	if p, err := p.parseExprStmt(prog); err != nil {
 		return err
 	} else {
 		popVal = p
@@ -1644,7 +1833,7 @@ func (p *parser) parseBranchBodyExpr(prog *program) error {
 			prog.emit0(p.l, bcPop)
 		}
 
-		if p, err := p.parseBranchBodyExprStmt(prog); err != nil {
+		if p, err := p.parseExprStmt(prog); err != nil {
 			return err
 		} else {
 			popVal = p
@@ -2220,7 +2409,9 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 			// 1. session variable
 			// 2. local variable
 			// 3. dynmaic variable
-			symT, symIdx := p.resolveSymbol(name, false)
+			symT, symIdx := p.resolveSymbol(name, false, false)
+			must(symIdx != symInvalidConst, "should never return invalid constant")
+
 			switch symT {
 			case symSession:
 				prog.emit1(p.l, bcLoadSession, symIdx)
