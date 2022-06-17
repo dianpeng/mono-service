@@ -59,18 +59,25 @@ func assertVeq(lhs Val, rhs Val) (bool, string) {
 				lm := lhs.Map()
 				rm := rhs.Map()
 				info := fmt.Sprintf("lhs: %s; rhs: %s", lm.Info(), rm.Info())
-
-				if len(lm.Data) == len(rm.Data) {
-					for k, v := range lm.Data {
-						vv, ok := rm.Data[k]
-						if !ok {
-							return false, info
-						}
-						if ok, _ := assertVeq(v, vv); !ok {
-							return false, info
-						}
+				if lm.Length() == rm.Length() {
+					cnt := lm.Foreach(
+						func(k string, v Val) bool {
+							vv, ok := rm.Get(k)
+							if !ok {
+								return false
+							}
+							if ok, _ := assertVeq(v, vv); !ok {
+								return false
+							} else {
+								return true
+							}
+						},
+					)
+					if cnt != lm.Length() {
+						return false, info
+					} else {
+						return true, info
 					}
-					return true, info
 				}
 
 				return false, info

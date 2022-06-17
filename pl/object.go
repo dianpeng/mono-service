@@ -448,6 +448,13 @@ func NewValUsr(u Usr) Val {
 	}
 }
 
+func NewValIter(i Iter) Val {
+	return Val{
+		Type:  ValIter,
+		vData: i,
+	}
+}
+
 func NewValUValData(
 	c interface{},
 ) Val {
@@ -1013,6 +1020,26 @@ func (v *Val) Method(name string, args []Val) (Val, error) {
 	}
 
 	return NewValNull(), fmt.Errorf("%s:%s is unknown", v.Id(), name)
+}
+
+func (v *Val) NewIterator() (Iter, error) {
+	switch v.Type {
+	case ValInt, ValReal, ValBool, ValNull, ValRegexp, ValClosure, valFrame:
+		return nil, fmt.Errorf("type %s does not support iterator", v.Id())
+
+	case ValStr:
+		return newStrIter(v.String()), nil
+	case ValList:
+		return v.List().NewIter(), nil
+	case ValMap:
+		return v.Map().NewIter(), nil
+	case ValPair:
+		return v.Pair().NewIter(), nil
+
+	default:
+		must(v.IsUsr(), "must be user")
+		return v.Usr().NewIterator()
+	}
 }
 
 func (v *Val) Id() string {

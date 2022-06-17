@@ -150,6 +150,13 @@ func (s *lexicalScope) idx(i int) int {
 	return i - s.offset
 }
 
+func (s *lexicalScope) vname(x string) string {
+  if x == "_" {
+    return fmt.Sprintf("@ignore_%d", len(s.tbl))
+  }
+  return x
+}
+
 func (s *lexicalScope) add(x string, st int) int {
 	idx := s.find(x)
 	if idx != symError {
@@ -165,11 +172,11 @@ func (s *lexicalScope) add(x string, st int) int {
 }
 
 func (s *lexicalScope) addVar(x string) int {
-	return s.add(x, symtVar)
+	return s.add(s.vname(x), symtVar)
 }
 
 func (s *lexicalScope) addConst(x string) int {
-	return s.add(x, symtConst)
+	return s.add(s.vname(x), symtConst)
 }
 
 func (s *lexicalScope) find(x string) int {
@@ -319,24 +326,24 @@ func (p *parser) isEntryExpr() bool {
 	return p.stbl.eType == entryExpr
 }
 
-func (p *parser) addLocalVar(x string) int {
+func (p *parser) defLocalVar(x string) int {
 	idx := p.stbl.find(x)
 	if idx != symError {
-		return idx
+		return symError
 	}
 	return p.stbl.addVar(x)
 }
 
-func (p *parser) addLocalConst(x string) int {
+func (p *parser) defLocalConst(x string) int {
 	idx := p.stbl.find(x)
 	if idx != symError {
-		return idx
+		return symError
 	}
 	return p.stbl.addConst(x)
 }
 
 func (p *parser) mustAddLocalVar(x string) int {
-	idx := p.addLocalVar(x)
+	idx := p.defLocalVar(x)
 	must(idx != symError, x)
 	return idx
 }
@@ -742,7 +749,7 @@ func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 			if !p.l.expectCurrent(tkId) {
 				return "", p.l.toError()
 			}
-			idx := p.addLocalVar(p.l.valueText)
+			idx := p.defLocalVar(p.l.valueText)
 			if idx == symError {
 				return "", p.err("argument name duplicated")
 			}
@@ -1021,7 +1028,7 @@ func (p *parser) parseSymbolAssign(prog *program,
 	return nil
 }
 
-func (p *parser) parseBasicStmt(prog *program, lexeme lexeme) error {
+func (p *parser) parseBasicStmt(prog *program, lexeme lexeme, popExpr bool) (bool, error) {
 
 	switch p.l.token {
 	// assignment, agg-assignment, inc, dec
@@ -1041,10 +1048,10 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme) error {
 			must(sym != symConst, "must not be const")
 
 			if sym == symLocal && idx == symInvalidConst {
-				return p.errf("local variable %s is const, cannot be assigned to", lexeme.sval)
+				return true, p.errf("local variable %s is const, cannot be assigned to", lexeme.sval)
 			}
 
-			return p.parseSymbolAssign(prog,
+			return true, p.parseSymbolAssign(prog,
 				lexeme.sval,
 				sym,
 				idx,
@@ -1054,10 +1061,10 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme) error {
 		case tkSId:
 			idx := p.findSessionIdx(lexeme.sval)
 			if idx == symError {
-				return p.errf("session %s variable not existed", lexeme.sval)
+				return true, p.errf("session %s variable not existed", lexeme.sval)
 			}
 
-			return p.parseSymbolAssign(prog,
+			return true, p.parseSymbolAssign(prog,
 				lexeme.sval,
 				symSession,
 				idx,
@@ -1065,20 +1072,20 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme) error {
 
 			// const store
 		case tkCId:
-			return p.errf("const scope variable cannot be used for storing")
+			return true, p.errf("const scope variable cannot be used for storing")
 
 			// dynamic variable store
 		case tkDId:
-			return p.parseSymbolAssign(prog,
+			return true, p.parseSymbolAssign(prog,
 				lexeme.sval,
 				symDynamic,
 				symError,
 			)
 
 		default:
-			return p.err("assignment's lhs must be identifier or a session identifier")
+			return true, p.err("assignment's lhs must be identifier or a session identifier")
 		}
-		return nil
+		return true, nil
 
 	default:
 		// other prefix expression
@@ -1089,13 +1096,13 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme) error {
 
 	// now try to generate the previous saved lexeme and it could be anything
 	if err := p.parsePrimary(prog, lexeme); err != nil {
-		return err
+		return false, err
 	}
 
 	// then try to parse any suffix expression if applicable
 	var st int
 	if err := p.parseSuffixImpl(prog, &st); err != nil {
-		return err
+		return false, err
 	}
 
 	// handle the dangling assignment if needed. The assignment operation is been
@@ -1118,7 +1125,7 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme) error {
 			break
 
 		default:
-			return p.err("invalid assignment expression, the field assignment " +
+			return true, p.err("invalid assignment expression, the field assignment " +
 				"can only apply to [] or '.' operators")
 		}
 
@@ -1147,7 +1154,7 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme) error {
 
 		default:
 			if err := p.parseExpr(prog); err != nil {
-				return err
+				return true, err
 			}
 
 			switch assign {
@@ -1194,9 +1201,14 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme) error {
 			prog.emit0(p.l, bcIndexSet)
 			break
 		}
+		return true, nil
+	} else {
+		// pop the last expression just been evaluated
+		if popExpr {
+			prog.emit0(p.l, bcPop)
+		}
+		return false, nil
 	}
-
-	return nil
 }
 
 func (p *parser) parseStmt(prog *program) error {
@@ -1223,7 +1235,8 @@ func (p *parser) parseStmt(prog *program) error {
 		return nil
 	} else {
 		// normal statement operation, ie assignment, agg assignment inc and dec
-		return p.parseBasicStmt(prog, lexeme)
+		_, err := p.parseBasicStmt(prog, lexeme, true)
+		return err
 	}
 }
 
@@ -1275,7 +1288,7 @@ func (p *parser) parseTry(prog *program,
 			if !p.l.expect(tkId) {
 				return p.l.toError()
 			}
-			idx = p.addLocalVar(p.l.valueText)
+			idx = p.defLocalVar(p.l.valueText)
 			if idx == symError {
 				return p.errf("duplicate local variable: %s", p.l.valueText)
 			}
@@ -1447,9 +1460,9 @@ func (p *parser) parseVarDecl(prog *program, symt int) error {
 	// to allow recursive anonymous function call
 	var idx int
 	if symt == symtVar {
-		idx = p.addLocalVar(p.l.valueText)
+		idx = p.defLocalVar(p.l.valueText)
 	} else {
-		idx = p.addLocalConst(p.l.valueText)
+		idx = p.defLocalConst(p.l.valueText)
 	}
 
 	if idx == symError {
@@ -1515,7 +1528,6 @@ func (p *parser) parseForeverLoop(prog *program) error {
 // -------------------------------------------------------------------
 func (p *parser) parseIteratorLoop(prog *program, key string) error {
 	must(p.l.token == tkComma, "must be comma")
-	p.l.next()
 
 	// 1. parsing the value local variable name
 	if !p.l.expect(tkId) {
@@ -1527,6 +1539,7 @@ func (p *parser) parseIteratorLoop(prog *program, key string) error {
 	if !p.l.expect(tkAssign) {
 		return p.l.toError()
 	}
+	p.l.next()
 
 	if err := p.parseExpr(prog); err != nil {
 		return err
@@ -1541,7 +1554,7 @@ func (p *parser) parseIteratorLoop(prog *program, key string) error {
 	p.enterLoopScope()
 
 	keyIdx := p.mustAddLocalVar(key)
-	valIdx := p.addLocalVar(val)
+	valIdx := p.defLocalVar(val)
 
 	if valIdx == symError {
 		return p.err("duplicate local variable name in iterator style loop")
@@ -1576,7 +1589,7 @@ func (p *parser) parseIteratorLoop(prog *program, key string) error {
 	// 4.3 loop tail check, if the iterator can move forward, then just move forwad
 	//     and return true, otherwise return false
 	prog.emit0(p.l, bcNextIterator)
-	prog.emit1(p.l, bcJfalse, headerPos)
+	prog.emit1(p.l, bcJtrue, headerPos)
 
 	// header testify should be patched to jump at current position, which is
 	// out of the loop body
@@ -1663,7 +1676,7 @@ func (p *parser) parseTripCountLoopRest(prog *program) error {
 		lexeme := p.lexeme()
 		p.l.next()
 
-		if err := p.parseBasicStmt(prog, lexeme); err != nil {
+		if _, err := p.parseBasicStmt(prog, lexeme, true); err != nil {
 			return err
 		}
 	}
@@ -1989,16 +2002,24 @@ func (p *parser) parseBranchExpr(prog *program) error {
 // instead of expression to avoid nested if in if's condition. Since the if
 // body has mandatory bracket, it means we can nest if inside and it is still
 // fine to maintain
-func (p *parser) parseExprStmt(prog *program) (bool, error) {
+func (p *parser) parseExprStmt(prog *program) (bool, bool, error) {
 	switch p.l.token {
 	case tkLet:
-		return false, p.parseVarDecl(prog, symtVar)
+		return true, false, p.parseVarDecl(prog, symtVar)
 	case tkConst:
-		return false, p.parseVarDecl(prog, symtConst)
+		return true, false, p.parseVarDecl(prog, symtConst)
 	case tkFor:
-		return false, p.parseFor(prog)
+		return false, false, p.parseFor(prog)
 	default:
-		return true, p.parseExpr(prog)
+		lexeme := p.lexeme()
+		p.l.next()
+
+		isStmt, err := p.parseBasicStmt(prog, lexeme, false)
+		if err != nil {
+			return true, true, err
+		} else {
+			return true, !isStmt, nil
+		}
 	}
 }
 
@@ -2009,21 +2030,25 @@ func (p *parser) parseExprBody(prog *program) error {
 	p.l.next()
 
 	popVal := false
+	needSep := true
 
 	p.enterNormalScope()
 
-	if p, err := p.parseExprStmt(prog); err != nil {
+	if s, p, err := p.parseExprStmt(prog); err != nil {
 		return err
 	} else {
 		popVal = p
+		needSep = s
 	}
-	if !p.l.expectCurrent(tkSemicolon) {
-		return p.l.toError()
+	if needSep {
+		if !p.l.expectCurrent(tkSemicolon) {
+			return p.l.toError()
+		} else {
+			p.l.next()
+		}
 	}
 
 	for {
-		p.l.next()
-
 		// okay now it is possible that it is a statement or an expression
 		if p.l.token == tkRBra {
 			break
@@ -2035,14 +2060,19 @@ func (p *parser) parseExprBody(prog *program) error {
 			prog.emit0(p.l, bcPop)
 		}
 
-		if p, err := p.parseExprStmt(prog); err != nil {
+		if s, p, err := p.parseExprStmt(prog); err != nil {
 			return err
 		} else {
 			popVal = p
+			needSep = s
 		}
 
-		if !p.l.expectCurrent(tkSemicolon) {
-			return p.l.toError()
+		if needSep {
+			if !p.l.expectCurrent(tkSemicolon) {
+				return p.l.toError()
+			} else {
+				p.l.next()
+			}
 		}
 	}
 

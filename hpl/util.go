@@ -100,11 +100,14 @@ func foreachHeaderKV(arg pl.Val, fn func(key string, val string)) bool {
 		return true
 
 	case pl.ValMap:
-		for k, v := range arg.Map().Data {
-			if v.Type == pl.ValStr {
-				fn(k, v.String())
-			}
-		}
+		arg.Map().Foreach(
+			func(k string, v pl.Val) bool {
+				if v.Type == pl.ValStr {
+					fn(k, v.String())
+				}
+				return true
+			},
+		)
 		return true
 
 	default:

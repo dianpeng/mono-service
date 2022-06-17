@@ -32,11 +32,8 @@ func (li *ListIter) Has() bool {
 }
 
 func (li *ListIter) Next() bool {
-	if li.Has() {
-		li.cur++
-		return true
-	}
-	return false
+	li.cur++
+	return li.Has()
 }
 
 func (li *ListIter) Deref() (Val, Val, error) {
@@ -48,6 +45,13 @@ func (li *ListIter) Deref() (Val, Val, error) {
 }
 
 func NewListIter(l *List) *ListIter {
+	return &ListIter{
+		l:   l,
+		cur: 0,
+	}
+}
+
+func (l *List) NewIter() Iter {
 	return &ListIter{
 		l:   l,
 		cur: 0,

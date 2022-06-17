@@ -75,6 +75,7 @@ const (
 	// 1. (cond1) || (cond2) : cond1 true --> jump next
 	// 2. (cond1) && (cond2) : cond1 false --> jump next
 
+	bcJtrue   = 51
 	bcJfalse  = 52
 	bcAnd     = 53
 	bcOr      = 54
@@ -446,6 +447,7 @@ func (x *bytecode) dump(resolver func(int, int) string) string {
 		bcAnd,
 		bcOr,
 		bcJfalse,
+		bcJtrue,
 		bcJump,
 		bcTernary:
 
@@ -559,6 +561,8 @@ func getBytecodeName(bc int) string {
 		return "negate"
 	case bcJfalse:
 		return "jfalse"
+	case bcJtrue:
+		return "jtrue"
 	case bcJump:
 		return "jump"
 	case bcAnd:

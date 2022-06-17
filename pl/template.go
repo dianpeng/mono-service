@@ -82,9 +82,12 @@ func (t *pongoTemplate) tocontext(v Val) pongo2.Context {
 
 	case ValMap:
 		p := make(pongo2.Context)
-		for k, v := range v.Map().Data {
-			p[k] = v.ToNative()
-		}
+		v.Map().Foreach(
+			func(k string, v Val) bool {
+				p[k] = v.ToNative()
+				return true
+			},
+		)
 		return p
 
 	default:

@@ -21,8 +21,8 @@ type EvalAction func(*Evaluator, string, Val) error
 // [arg:N]
 // [arg:N-1]
 //   ...
-// [arg:1]          <-------------- framep+1 (where local stack start)
-// [index:function] <-------------- framep
+// [arg:1]          <------- framep+1 (where local stack start)
+// [index:function] <------- framep
 
 type Evaluator struct {
 	Stack   []Val
@@ -668,6 +668,14 @@ FUNC:
 			}
 			break
 
+		case bcJtrue:
+			cond := e.top0()
+			e.pop()
+			if cond.ToBoolean() {
+				pc = bc.argument - 1
+			}
+			break
+
 		case bcJump:
 			pc = bc.argument - 1
 			break
@@ -1078,7 +1086,42 @@ FUNC:
 			}
 			break
 
-		// iterator
+			// iterator
+		case bcNewIterator:
+			tos := e.top0()
+			e.pop()
+
+			itr, err := tos.NewIterator()
+			if err != nil {
+				return rrErr(prog, pc, err)
+			}
+			e.push(NewValIter(itr))
+			break
+
+		case bcHasIterator:
+			tos := e.top0()
+			must(tos.IsIter(), "must be iterator(has_iterator)")
+			e.push(NewValBool(tos.Iter().Has()))
+			break
+
+		case bcDerefIterator:
+			tos := e.top0()
+			must(tos.IsIter(), "must be iterator(deref_iterator)")
+			key, val, err := tos.Iter().Deref()
+			if err != nil {
+				return rrErr(prog, pc, err)
+			}
+
+			// order matters
+			e.push(key)
+			e.push(val)
+			break
+
+		case bcNextIterator:
+			tos := e.top0()
+			must(tos.IsIter(), "must be iterator(next_iterator)")
+			e.push(NewValBool(tos.Iter().Next()))
+			break
 
 		case bcMatch:
 			c := e.top0()

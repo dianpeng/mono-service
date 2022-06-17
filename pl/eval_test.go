@@ -722,13 +722,13 @@ policy => {
 		{
 			l := output.mapAt("act_map_empty")
 			assert.True(l != nil)
-			assert.True(len(l.Data) == 0)
+			assert.True(l.Length() == 0)
 		}
 
 		{
 			l := output.listAt("act_list1")
 			assert.True(l != nil)
-			assert.Equal(len(l.Data), 7, "length")
+			assert.Equal(l.Length(), 7, "length")
 			{
 				e := l.Data[0]
 				assert.True(e.Type == ValInt)
@@ -762,8 +762,8 @@ policy => {
 		}
 		{
 			m := output.mapAt("act_map1")
-			assert.Equal(len(m.Data), 1)
-			v, ok := m.Data["a"]
+			assert.Equal(m.Length(), 1)
+			v, ok := m.Get("a")
 			assert.True(ok)
 			assert.Equal(v.Type, ValStr, "map.type")
 			assert.Equal(v.String(), "Hello World")
@@ -835,12 +835,12 @@ policy{
 		{
 			l := output.listAt("empty_list")
 			assert.True(l != nil)
-			assert.True(len(l.Data) == 0)
+			assert.True(l.Length() == 0)
 		}
 		{
 			l := output.listAt("list1")
 			assert.True(l != nil)
-			assert.True(len(l.Data) == 1)
+			assert.True(l.Length() == 1)
 			assert.True(l.Data[0].Type == ValInt)
 			assert.True(l.Data[0].Int() == 1)
 		}
@@ -872,23 +872,23 @@ policy{
 		{
 			l := output.mapAt("empty_map")
 			assert.True(l != nil)
-			assert.True(len(l.Data) == 0)
+			assert.True(l.Length() == 0)
 		}
 		{
 			l := output.mapAt("map1")
 			assert.True(l != nil)
-			assert.True(len(l.Data) == 1)
+			assert.True(l.Length() == 1)
 
-			v0, ok := l.Data["a"]
+			v0, ok := l.Get("a")
 			assert.True(ok)
 			assert.True(v0.Type == ValMap)
 		}
 		{
 			l := output.mapAt("map2")
 			assert.True(l != nil)
-			assert.True(len(l.Data) == 2)
+			assert.True(l.Length() == 2)
 
-			v1, ok := l.Data["b"]
+			v1, ok := l.Get("b")
 			assert.True(ok)
 			assert.True(v1.Type == ValBool)
 			assert.True(v1.Bool())
@@ -897,17 +897,17 @@ policy{
 		{
 			l := output.mapAt("map3")
 			assert.True(l != nil)
-			assert.True(len(l.Data) == 1)
+			assert.True(l.Length() == 1)
 
-			v0, ok := l.Data["a"]
+			v0, ok := l.Get("a")
 			assert.True(ok)
 			assert.True(v0.Type == ValMap)
 
-			v00, ok := v0.Map().Data["b"]
+			v00, ok := v0.Map().Get("b")
 			assert.True(ok)
 			assert.True(v00.Type == ValMap)
 
-			v000, ok := v00.Map().Data["c"]
+			v000, ok := v00.Map().Get("c")
 			assert.True(ok)
 			assert.True(v000.Type == ValInt)
 			assert.True(v000.Int() == 1)

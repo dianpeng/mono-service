@@ -28,14 +28,7 @@ fn testBasicArithmetic() {
   }
 
   assert::eq({}, {});
-  assert::eq({
-    "a": 10,
-    "b": 20
-  },
-  {
-    "a": 1+8+1,
-    "b": 22-2
-  });
+  assert::eq({"a": 10, "b": 20}, {"a": 1+8+1, "b": 22-2});
 }
 
 fn testScopingRules() {

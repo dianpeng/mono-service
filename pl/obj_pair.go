@@ -9,6 +9,39 @@ type Pair struct {
 	Second Val
 }
 
+type PairIter struct {
+	p   *Pair
+	cnt int
+}
+
+func (p *PairIter) Has() bool {
+	return p.cnt < 2
+}
+
+func (p *PairIter) Next() bool {
+	p.cnt++
+	return p.Has()
+}
+
+func (p *PairIter) Deref() (Val, Val, error) {
+	switch p.cnt {
+	case 0:
+		return NewValInt(0), p.p.First, nil
+	case 1:
+		return NewValInt(1), p.p.Second, nil
+	default:
+		break
+	}
+	return NewValNull(), NewValNull(), fmt.Errorf("iterator out of bound")
+}
+
+func (p *Pair) NewIter() Iter {
+	return &PairIter{
+		p:   p,
+		cnt: 0,
+	}
+}
+
 func (p *Pair) ToNative() interface{} {
 	return [2]interface{}{
 		p.First.ToNative(),
