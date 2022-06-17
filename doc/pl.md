@@ -280,6 +280,35 @@ rule a {
   let regex = r"This is a regex string";
   let matched = "A string" ~ regex; // returns true or false
 
+  // pipe syntax is also support for better expressive, pipe is essentially just
+  // a function call
+  // a | b is same as b(a)
+  // a | b(2, 3) is same as b(a, 2, 3)
+
+  let pipe1 = "string" | str::to_upper;
+  let mul10 = fn(a, b) {
+    return (a + b) * 10;
+  };
+  let pipe2 = 1 | mul10(2);
+
+  // additionally, we also support method call. A method call is a specialized
+  // call that dispatch directly to an object that support method call.
+
+  let x = "lower":to_upper(); // use : to indicate calling method to_upper on string
+
+  // be careful the difference between method call and dot call.
+
+  let obj = {
+  };
+
+  obj.a = fn() {
+    return "this is a closure";
+  };
+
+  let aa = obj.a(); // this is a call of field a inside of map *obj*
+
+  let bb = obj:length(); // this is a call of length member function on map *obj*
+
 ```
 
 * Ternary Expression
