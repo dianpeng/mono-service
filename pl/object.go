@@ -539,12 +539,12 @@ func NewValUValImmutable(
 
 func (v *Val) AddList(vv Val) {
 	must(v.Type == ValList, "AddList: must be list")
-	v.List().Data = append(v.List().Data, vv)
+	v.List().Append(vv)
 }
 
 func (v *Val) AddMap(key string, val Val) {
 	must(v.Type == ValMap, "AddMap: must be map")
-	v.Map().Data[key] = val
+	v.Map().Set(key, val)
 }
 
 // never failed
@@ -561,9 +561,9 @@ func (v *Val) ToBoolean() bool {
 	case ValNull:
 		return true
 	case ValList:
-		return len(v.List().Data) != 0
+		return v.List().Length() != 0
 	case ValMap:
-		return len(v.Map().Data) != 0
+		return v.Map().Length() != 0
 	case ValIter:
 		return v.Iter().Has()
 	case ValClosure:

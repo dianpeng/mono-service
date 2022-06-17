@@ -17,10 +17,31 @@ type Map struct {
 	Data map[string]Val
 }
 
+type MapIter struct {
+	m *Map
+}
+
 func NewMap() *Map {
 	return &Map{
 		Data: make(map[string]Val),
 	}
+}
+
+func (m *Map) Set(key string, v Val) {
+	m.Data[key] = v
+}
+
+func (m *Map) Get(key string) (Val, bool) {
+	v, ok := m.Data[key]
+	if ok {
+		return v, true
+	} else {
+		return NewValNull(), false
+	}
+}
+
+func (m *Map) Length() int {
+	return len(m.Data)
 }
 
 func (m *Map) ToNative() interface{} {

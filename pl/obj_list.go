@@ -22,6 +22,42 @@ func NewList() *List {
 	}
 }
 
+type ListIter struct {
+	l   *List
+	cur int
+}
+
+func (li *ListIter) Has() bool {
+	return li.cur < li.l.Length()
+}
+
+func (li *ListIter) Next() bool {
+	if li.Has() {
+		li.cur++
+		return true
+	}
+	return false
+}
+
+func (li *ListIter) Deref() (Val, Val, error) {
+	if li.Has() {
+		return NewValInt(li.cur), li.l.Data[li.cur], nil
+	} else {
+		return NewValNull(), NewValNull(), fmt.Errorf("iterator out of bound")
+	}
+}
+
+func NewListIter(l *List) *ListIter {
+	return &ListIter{
+		l:   l,
+		cur: 0,
+	}
+}
+
+func (l *List) Length() int {
+	return len(l.Data)
+}
+
 func (l *List) Append(x Val) {
 	l.Data = append(l.Data, x)
 }

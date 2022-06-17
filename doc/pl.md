@@ -32,8 +32,6 @@ server implementation or related industry experience.
   1. One pass code generation
   2. Bytecode style VM with compact memory footprint
 
-
-
 ## Language
 
 
