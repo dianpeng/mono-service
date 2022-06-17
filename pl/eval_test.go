@@ -44,19 +44,19 @@ func test(code string) (Val, bool) {
 	// fmt.Printf(":code\n%s", policy.Dump())
 
 	if err != nil {
-		fmt.Printf(":policy %s", err.Error())
+		fmt.Printf(":policy \n%s", err.Error())
 		return NewValNull(), false
 	}
 
 	err = eval.EvalSession(policy)
 	if err != nil {
-		fmt.Printf(":evalSession %s", err.Error())
+		fmt.Printf(":evalSession \n%s", err.Error())
 		return NewValNull(), false
 	}
 
 	err = eval.Eval("test", policy)
 	if err != nil {
-		fmt.Printf(":eval %s", err.Error())
+		fmt.Printf(":eval\n%s", err.Error())
 		return NewValNull(), false
 	}
 	return *ret, true
@@ -309,6 +309,206 @@ func (a *actionOutput) mapAt(idx string) *Map {
 	return x.Map()
 }
 
+func TestTryExpr(t *testing.T) {
+	assert := assert.New(t)
+	assert.True(testString(
+		`
+	  test{
+	    let a = try foo() else "hello world";
+	    output => a;
+	  }
+	  `, "hello world"))
+
+	assert.True(testString(
+		`
+	  test {
+	    let a = try foo() else {
+        try bar() else {
+          try q() else {
+            "hello world";
+          };
+        };
+      };
+
+	    output => a;
+	  }
+	  `, "hello world"))
+
+	assert.True(testString(
+		`
+	  test{
+	    let a = try foo() else let reason reason;
+	    output => a;
+	  }
+	  `, "foo unknown func"))
+
+	assert.True(testString(
+		`
+	  test{
+      let reason = null;
+	    let a = try foo() else reason reason;
+	    output => a;
+	  }
+	  `, "foo unknown func"))
+
+	assert.True(testString(
+		`
+	  fn f0() {
+	    return f1();
+	  }
+	  fn f1() {
+	    return f2();
+	  }
+	  fn f2() {
+	    return f3();
+	  }
+	  fn f3() {
+	    return try foo() else "hello world";
+	  }
+	  test{
+	    output => f0();
+	  }
+	  `, "hello world"))
+
+	assert.True(testString(
+		`
+  fn f0() {
+    return f1();
+  }
+  fn f1() {
+    return f2();
+  }
+  fn f2() {
+    return f3();
+  }
+  fn f3() {
+    return foo();
+  }
+  test{
+    output => try f0() else "hello world";
+  }
+  `, "hello world"))
+
+	assert.True(testString(
+		`
+  session {
+    xxx = try uuvv() else "hello world";
+  }
+  test{
+    output => xxx;
+  }
+  `, "hello world"))
+}
+
+func TestTryStatement(t *testing.T) {
+	assert := assert.New(t)
+
+	// basic
+	{
+		assert.True(testString(
+			`
+    test{
+      try {
+        foo();
+      } else {
+      }
+
+      output => "hello world";
+    }
+    `, "hello world"))
+
+		assert.True(testString(
+			`
+    test{
+      try {
+        foo();
+      } else {
+        output => "hello world";
+      }
+    }
+    `, "hello world"))
+
+		assert.True(testString(
+			`
+    test{
+      try {
+        foo();
+        output => "bar";
+      } else {
+        output => "hello world";
+      }
+    }
+    `, "hello world"))
+
+		assert.True(testString(
+			`
+    test{
+      try {
+        xxx = 100;
+        output => "bar";
+      } else {
+        output => "hello world";
+      }
+    }
+    `, "hello world"))
+	}
+
+	// capture the error value
+	{
+		assert.True(testString(
+			`
+    test{
+      try {
+        foo();
+      } else let bar {
+      }
+
+      output => "hello world";
+    }
+    `, "hello world"))
+
+		assert.True(testString(
+			`
+    test{
+      try {
+        foo();
+      } else let bar {
+        print(bar);
+        output => "hello world";
+      }
+    }
+    `, "hello world"))
+
+		assert.True(testString(
+			`
+    test{
+      let bar;
+      try {
+        foo();
+        output => "bar";
+      } else bar {
+        print(bar);
+        output => "hello world";
+      }
+    }
+    `, "hello world"))
+
+		assert.True(testString(
+			`
+    test{
+      let bar;
+      try {
+        xxx = 100;
+        output => "bar";
+      } else bar {
+        print(bar);
+        output => "hello world";
+      }
+    }
+    `, "hello world"))
+	}
+}
+
 func TestMCall(t *testing.T) {
 	assert := assert.New(t)
 	{
@@ -446,115 +646,6 @@ func TestUpvalue(t *testing.T) {
       output => lhs + rhs;
     }
     `, "hello worldHello World"))
-	}
-}
-
-func TestTryStatement(t *testing.T) {
-	assert := assert.New(t)
-
-	// basic
-	{
-		assert.True(testString(
-			`
-    test{
-      try {
-        foo();
-      } else {
-      }
-
-      output => "hello world";
-    }
-    `, "hello world"))
-
-		assert.True(testString(
-			`
-    test{
-      try {
-        foo();
-      } else {
-        output => "hello world";
-      }
-    }
-    `, "hello world"))
-
-		assert.True(testString(
-			`
-    test{
-      try {
-        foo();
-        output => "bar";
-      } else {
-        output => "hello world";
-      }
-    }
-    `, "hello world"))
-
-		assert.True(testString(
-			`
-    test{
-      try {
-        xxx = 100;
-        output => "bar";
-      } else {
-        output => "hello world";
-      }
-    }
-    `, "hello world"))
-	}
-
-	// capture the error value
-	{
-		assert.True(testString(
-			`
-    test{
-      try {
-        foo();
-      } else let bar {
-      }
-
-      output => "hello world";
-    }
-    `, "hello world"))
-
-		assert.True(testString(
-			`
-    test{
-      try {
-        foo();
-      } else let bar {
-        print(bar);
-        output => "hello world";
-      }
-    }
-    `, "hello world"))
-
-		assert.True(testString(
-			`
-    test{
-      let bar;
-      try {
-        foo();
-        output => "bar";
-      } else bar {
-        print(bar);
-        output => "hello world";
-      }
-    }
-    `, "hello world"))
-
-		assert.True(testString(
-			`
-    test{
-      let bar;
-      try {
-        xxx = 100;
-        output => "bar";
-      } else bar {
-        print(bar);
-        output => "hello world";
-      }
-    }
-    `, "hello world"))
 	}
 }
 
@@ -2027,95 +2118,4 @@ test {
 }
 `, "1000"))
 
-}
-
-func TestTryExpr(t *testing.T) {
-	assert := assert.New(t)
-	assert.True(testString(
-		`
-	  test{
-	    let a = try foo() else "hello world";
-	    output => a;
-	  }
-	  `, "hello world"))
-
-	assert.True(testString(
-		`
-	  test{
-	    let a = try foo() else {
-        try bar() else {
-          try q() else {
-            "hello world";
-          };
-        };
-      };
-
-	    output => a;
-	  }
-	  `, "hello world"))
-
-	assert.True(testString(
-		`
-	  test{
-	    let a = try foo() else let reason reason;
-	    output => a;
-	  }
-	  `, "foo unknown func"))
-
-	assert.True(testString(
-		`
-	  test{
-      let reason = null;
-	    let a = try foo() else reason reason;
-	    output => a;
-	  }
-	  `, "foo unknown func"))
-
-	assert.True(testString(
-		`
-	  fn f0() {
-	    return f1();
-	  }
-	  fn f1() {
-	    return f2();
-	  }
-	  fn f2() {
-	    return f3();
-	  }
-	  fn f3() {
-	    return try foo() else "hello world";
-	  }
-	  test{
-	    output => f0();
-	  }
-	  `, "hello world"))
-
-	assert.True(testString(
-		`
-  fn f0() {
-    return f1();
-  }
-  fn f1() {
-    return f2();
-  }
-  fn f2() {
-    return f3();
-  }
-  fn f3() {
-    return foo();
-  }
-  test{
-    output => try f0() else "hello world";
-  }
-  `, "hello world"))
-
-	assert.True(testString(
-		`
-  session {
-    xxx = try uuvv() else "hello world";
-  }
-  test{
-    output => xxx;
-  }
-  `, "hello world"))
 }

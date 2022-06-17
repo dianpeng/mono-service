@@ -38,7 +38,7 @@ func assertVeq(lhs Val, rhs Val) (bool, string) {
 				lok, _ := assertVeq(lp.First, rp.First)
 				rok, _ := assertVeq(lp.Second, rp.Second)
 
-				return lok && rok, fmt.Sprintf("lhs: %s; rhs: %s", lp.Info, rp.Info())
+				return lok && rok, fmt.Sprintf("lhs: %s; rhs: %s", lp.Info(), rp.Info())
 
 			case ValList:
 				ll := lhs.List()

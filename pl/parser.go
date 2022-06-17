@@ -71,7 +71,7 @@ func newLexicalScope(t int, p *lexicalScope, isTop bool) *lexicalScope {
 	}
 
 	offset := 0
-	if p != nil {
+	if !isTop && p != nil {
 		offset = p.nextOffset()
 	}
 
@@ -1256,11 +1256,11 @@ func (p *parser) parseTry(prog *program,
 		return err
 	}
 
-	// patch the enter exception
-	prog.emit1At(p.l, pushexp, bcPushException, prog.label())
-
 	// exception region finished, and jump out of the else branch
 	popexp := prog.patch(p.l)
+
+	// patch the enter exception
+	prog.emit1At(p.l, pushexp, bcPushException, prog.label())
 
 	// else branch
 	if !p.l.expectCurrent(tkElse) {
@@ -1443,12 +1443,15 @@ func (p *parser) parseVarDecl(prog *program, symt int) error {
 		return p.l.toError()
 	}
 
+	// make sure to add the variable before parsing/compiling its rhs expression
+	// to allow recursive anonymous function call
 	var idx int
 	if symt == symtVar {
 		idx = p.addLocalVar(p.l.valueText)
 	} else {
 		idx = p.addLocalConst(p.l.valueText)
 	}
+
 	if idx == symError {
 		return p.err("duplicate local variable via let")
 	}
@@ -1992,6 +1995,8 @@ func (p *parser) parseExprStmt(prog *program) (bool, error) {
 		return false, p.parseVarDecl(prog, symtVar)
 	case tkConst:
 		return false, p.parseVarDecl(prog, symtConst)
+	case tkFor:
+		return false, p.parseFor(prog)
 	default:
 		return true, p.parseExpr(prog)
 	}
@@ -2472,6 +2477,23 @@ func (p *parser) parseVCall(prog *program) error {
 	return nil
 }
 
+// Rules for unbounded call name resolution
+
+// The unbounded call's name resolution is little bit different from the normal
+// symbol resolution. The difference is that when we don't know a name for
+// variable loading/storing, we issue bcLoadVar/bcStoreVar; for function call
+// we issue bcCall.
+// In general, the name of unbounded function call is as following:
+// 1) try to resolve it as known symbol
+//    ie local, session or const
+// 2) If 1) failed, then defer the call when all parsing/compilation is done
+// 3) Once all compilation is done, we try to lookup the name as following :
+//   3.1) If it is an intrinsic function call, then just issue it
+//   3.2) If it is a script function call, then just issue it
+//   3.3) Issue the function call with bcCall, which is the dynamic call's
+//        up call instruction. Ultimately, this instruction will become a
+//        embedder's call function callback invokation.
+
 func (p *parser) parseUnboundCall(prog *program,
 	name string,
 	argAdd int,
@@ -2497,14 +2519,50 @@ func (p *parser) parseUnboundCall(prog *program,
 		pcnt = pc
 	}
 
-	p.callPatch = append(p.callPatch, callentry{
-		entryPos: entryIndex,
-		swapPos:  swapPos,
-		callPos:  prog.patch(p.l),
-		prog:     prog,
-		arg:      pcnt + argAdd,
-		symbol:   name,
-	})
+	// now try to resolve the name via variable lookup in case it is just a vcall
+
+	symtype, symindex := p.resolveSymbol(
+		name,
+		false,
+		false,
+	)
+
+	switch symtype {
+	case symSession:
+		prog.emit1At(p.l, entryIndex, bcLoadSession, symindex)
+		break
+
+	case symLocal:
+		prog.emit1At(p.l, entryIndex, bcLoadLocal, symindex)
+		break
+
+	case symUpval:
+		prog.emit1At(p.l, entryIndex, bcLoadUpvalue, symindex)
+		break
+
+	case symConst:
+		prog.emit1At(p.l, entryIndex, bcLoadConst, symindex)
+		break
+
+	default:
+		// notes if it is dynamic variable then just dispatch it with bcCall
+		p.callPatch = append(p.callPatch, callentry{
+			entryPos: entryIndex,
+			swapPos:  swapPos,
+			callPos:  prog.patch(p.l),
+			prog:     prog,
+			arg:      pcnt + argAdd,
+			symbol:   name,
+		})
+		return nil
+	}
+
+	if swapPos != -1 {
+		prog.emit0At(p.l, swapPos, bcSwap)
+	}
+
+	// emit the final vcall
+	prog.emit1(p.l, bcVCall, pcnt+argAdd)
 	return nil
 }
 
@@ -2515,7 +2573,16 @@ func (p *parser) patchAllCall() {
 			e.prog.emit0At(p.l, e.swapPos, bcSwap)
 		}
 
-		// function name resolution
+		// The call entry in current stage is the call entry that its name cannot
+		// be resolved during variable lookup, ie try to dispatch it via VCall
+
+		// 1) try to index it as intrinsic function
+
+		// 2) try to index it as script function which has an external name and not
+		//    be bounded as local variable name
+
+		// 3) try to dispatch it as dynamic function call, ie upcall
+
 		intrinsicIdx := indexIntrinsic(e.symbol)
 		if intrinsicIdx != -1 {
 			idx := e.prog.addInt(int64(intrinsicIdx))
@@ -2529,6 +2596,7 @@ func (p *parser) patchAllCall() {
 				e.prog.emit1At(p.l, e.entryPos, bcLoadInt, idx)
 				e.prog.emit1At(p.l, e.callPos, bcSCall, e.arg)
 			} else {
+
 				idx := e.prog.addStr(e.symbol)
 				e.prog.emit1At(p.l, e.entryPos, bcLoadStr, idx)
 				e.prog.emit1At(p.l, e.callPos, bcCall, e.arg)
@@ -2708,7 +2776,11 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 		break
 
 	case tkDollar:
-		prog.emit0(p.l, bcLoadDollar)
+		if p.isEntryRule() {
+			prog.emit0(p.l, bcLoadDollar)
+		} else {
+			return p.err("only rule body can use $ as variable")
+		}
 		break
 
 	case tkSId:

@@ -61,6 +61,7 @@ func TestLexerBasic(t *testing.T) {
 
 	{
 		l := newLexer("$()[]{};=.,:}}")
+		l.allowDRBra = true
 		assert.Equal(l.next(), tkDollar, "$")
 		assert.Equal(l.next(), tkLPar, "(")
 		assert.Equal(l.next(), tkRPar, ")")
@@ -78,6 +79,7 @@ func TestLexerBasic(t *testing.T) {
 	}
 	{
 		l := newLexer("}}}")
+		l.allowDRBra = true
 		assert.Equal(l.next(), tkDRBra, "}}")
 		assert.Equal(l.next(), tkRBra, "}")
 	}
