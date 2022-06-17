@@ -86,8 +86,19 @@ fn str_iter() {
   }, 2);
 }
 
+fn pair_iter() {
+  assert::eq(if true {
+    let i = 0;
+    for let _, _ = ("a", "b") {
+      i++;
+    }
+    i;
+  }, 2);
+}
+
 test {
   map_iter();
   list_iter();
   str_iter();
+  pair_iter();
 }
