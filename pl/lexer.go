@@ -44,6 +44,7 @@ const (
 	tkQuest
 	tkAt
 	tkSharp
+	tkPipe
 
 	// unary
 	tkNot
@@ -211,6 +212,8 @@ func getTokenName(tk int) string {
 		return "@"
 	case tkSharp:
 		return "#"
+	case tkPipe:
+		return "|"
 
 	case tkAdd:
 		return "+"
@@ -623,7 +626,10 @@ var lexerkeyword = map[string]int{
 	"try":    tkTry,
 	"return": tkReturn,
 
-	"fn":   tkFunction,
+	/* reserve 2 keywords for function definition, this may not be a good idea though */
+	"fn":       tkFunction,
+	"function": tkFunction,
+
 	"rule": tkRule,
 
 	/* intrinsic keywords */
@@ -911,7 +917,7 @@ func (t *lexer) next() int {
 			return t.pp(tkAnd, '&')
 
 		case '|':
-			return t.pp(tkOr, '|')
+			return t.p2(tkPipe, tkOr, '|')
 
 		case '!':
 			return t.pp2(tkNot, tkNe, tkRegexpNMatch, '=', '~')

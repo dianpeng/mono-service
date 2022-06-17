@@ -634,6 +634,13 @@ FUNC:
 			}
 			break
 
+		case bcSwap:
+			sz := len(e.Stack)
+
+			// top of the stack has been swapped, now t1 becomse t0
+			e.Stack[sz-1], e.Stack[sz-2] = e.Stack[sz-2], e.Stack[sz-1]
+			break
+
 		case bcPop:
 			e.pop()
 			break

@@ -4,74 +4,88 @@ import (
 	"fmt"
 )
 
-func assertVeq(lhs Val, rhs Val) bool {
-	if lhs.Type != rhs.Type {
-		return false
-	} else {
-		if !IsValueType(lhs.Type) {
-			return false
-		} else {
+func assertVeq(lhs Val, rhs Val) (bool, string) {
+	if lhs.Type == rhs.Type {
+		if IsValueType(lhs.Type) {
 			switch lhs.Type {
 			case ValNull:
-				return true
+				return true, fmt.Sprintf("lhs: null; rhs: null")
 
 			case ValInt:
-				return lhs.Int() == rhs.Int()
+				l := lhs.Int()
+				r := rhs.Int()
+				return l == r, fmt.Sprintf("lhs: %d; rhs: %d", l, r)
 
 			case ValReal:
-				return lhs.Real() == rhs.Real()
+				l := lhs.Real()
+				r := rhs.Real()
+				return l == r, fmt.Sprintf("lhs: %f; rhs: %f", l, r)
 
 			case ValStr:
-				return lhs.String() == rhs.String()
+				l := lhs.String()
+				r := rhs.String()
+				return l == r, fmt.Sprintf("lhs: %s; rhs: %s", l, r)
 
 			case ValBool:
-				return lhs.Bool() == rhs.Bool()
+				l := lhs.Bool()
+				r := rhs.Bool()
+				return l == r, fmt.Sprintf("lhs: %t; rhs: %t", l, r)
 
 			case ValPair:
 				lp := lhs.Pair()
 				rp := rhs.Pair()
-				return assertVeq(lp.First, rp.First) && assertVeq(lp.Second, rp.Second)
+
+				lok, _ := assertVeq(lp.First, rp.First)
+				rok, _ := assertVeq(lp.Second, rp.Second)
+
+				return lok && rok, fmt.Sprintf("lhs: %s; rhs: %s", lp.Info, rp.Info())
 
 			case ValList:
 				ll := lhs.List()
 				rl := rhs.List()
+				info := fmt.Sprintf("lhs: %s; rhs: %s", ll.Info(), rl.Info())
+
 				if len(ll.Data) == len(rl.Data) {
 					for i := 0; i < len(ll.Data); i++ {
-						if !assertVeq(ll.Data[i], rl.Data[i]) {
-							return false
+						if ok, _ := assertVeq(ll.Data[i], rl.Data[i]); !ok {
+							return false, info
 						}
 					}
-					return true
+					return true, info
 				}
-				return false
+				return false, info
 
 			case ValMap:
 				lm := lhs.Map()
 				rm := rhs.Map()
+				info := fmt.Sprintf("lhs: %s; rhs: %s", lm.Info(), rm.Info())
 
 				if len(lm.Data) == len(rm.Data) {
 					for k, v := range lm.Data {
 						vv, ok := rm.Data[k]
 						if !ok {
-							return false
+							return false, info
 						}
-						if !assertVeq(v, vv) {
-							return false
+						if ok, _ := assertVeq(v, vv); !ok {
+							return false, info
 						}
 					}
-					return true
+					return true, info
 				}
 
-				return false
+				return false, info
 
 			default:
 				must(lhs.Type == ValRegexp, "must be regexp")
-				return lhs.Regexp().String() == rhs.Regexp().String()
+				l := lhs.Regexp()
+				r := rhs.Regexp()
+				info := fmt.Sprintf("lhs: [regexp %s]; rhs: [regexp %s]", l.String(), r.String())
+				return l.String() == r.String(), info
 			}
 		}
 	}
 
-	return false
+	return false, fmt.Sprintf("lhs: %s; rhs: %s", lhs.Info(), rhs.Info())
 }
 
 func init() {
@@ -92,7 +106,7 @@ func init() {
 			}
 
 			if !result {
-				return NewValNull(), fmt.Errorf("assert::yes failed: %s", msg)
+				return NewValNull(), fmt.Errorf("assert::yes failed]: %s", msg)
 			} else {
 				return NewValNull(), nil
 			}
@@ -116,7 +130,7 @@ func init() {
 			}
 
 			if result {
-				return NewValNull(), fmt.Errorf("assert::no failed: %s", msg)
+				return NewValNull(), fmt.Errorf("assert::no failed]: %s", msg)
 			} else {
 				return NewValNull(), nil
 			}
@@ -141,8 +155,8 @@ func init() {
 			lhs := args[0]
 			rhs := args[1]
 
-			if !assertVeq(lhs, rhs) {
-				return NewValNull(), fmt.Errorf("assert::eq failed: %s", msg)
+			if ok, info := assertVeq(lhs, rhs); !ok {
+				return NewValNull(), fmt.Errorf("assert::eq failed]: %s; message: %s", info, msg)
 			} else {
 				return NewValNull(), nil
 			}
@@ -167,8 +181,8 @@ func init() {
 			lhs := args[0]
 			rhs := args[1]
 
-			if assertVeq(lhs, rhs) {
-				return NewValNull(), fmt.Errorf("assert::ne failed: %s", msg)
+			if ok, info := assertVeq(lhs, rhs); ok {
+				return NewValNull(), fmt.Errorf("assert::ne failed]: %s; message: %s", info, msg)
 			} else {
 				return NewValNull(), nil
 			}

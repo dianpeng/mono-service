@@ -201,6 +201,7 @@ func (s *lexicalScope) findConst(x string) int {
 // simulate linker to resolve call types after all the code has been parsed
 type callentry struct {
 	entryPos int
+	swapPos  int
 	callPos  int
 	prog     *program
 	arg      int
@@ -2471,19 +2472,37 @@ func (p *parser) parseVCall(prog *program) error {
 	return nil
 }
 
-func (p *parser) parseFreeCall(prog *program, name string) error {
-	entryIndex := prog.patch(p.l)
+func (p *parser) parseUnboundCall(prog *program,
+	name string,
+	argAdd int,
+	isPipe bool,
+) error {
 
-	pcnt, err := p.parseCallArgs(prog)
-	if err != nil {
-		return err
+	entryIndex := prog.patch(p.l)
+	swapPos := -1
+
+	// if it is a pipecall, then we should swap the entry and its previous args
+	if isPipe {
+		swapPos = prog.patch(p.l)
+	}
+
+	// function call argument
+	pcnt := 0
+
+	if !isPipe || (isPipe && p.l.token == tkLPar) {
+		pc, err := p.parseCallArgs(prog)
+		if err != nil {
+			return err
+		}
+		pcnt = pc
 	}
 
 	p.callPatch = append(p.callPatch, callentry{
 		entryPos: entryIndex,
+		swapPos:  swapPos,
 		callPos:  prog.patch(p.l),
 		prog:     prog,
-		arg:      pcnt,
+		arg:      pcnt + argAdd,
 		symbol:   name,
 	})
 	return nil
@@ -2491,10 +2510,17 @@ func (p *parser) parseFreeCall(prog *program, name string) error {
 
 func (p *parser) patchAllCall() {
 	for _, e := range p.callPatch {
+		// whether we should perform swap due to the pipe call
+		if e.swapPos != -1 {
+			e.prog.emit0At(p.l, e.swapPos, bcSwap)
+		}
+
+		// function name resolution
 		intrinsicIdx := indexIntrinsic(e.symbol)
 		if intrinsicIdx != -1 {
 			idx := e.prog.addInt(int64(intrinsicIdx))
 			e.prog.emit1At(p.l, e.entryPos, bcLoadInt, idx)
+
 			e.prog.emit1At(p.l, e.callPos, bcICall, e.arg)
 		} else {
 			scallIdx := p.policy.getFunctionIndex(e.symbol)
@@ -2567,6 +2593,35 @@ SUFFIX:
 			}
 			break
 
+		case tkPipe:
+			// Pipe style expression
+			// Pipe is used to invoke free/global function in a compact format,
+			// case 1> a | b[(args)] => b(a, [args])
+			// case 2> a | b => b(a)
+
+			if !p.l.expect(tkId) {
+				return p.l.toError()
+			}
+
+			name := p.l.valueText
+			p.l.next()
+
+			// FIXME(dpeng): abstract module call name resolution out or put it into lexer
+
+			// optionally module name
+			if p.l.token == tkScope {
+				if !p.l.expect(tkId) {
+					return p.l.toError()
+				}
+				name = modFuncName(name, p.l.valueText)
+				p.l.next()
+			}
+
+			if err := p.parseUnboundCall(prog, name, 1, true); err != nil {
+				return err
+			}
+			break
+
 		default:
 			break SUFFIX
 		}
@@ -2591,7 +2646,7 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 		// identifier leading types
 		switch p.l.token {
 		case tkLPar:
-			if err := p.parseFreeCall(prog, name); err != nil {
+			if err := p.parseUnboundCall(prog, name, 0, false); err != nil {
 				return err
 			}
 			break
@@ -2606,7 +2661,7 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 			if !p.l.expect(tkLPar) {
 				return p.l.toError()
 			}
-			if err := p.parseFreeCall(prog, modFuncName(modName, funcName)); err != nil {
+			if err := p.parseUnboundCall(prog, modFuncName(modName, funcName), 0, false); err != nil {
 				return err
 			}
 			break

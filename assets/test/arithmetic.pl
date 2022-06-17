@@ -22,6 +22,11 @@ fn testBasicArithmetic() {
   assert::eq([], []);
   assert::eq([1], [1]);
 
+  {
+    let aa;
+    assert::eq(null, aa);
+  }
+
   assert::eq({}, {});
   assert::eq({
     "a": 10,

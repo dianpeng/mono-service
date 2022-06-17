@@ -6,6 +6,9 @@ import (
 	// go template
 	"text/template"
 
+	// pongo
+	"github.com/flosch/pongo2"
+
 	// markdown
 	"github.com/gomarkdown/markdown"
 	"github.com/gomarkdown/markdown/html"
@@ -56,12 +59,51 @@ func (t *mdTemplate) Execute(ctx Val) (string, error) {
 	return t.md, nil
 }
 
+type pongoTemplate struct {
+	tpl *pongo2.Template
+}
+
+func (t *pongoTemplate) Compile(_, input string, _ Val) error {
+	r, err := pongo2.FromString(input)
+	if err != nil {
+		return err
+	}
+	t.tpl = r
+	return nil
+}
+
+func (t *pongoTemplate) tocontext(v Val) pongo2.Context {
+	switch v.Type {
+	case ValPair:
+		return pongo2.Context{
+			"first":  v.Pair().First.ToNative(),
+			"second": v.Pair().Second.ToNative(),
+		}
+
+	case ValMap:
+		p := make(pongo2.Context)
+		for k, v := range v.Map().Data {
+			p[k] = v.ToNative()
+		}
+		return p
+
+	default:
+		return make(pongo2.Context)
+	}
+}
+
+func (t *pongoTemplate) Execute(ctx Val) (string, error) {
+	return t.tpl.Execute(t.tocontext(ctx))
+}
+
 func newTemplate(t string) Template {
 	switch t {
 	case "go":
 		return &goTemplate{}
 	case "md":
 		return &mdTemplate{}
+	case "pongo":
+		return &pongoTemplate{}
 	default:
 		return nil
 	}

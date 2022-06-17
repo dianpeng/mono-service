@@ -24,8 +24,8 @@ allow user with Go/C/JavaScript background to pick it up easily.
   3. Session variables
 
 3. Reasonably Performant
-  1. Bytecode interpreter
-
+  1. One pass code generation
+  2. Bytecode style VM with compact memory footprint
 
 ## Tutorial
 

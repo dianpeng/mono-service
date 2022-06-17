@@ -43,7 +43,7 @@ form a virtual host. A vhost is been used as an representation of tenancy.
 
 See document for DSL features:
 
-[a relative link](doc/pl.md)
+[Policy Language](doc/pl.md)
 
 ## Yaml
 

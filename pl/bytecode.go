@@ -82,9 +82,10 @@ const (
 	bcJump    = 56
 
 	// stack manipulation
-	bcDup1 = 68
-	bcDup2 = 69
-	bcPop  = 70
+	bcSwap = 61
+	bcDup1 = 62
+	bcDup2 = 63
+	bcPop  = 64
 
 	// this instruction can only be generated during the global scope
 	bcSetSession = 71
@@ -566,6 +567,8 @@ func getBytecodeName(bc int) string {
 		return "or"
 	case bcTernary:
 		return "ternary"
+	case bcSwap:
+		return "swap"
 	case bcPop:
 		return "pop"
 	case bcDup1:
