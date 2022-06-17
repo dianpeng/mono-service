@@ -12,10 +12,14 @@ import (
 
 const (
 	tkId = iota
-	tkSId
-	tkDId
 
+	// qualify id
+	tkSId
+	tkCId
+	tkDId
 	tkRId
+	tkEId
+
 	tkInt
 	tkReal
 	tkStr
@@ -38,6 +42,8 @@ const (
 	tkScope
 	tkSemicolon
 	tkQuest
+	tkAt
+	tkSharp
 
 	// unary
 	tkNot
@@ -84,6 +90,7 @@ const (
 	tkTrue
 	tkFalse
 	tkNull
+	tkDynamic
 	tkConst
 	tkSession
 	tkLet
@@ -120,6 +127,9 @@ type lexer struct {
 	valueInt  int64
 	valueReal float64
 	valueText string
+
+	// option
+	allowDRBra bool
 }
 
 func isaggassign(tk int) bool {
@@ -145,12 +155,18 @@ func getTokenName(tk int) string {
 	switch tk {
 	case tkId:
 		return "id"
+
 	case tkSId:
 		return "session_id"
 	case tkDId:
 		return "dynamic_id"
 	case tkRId:
-		return "rid"
+		return "resource_id"
+	case tkEId:
+		return "extern_id"
+	case tkCId:
+		return "const_id"
+
 	case tkInt:
 		return "int"
 	case tkReal:
@@ -191,6 +207,10 @@ func getTokenName(tk int) string {
 		return ";"
 	case tkQuest:
 		return "?"
+	case tkAt:
+		return "@"
+	case tkSharp:
+		return "#"
 
 	case tkAdd:
 		return "+"
@@ -245,6 +265,8 @@ func getTokenName(tk int) string {
 		return "let"
 	case tkConst:
 		return "const"
+	case tkDynamic:
+		return "dynamic"
 	case tkSession:
 		return "session"
 	case tkExtern:
@@ -518,6 +540,20 @@ func (t *lexer) scanNum() int {
 	}
 }
 
+func (t *lexer) scanRId() int {
+	must(t.input[t.cursor] == '@', "must be @")
+	t.cursor++
+	must(t.input[t.cursor] == '\'' ||
+		t.input[t.cursor] == '"', "must be quoted string")
+	x := t.scanStr()
+	if x != tkStr {
+		return x
+	} else {
+		t.token = tkRId
+		return tkRId
+	}
+}
+
 func (t *lexer) tryPrefixString(c rune) (int, bool) {
 	// Prefix string's prefix checking
 	switch c {
@@ -553,25 +589,12 @@ func (t *lexer) tryPrefixString(c rune) (int, bool) {
 	return tk, true
 }
 
-func (t *lexer) scanRId() int {
-	must(t.input[t.cursor] == '@', "must be @")
-	t.cursor++
-	must(t.input[t.cursor] == '\'' ||
-		t.input[t.cursor] == '"', "must be quoted string")
-	x := t.scanStr()
-	if x != tkStr {
-		return x
-	} else {
-		t.token = tkRId
-		return tkRId
-	}
-}
-
 var lexerkeyword = map[string]int{
 	"true":  tkTrue,
 	"false": tkFalse,
 	"null":  tkNull,
 
+	"dynamic": tkDynamic,
 	"const":   tkConst,
 	"session": tkSession,
 	"extern":  tkExtern,
@@ -607,6 +630,48 @@ var lexerkeyword = map[string]int{
 	"template": tkTemplate,
 }
 
+func (t *lexer) tryQualifyId(keyword int) int {
+	switch keyword {
+	case tkSession,
+		tkConst,
+		tkDynamic,
+		tkExtern:
+		break
+	default:
+		return -1
+	}
+
+	cursor := t.cursor
+
+	// we just peek forward 2 tokens otherwise we just don't know what happened
+
+	ntk1 := t.next()
+	if ntk1 != tkScope {
+		t.cursor = cursor
+		return -1
+	}
+
+	ntk2 := t.next()
+	if ntk2 != tkId {
+		t.cursor = cursor
+		return -1
+	}
+
+	// notes since it is id, its lexeme value has been put inplace, so nothing
+	// need to done here, just return the token we have
+
+	switch keyword {
+	case tkSession:
+		return tkSId
+	case tkConst:
+		return tkCId
+	case tkDynamic:
+		return tkDId
+	default:
+		return tkEId
+	}
+}
+
 func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 	if tk, ok := t.tryPrefixString(c); ok {
 		return tk
@@ -615,28 +680,7 @@ func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 	idType := tkId
 	hasPrefix := false
 
-	// prefixed token
-	if c == '@' {
-		if t.cursor+1 == len(t.input) {
-			return t.err("prefix @ is not finished")
-		}
-		nc := t.input[t.cursor+1]
-		if nc == '"' || nc == '\'' {
-			return t.scanRId()
-		}
-
-		t.cursor++
-		idType = tkSId
-		hasPrefix = true
-	} else if c == '#' {
-		if t.cursor+1 == len(t.input) {
-			return t.err("prefix # is not finished")
-		}
-
-		t.cursor++
-		idType = tkDId
-		hasPrefix = true
-	} else if !unicode.IsLetter(c) && c != '_' {
+	if !unicode.IsLetter(c) && c != '_' {
 		return t.err("unrecognized token here, expect keyword or identifier")
 	}
 
@@ -656,6 +700,15 @@ func (t *lexer) scanIdOrKeywordOrPrefixString(c rune) int {
 	if !hasPrefix {
 		id, ok := lexerkeyword[idOrKeyword]
 		if ok {
+			// FIXME(dpeng): here we hack the lexer to support a grammar basically
+			//   which should be supported by parser instead of lexer. But this makes
+			//   our parser code easier to maintain. Basically we just want to separate
+			//   some speical naming thing, ie qualifier
+			if tk := t.tryQualifyId(id); tk != -1 {
+				t.token = tk
+				return tk
+			}
+
 			t.token = id
 			return id
 		}
@@ -881,7 +934,11 @@ func (t *lexer) next() int {
 		case '{':
 			return t.yield(tkLBra, 1)
 		case '}':
-			return t.p2(tkRBra, tkDRBra, '}')
+			if t.allowDRBra {
+				return t.p2(tkRBra, tkDRBra, '}')
+			} else {
+				return t.yield(tkRBra, 1)
+			}
 		case '.':
 			return t.yield(tkDot, 1)
 		case ',':
@@ -890,6 +947,18 @@ func (t *lexer) next() int {
 			return t.yield(tkDollar, 1)
 		case '?':
 			return t.yield(tkQuest, 1)
+		case '@':
+			if t.cursor+1 < len(t.input) {
+				nc := t.input[t.cursor+1]
+				if nc == '"' || nc == '\'' {
+					return t.scanRId()
+				}
+			}
+			return t.yield(tkAt, 1)
+
+		case '#':
+			return t.yield(tkSharp, 1)
+
 		case ';':
 			return t.yield(tkSemicolon, 1)
 		case ':':

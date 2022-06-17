@@ -7,9 +7,10 @@ type DynamicVariable struct {
 	Value Val
 }
 
-func must(cond bool, msg string) {
+func must(cond bool, msg string, a ...interface{}) {
 	if !cond {
-		panic(fmt.Sprintf("must: %s", msg))
+		f := fmt.Sprintf("must: %s", msg)
+		panic(fmt.Sprintf(f, a...))
 	}
 }
 

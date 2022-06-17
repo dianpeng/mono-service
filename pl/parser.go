@@ -54,14 +54,25 @@ type lexicalScope struct {
 	// prog field, only used when isTop is true, modify upvalue when performing
 	// upvalue collapsing
 	prog *program
-	next *lexicalScope
+	// used only when the isTop is true, recording the largest local variable size
+	maxLocal int
+	offset   int
+	next     *lexicalScope
+
+	// caching the top scope of current lexical scope, top can be same as this
+	top *lexicalScope
 }
 
-func newLexicalScope(t int, p *lexicalScope) *lexicalScope {
+func newLexicalScope(t int, p *lexicalScope, isTop bool) *lexicalScope {
 	if p != nil && t == scpNormal {
 		if p.scpType == scpLoop || p.scpType == scpInLoop {
 			t = scpInLoop
 		}
+	}
+
+	offset := 0
+	if p != nil {
+		offset = p.nextOffset()
 	}
 
 	et := entryRule
@@ -74,11 +85,52 @@ func newLexicalScope(t int, p *lexicalScope) *lexicalScope {
 		eType:   et,
 		scpType: t,
 		parent:  p,
-		isTop:   false,
+		isTop:   isTop,
+		offset:  offset,
 	}
 
 	if p != nil {
 		p.next = x
+	}
+
+	// always put at last
+	if isTop {
+		x.top = x
+	} else {
+		x.top = x.prevTop()
+	}
+	must(x.top != nil, "every scope should have a top")
+	return x
+}
+
+func (s *lexicalScope) nextOffset() int {
+	return s.offset + len(s.tbl)
+}
+
+func (s *lexicalScope) topMaxLocal() int {
+	return s.top.maxLocal
+}
+
+func (s *lexicalScope) nearestLoop() *lexicalScope {
+	x := s
+	for x != nil && x.scpType != scpLoop {
+		x = x.parent
+	}
+	return x
+}
+
+func (s *lexicalScope) prevTop() *lexicalScope {
+	x := s
+	for x != nil && !x.isTop {
+		x = x.parent
+	}
+	return x
+}
+
+func (s *lexicalScope) nextTop() *lexicalScope {
+	x := s.next
+	for x != nil && !x.isTop {
+		x = x.next
 	}
 	return x
 }
@@ -90,6 +142,14 @@ func (s *lexicalScope) localSize() int {
 	return len(s.tbl)
 }
 
+func (s *lexicalScope) vdx(i int) int {
+	return s.offset + i
+}
+
+func (s *lexicalScope) idx(i int) int {
+	return i - s.offset
+}
+
 func (s *lexicalScope) add(x string, st int) int {
 	idx := s.find(x)
 	if idx != symError {
@@ -99,7 +159,9 @@ func (s *lexicalScope) add(x string, st int) int {
 		name: x,
 		dec:  st,
 	})
-	return len(s.tbl) - 1
+
+	s.top.maxLocal++
+	return s.vdx(len(s.tbl) - 1)
 }
 
 func (s *lexicalScope) addVar(x string) int {
@@ -113,7 +175,7 @@ func (s *lexicalScope) addConst(x string) int {
 func (s *lexicalScope) find(x string) int {
 	for idx, xx := range s.tbl {
 		if xx.name == x {
-			return idx
+			return s.vdx(idx)
 		}
 	}
 	return symError
@@ -126,7 +188,7 @@ func (s *lexicalScope) findVar(x string) int {
 	if idx == symError {
 		return symError
 	}
-	if s.tbl[idx].dec == symtConst {
+	if s.tbl[s.idx(idx)].dec == symtConst {
 		return symInvalidConst
 	}
 	return idx
@@ -149,7 +211,6 @@ type parser struct {
 	l         *lexer
 	policy    *Policy
 	stbl      *lexicalScope
-	maxLocal  int
 	constVar  []string
 	sessVar   []string
 	callPatch []callentry
@@ -171,26 +232,25 @@ const (
 )
 
 // lexical scope management
-func (p *parser) enterScope(t int) *lexicalScope {
-	x := newLexicalScope(t, p.stbl)
+func (p *parser) enterScope(t int, isTop bool) *lexicalScope {
+	x := newLexicalScope(t, p.stbl, isTop)
 	p.stbl = x
 	return x
 }
 
 func (p *parser) enterLoopScope() *lexicalScope {
-	return p.enterScope(scpLoop)
+	return p.enterScope(scpLoop, false)
 }
 
-func (p *parser) enterNormalScopeTop(et int, prog *program) *lexicalScope {
-	pp := p.enterScope(scpNormal)
+func (p *parser) enterScopeTop(et int, prog *program) *lexicalScope {
+	pp := p.enterScope(scpNormal, true)
 	pp.eType = et
-	pp.isTop = true
 	pp.prog = prog
 	return pp
 }
 
 func (p *parser) enterNormalScope() *lexicalScope {
-	return p.enterScope(scpNormal)
+	return p.enterScope(scpNormal, false)
 }
 
 func (p *parser) leaveScope() *lexicalScope {
@@ -202,24 +262,16 @@ func (p *parser) leaveScope() *lexicalScope {
 	return pp
 }
 
-func (p *parser) nearestLoop() *lexicalScope {
-	x := p.stbl
-	for x != nil && x.scpType != scpLoop {
-		x = x.parent
-	}
-	return x
-}
-
 func (p *parser) addBreak(label int) {
 	must(p.isInLoop(), "must be in loop(addBreak)")
-	loop := p.nearestLoop()
+	loop := p.stbl.nearestLoop()
 	must(loop != nil, "must have a closed loop")
 	loop.brklist = append(loop.brklist, label)
 }
 
 func (p *parser) addContinue(label int) {
 	must(p.isInLoop(), "must be in loop(addContinue)")
-	loop := p.nearestLoop()
+	loop := p.stbl.nearestLoop()
 	must(loop != nil, "must have a closed loop")
 	loop.cntlist = append(loop.cntlist, label)
 }
@@ -271,7 +323,6 @@ func (p *parser) addLocalVar(x string) int {
 	if idx != symError {
 		return idx
 	}
-	p.maxLocal++
 	return p.stbl.addVar(x)
 }
 
@@ -280,7 +331,6 @@ func (p *parser) addLocalConst(x string) int {
 	if idx != symError {
 		return idx
 	}
-	p.maxLocal++
 	return p.stbl.addConst(x)
 }
 
@@ -333,18 +383,8 @@ func (p *parser) findLocalVar(n string) int {
 }
 
 func (p *parser) findNearestUpcall(fr *lexicalScope) (*lexicalScope, *lexicalScope) {
-	for {
-		if fr.isTop {
-			return fr.parent, fr
-		}
-		fr = fr.parent
-	}
-	return nil, nil
-}
-
-func (p *parser) funcScope(fr *lexicalScope) *lexicalScope {
-	_, r := p.findNearestUpcall(fr)
-	return r
+	x := fr.prevTop()
+	return x.parent, x
 }
 
 // upvalue name resolution
@@ -366,21 +406,10 @@ func (p *parser) findUpval(n string) int {
 		return -1
 	}
 
-	nextFuncScope := func(s *lexicalScope) *lexicalScope {
-		x := s.next
-		for {
-			must(x != nil, "invalid scope")
-			if x.isTop {
-				return x
-			}
-			x = x.next
-		}
-		return nil
-	}
-
 	// collapse the upvalue from multiple function's upvalue stack
 
-	patchScope := nextFuncScope(cur)
+	patchScope := cur.nextTop()
+	must(patchScope != nil, "must have a preceeding top scope")
 	onStack := true
 
 	for {
@@ -400,7 +429,7 @@ func (p *parser) findUpval(n string) int {
 		if patchScope == currentTop {
 			break
 		} else {
-			patchScope = nextFuncScope(patchScope)
+			patchScope = patchScope.nextTop()
 		}
 	}
 
@@ -475,10 +504,14 @@ func (p *parser) err(xx string) error {
 	}
 }
 
+func (p *parser) errf(f string, a ...interface{}) error {
+	return p.err(fmt.Sprintf(f, a...))
+}
+
 func (p *parser) parseExpression() (*Policy, error) {
 	p.l.next()
 	prog := newProgram("$expression", progExpression)
-	p.enterNormalScopeTop(entryExpr, prog)
+	p.enterScopeTop(entryExpr, prog)
 	defer func() {
 		p.leaveScope()
 	}()
@@ -509,7 +542,6 @@ func (p *parser) parse() (*Policy, error) {
 	//
 	// 2) Session Scope, which should be reinitialized once the session is done.
 	//    The definition of session is defined by user
-	//
 	if p.l.token == tkConst {
 		if err := p.parseConstScope(); err != nil {
 			return nil, err
@@ -545,7 +577,16 @@ LOOP:
 
 		default:
 			if tk != tkEof {
-				return nil, p.err("unexpected token, cannot be parsed as known statement")
+				// print a little bit better diagnostic information, well, in general
+				// we should invest more to error reporting
+				switch tk {
+				case tkSession:
+					return nil, p.errf("session section should be put at the top, after const scope")
+				case tkConst:
+					return nil, p.errf("const section should be put at the top")
+				default:
+					return nil, p.errf("unknown token: %s, unrecognized statement", p.l.tokenName())
+				}
 			} else {
 				break LOOP
 			}
@@ -563,7 +604,7 @@ func (p *parser) parseSessionLoad(prog *program) error {
 	gname := p.l.valueText
 	idx := p.findSessionIdx(gname)
 	if idx == symError {
-		return p.err(fmt.Sprintf("unknown session %s", gname))
+		return p.errf("unknown session %s", gname)
 	}
 	p.l.next()
 	prog.emit1(p.l, bcLoadSession, idx)
@@ -609,7 +650,7 @@ func (p *parser) parseVarScope(rulename string,
 
 	prog := newProgram(rulename, progSession)
 
-	p.enterNormalScopeTop(entryVar, prog)
+	p.enterScopeTop(entryVar, prog)
 	defer func() {
 		p.leaveScope()
 	}()
@@ -679,7 +720,7 @@ func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 	}
 
 	prog := newProgram(funcName, progFunc)
-	p.enterNormalScopeTop(entryFunc, prog)
+	p.enterScopeTop(entryFunc, prog)
 	defer func() {
 		p.leaveScope()
 	}()
@@ -731,8 +772,8 @@ func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 	// always generate a return nil at the end of the function
 	prog.emit0(p.l, bcLoadNull)
 	prog.emit0(p.l, bcReturn)
-	prog.localSize = p.maxLocal - 1
-	prog.emit1At(p.l, localR, bcReserveLocal, p.maxLocal-1)
+	prog.localSize = p.stbl.topMaxLocal() - 1
+	prog.emit1At(p.l, localR, bcReserveLocal, p.stbl.topMaxLocal()-1)
 
 	return funcName, nil
 }
@@ -774,7 +815,7 @@ func (p *parser) parseRule() error {
 	}
 
 	prog := newProgram(name, progRule)
-	p.enterNormalScopeTop(entryRule, prog)
+	p.enterScopeTop(entryRule, prog)
 	p.mustAddLocalVar("#frame")
 	defer func() {
 		p.leaveScope()
@@ -814,8 +855,8 @@ func (p *parser) parseRule() error {
 
 	// always generate a halt at the end of the rule
 	prog.emit0(p.l, bcHalt)
-	prog.localSize = p.maxLocal - 1
-	prog.emit1At(p.l, localR, bcReserveLocal, p.maxLocal-1)
+	prog.localSize = p.stbl.topMaxLocal() - 1
+	prog.emit1At(p.l, localR, bcReserveLocal, p.stbl.topMaxLocal()-1)
 	p.policy.p = append(p.policy.p, prog)
 
 	return nil
@@ -999,7 +1040,7 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme) error {
 			must(sym != symConst, "must not be const")
 
 			if sym == symLocal && idx == symInvalidConst {
-				return p.err(fmt.Sprintf("local variable %s is const, cannot be assigned to", lexeme.sval))
+				return p.errf("local variable %s is const, cannot be assigned to", lexeme.sval)
 			}
 
 			return p.parseSymbolAssign(prog,
@@ -1012,7 +1053,7 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme) error {
 		case tkSId:
 			idx := p.findSessionIdx(lexeme.sval)
 			if idx == symError {
-				return p.err(fmt.Sprintf("session %s variable not existed", lexeme.sval))
+				return p.errf("session %s variable not existed", lexeme.sval)
 			}
 
 			return p.parseSymbolAssign(prog,
@@ -1020,6 +1061,10 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme) error {
 				symSession,
 				idx,
 			)
+
+			// const store
+		case tkCId:
+			return p.errf("const scope variable cannot be used for storing")
 
 			// dynamic variable store
 		case tkDId:
@@ -1213,8 +1258,8 @@ func (p *parser) parseTry(prog *program,
 	// patch the enter exception
 	prog.emit1At(p.l, pushexp, bcPushException, prog.label())
 
-	// exception region finished
-	prog.emit0(p.l, bcPopException)
+	// exception region finished, and jump out of the else branch
+	popexp := prog.patch(p.l)
 
 	// else branch
 	if !p.l.expectCurrent(tkElse) {
@@ -1231,15 +1276,15 @@ func (p *parser) parseTry(prog *program,
 			}
 			idx = p.addLocalVar(p.l.valueText)
 			if idx == symError {
-				return p.err(fmt.Sprintf("duplicate local variable: %s", p.l.valueText))
+				return p.errf("duplicate local variable: %s", p.l.valueText)
 			}
 			p.l.next()
 		} else {
 			idx = p.findLocalVar(p.l.valueText)
 			if idx == symError {
-				return p.err(fmt.Sprintf("local variable not found: %s", p.l.valueText))
+				return p.errf("local variable not found: %s", p.l.valueText)
 			} else if idx == symConst {
-				return p.err(fmt.Sprintf("local variable is const: %s", p.l.valueText))
+				return p.errf("local variable is const: %s", p.l.valueText)
 			}
 			p.l.next()
 		}
@@ -1253,6 +1298,7 @@ func (p *parser) parseTry(prog *program,
 		return err
 	}
 
+	prog.emit1At(p.l, popexp, bcPopException, prog.label())
 	return nil
 }
 
@@ -1816,14 +1862,14 @@ func (p *parser) parseBody(prog *program) error {
 		case tkSemicolon:
 			break
 
-    case tkLBra:
-      p.enterNormalScope()
-      if err := p.parseBody(prog); err != nil {
-        return err
-      }
-      p.leaveScope()
-      hasSep = false
-      break
+		case tkLBra:
+			p.enterNormalScope()
+			if err := p.parseBody(prog); err != nil {
+				return err
+			}
+			p.leaveScope()
+			hasSep = false
+			break
 
 		case tkLet:
 			if err := p.parseVarDecl(prog, symtVar); err != nil {
@@ -1916,7 +1962,8 @@ func (p *parser) parseTryExpr(prog *program) error {
 		if p.l.token == tkLBra {
 			return p.parseExprBody(prog)
 		} else {
-			return p.parseExpr(prog)
+			err := p.parseExpr(prog)
+			return err
 		}
 	}
 	return p.parseTry(prog, parseChunk, parseChunk)
@@ -2291,7 +2338,7 @@ func (p *parser) parsePrimary(prog *program, l lexeme) error {
 		}
 		break
 
-	case tkDollar, tkId, tkSId, tkDId:
+	case tkDollar, tkId, tkCId, tkSId, tkDId:
 		if err := p.parsePExpr(prog, tk, l.sval); err != nil {
 			return err
 		}
@@ -2302,7 +2349,7 @@ func (p *parser) parsePrimary(prog *program, l lexeme) error {
 		return p.parseTemplate(prog)
 
 	default:
-		return p.err(fmt.Sprintf("unexpected token %s in expression parsing", p.l.tokenName()))
+		return p.errf("unexpected token %s in expression parsing", p.l.tokenName())
 	}
 	return nil
 }
@@ -2359,7 +2406,7 @@ func (p *parser) parseCallArgs(prog *program) (int, error) {
 	if p.l.token != tkRPar {
 		for {
 			if err := p.parseExpr(prog); err != nil {
-				return -1, nil
+				return -1, err
 			}
 			pcnt++
 			if p.l.token == tkComma {
@@ -2610,14 +2657,20 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 		break
 
 	case tkSId:
-		gname := name
-
 		// session symbol table
-		idx := p.findSessionIdx(gname)
+		idx := p.findSessionIdx(name)
 		if idx == -1 {
-			return p.err(fmt.Sprintf("session variable %s is unknown", gname))
+			return p.errf("session variable %s is unknown", name)
 		}
 		prog.emit1(p.l, bcLoadSession, idx)
+		break
+
+	case tkCId:
+		idx := p.findConstIdx(name)
+		if idx == -1 {
+			return p.errf("const variable %s is unknown", name)
+		}
+		prog.emit1(p.l, bcLoadConst, idx)
 		break
 
 	default:
@@ -2853,11 +2906,15 @@ func (p *parser) parseStrInterpolationExpr(strV string, offset int, prog *progra
 	pp.sessVar = p.sessVar
 	pp.policy = p.policy
 
+	// allow DRBra to be parsed as symbol, otherwise will never be able to met the
+	// end of the expression
+	pp.l.allowDRBra = true
+
 	// notes, we should start the lexer here, otherwise it will not work --------
 	pp.l.next()
 
 	if err := pp.parseExpr(prog); err != nil {
-		return 0, p.err(fmt.Sprintf("string interpolation error: %s", err.Error()))
+		return 0, p.errf("string interpolation error: %s", err.Error())
 	}
 
 	// the parser should always stop at the token DRBra, otherwise it means we

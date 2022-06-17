@@ -131,7 +131,7 @@ func (e *Evaluator) localpos() int {
 func (e *Evaluator) prevfuncframe() *funcframe {
 	v := e.Stack[e.prevframepos()]
 	ff, ok := v.frame().(*funcframe)
-	must(ok, "must be frame")
+	must(ok, "unknown stack, corrupted? %s", v.Id())
 	return ff
 }
 
@@ -1049,6 +1049,7 @@ FUNC:
 
 		case bcPopException:
 			e.popExcep()
+			pc = bc.argument - 1
 			break
 
 		case bcLoadException:
