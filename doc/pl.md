@@ -52,15 +52,15 @@ PL features a highly flexible type system with following category
   5. String
 
 * Compound
-  6. List
-  7. Map
-  8. Regexp
-  9. Pair (a struct that has First and Second field)
+  1. List
+  2. Map
+  3. Regexp
+  4. Pair (a struct that has First and Second field)
 
 * Other
-  10. Iterator (used for iterator loop)
-  11. Closure (any callable object, ie script defined function or user defined function)
-  12. Usr (Go/Native extension)
+  1. Iterator (used for iterator loop)
+  2. Closure (any callable object, ie script defined function or user defined function)
+  3. Usr (Go/Native extension)
 
 
 
