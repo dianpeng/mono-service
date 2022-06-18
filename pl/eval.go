@@ -501,25 +501,22 @@ func (e *Evaluator) doErr(bt btlist, p *program, pc int, err error) error {
 }
 
 // Return 3 tuple elements
-// [1]: whether we see a match
-// [2]: the program stops the execution, notes due to call, we can enter into
+// [1]: the program stops the execution, notes due to call, we can enter into
 //      other script function
-// [3]: the pc that stops the execution
-// [4]: the error if we have
+// [2]: the pc that stops the execution
+// [3]: the error if we have
 
 type runresult struct {
-	match bool
-	prog  *program
-	pc    int
-	e     error
+	prog *program
+	pc   int
+	e    error
 }
 
 func rrErr(p *program, pc int, e error) runresult {
 	return runresult{
-		match: true,
-		prog:  p,
-		pc:    pc,
-		e:     e,
+		prog: p,
+		pc:   pc,
+		e:    e,
 	}
 }
 
@@ -527,20 +524,12 @@ func rrErrf(p *program, pc int, format string, a ...interface{}) runresult {
 	return rrErr(p, pc, fmt.Errorf(format, a...))
 }
 
-func rrUnmatch() runresult {
-	return runresult{
-		match: false,
-	}
-}
-
 func rrDone() runresult {
-	return runresult{
-		match: true,
-	}
+	return runresult{}
 }
 
 func (rr *runresult) isDone() bool {
-	return rr.match && rr.e == nil
+	return rr.e == nil
 }
 
 func (e *Evaluator) runP(event string,
@@ -548,10 +537,6 @@ func (e *Evaluator) runP(event string,
 	pc int,
 	policy *Policy,
 ) runresult {
-	// actual loop to interpret the internal policy, the policy selection code
-	// is been fused inside of the bytecode body and terminated by bcMatch bc
-	// make sure the function has enough slot for local variable
-
 	// script function entry label, the bcSCall will setup stack layout and
 	// jump(goto) this label for rexecution. prog will be swapped with the
 	// function program
@@ -844,7 +829,7 @@ FUNC:
 			// enter into the new call
 			if bc.opcode == bcSCall {
 				idx := funcIndexOrEntry.Int()
-				newCall := policy.fn[int(idx)]
+				newCall := prog.policy.fn[int(idx)]
 				prog = newCall
 				must(prog.freeCall(), "must be freecall")
 			} else {
@@ -884,7 +869,7 @@ FUNC:
 			break
 
 		case bcNewClosure:
-			fn := policy.fn[bc.argument]
+			fn := prog.policy.fn[bc.argument]
 			sfunc := newScriptFunc(fn)
 			for _, uv := range fn.upvalue {
 				if uv.onStack {
@@ -1123,17 +1108,6 @@ FUNC:
 			e.push(NewValBool(tos.Iter().Next()))
 			break
 
-		case bcMatch:
-			c := e.top0()
-			if c.ToBoolean() {
-				e.pop()
-			} else {
-				// leave the frame untouched
-				e.popTo(e.curframe.framep + 2)
-				return rrUnmatch()
-			}
-			break
-
 		case bcHalt:
 			return rrDone()
 
@@ -1174,7 +1148,7 @@ func (e *Evaluator) doEval(event string, pp []*program, policy *Policy) error {
 
 	pc := 0
 
-	for _, prog := range pp {
+	if prog := policy.findEvent(event); prog != nil {
 
 		// point to currently executing program, notes the PC field is not updated
 		// until the VM breaks
@@ -1186,12 +1160,6 @@ func (e *Evaluator) doEval(event string, pp []*program, policy *Policy) error {
 
 	RECOVER:
 		rr := e.runP(event, prog, pc, policy)
-
-		// not matched, try to find the next program in the list
-		if !rr.match {
-			pc = 0
-			continue
-		}
 
 		// finish execution
 		if rr.isDone() {

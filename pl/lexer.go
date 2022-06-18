@@ -95,8 +95,9 @@ const (
 	tkConst
 	tkSession
 	tkLet
-	tkWhen
+	tkSwitch
 	tkCase
+	tkModule
 	tkImport
 	tkExport
 	tkExtern
@@ -108,9 +109,10 @@ const (
 	tkFor
 	tkContinue
 	tkBreak
-	tkNext
 	tkFunction
+
 	tkRule
+	tkEmit
 
 	// intrinsic keywords, used for special builtin functionalities
 	tkTemplate
@@ -274,10 +276,12 @@ func getTokenName(tk int) string {
 		return "session"
 	case tkExtern:
 		return "extern"
-	case tkWhen:
-		return "when"
+	case tkSwitch:
+		return "switch"
 	case tkCase:
 		return "case"
+	case tkModule:
+		return "module"
 	case tkImport:
 		return "import"
 	case tkExport:
@@ -297,12 +301,12 @@ func getTokenName(tk int) string {
 		return "continue"
 	case tkBreak:
 		return "break"
-	case tkNext:
-		return "next"
 	case tkFunction:
 		return "fn"
 	case tkRule:
 		return "rule"
+	case tkEmit:
+		return "emit"
 	case tkReturn:
 		return "return"
 
@@ -608,8 +612,8 @@ var lexerkeyword = map[string]int{
 	"let": tkLet,
 
 	/* when case */
-	"when": tkWhen,
-	"case": tkCase,
+	"switch": tkSwitch,
+	"case":   tkCase,
 
 	/* if else branch */
 	"if":   tkIf,
@@ -620,7 +624,6 @@ var lexerkeyword = map[string]int{
 	"for":      tkFor,
 	"continue": tkContinue,
 	"break":    tkBreak,
-	"next":     tkNext,
 
 	/* other control flow */
 	"try":    tkTry,
@@ -631,6 +634,7 @@ var lexerkeyword = map[string]int{
 	"function": tkFunction,
 
 	"rule": tkRule,
+	"emit": tkEmit,
 
 	/* intrinsic keywords */
 	"template": tkTemplate,

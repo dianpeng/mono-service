@@ -130,14 +130,13 @@ func TestLexerNum(t *testing.T) {
 func TestLexerKeywordOrId(t *testing.T) {
 	assert := assert.New(t)
 	{
-		l := newLexer("if if2 elif elif2 else else3 when when_")
+		l := newLexer("if if2 elif elif2 else else3 when_")
 		assert.True(l.next() == tkIf)
 		assert.True(l.next() == tkId)
 		assert.True(l.next() == tkElif)
 		assert.True(l.next() == tkId)
 		assert.True(l.next() == tkElse)
 		assert.True(l.next() == tkId)
-		assert.True(l.next() == tkWhen)
 		assert.True(l.next() == tkId)
 		assert.True(l.next() == tkEof)
 	}

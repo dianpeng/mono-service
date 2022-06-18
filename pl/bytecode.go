@@ -133,8 +133,7 @@ const (
 	bcTemplate = 200
 
 	// halt the machine
-	bcMatch = 254
-	bcHalt  = 255
+	bcHalt = 255
 )
 
 type bytecode struct {
@@ -182,6 +181,7 @@ type upvalue struct {
 }
 
 type program struct {
+	policy    *Policy
 	name      string
 	localSize int
 	argSize   int // if this program is a function call, then this indicates
@@ -202,15 +202,16 @@ type program struct {
 	upvalue []upvalue
 }
 
-func newProgram(n string, t int) *program {
+func newProgram(p *Policy, n string, t int) *program {
 	return &program{
+		policy:   p,
 		name:     n,
 		progtype: t,
 	}
 }
 
-func newProgramEmpty(n string, t int) *program {
-	pp := newProgram(n, t)
+func newProgramEmpty(p *Policy, n string, t int) *program {
+	pp := newProgram(p, n, t)
 	pp.bcList = append(pp.bcList, bytecode{
 		opcode:   bcHalt,
 		argument: 0,
@@ -607,8 +608,6 @@ func getBytecodeName(bc int) string {
 	case bcTemplate:
 		return "template"
 
-	case bcMatch:
-		return "match"
 	case bcHalt:
 		return "halt"
 	default:

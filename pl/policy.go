@@ -20,6 +20,12 @@ type Policy struct {
 	// code then this part is empty
 	session *program
 
+	// dispatch table, ie event matching hash table. Ie each program's event name
+	// will become key in this table for finding out which rule should be used
+	// NOTES(dpeng): for optimization purpose, this table *MAY* be nil since if
+	// our rule limited, linear search is the fastest
+	eventMap map[string]*program
+
 	// all the named rules, evaluation will iterate each program for execution
 	// until one is found
 	p []*program
@@ -28,6 +34,12 @@ type Policy struct {
 	// name must be unique across all the policy. Notes each program's name becomes
 	// function name
 	fn []*program
+}
+
+func newPolicy() *Policy {
+	return &Policy{
+		eventMap: make(map[string]*program),
+	}
 }
 
 func (p *Policy) nextAnonymousFuncName() string {
@@ -96,6 +108,28 @@ func (p *Policy) HasSession() bool {
 
 func (p *Policy) HasConst() bool {
 	return p.constProgram != nil
+}
+
+func (p *Policy) HaveEvent(name string) bool {
+	_, ok := p.eventMap[name]
+	return ok
+}
+
+func (p *Policy) addEvent(name string, prog *program) bool {
+	if p.HaveEvent(name) {
+		return false
+	}
+	p.eventMap[name] = prog
+	return true
+}
+
+func (p *Policy) findEvent(name string) *program {
+	v, ok := p.eventMap[name]
+	if !ok {
+		return nil
+	} else {
+		return v
+	}
 }
 
 func (p *Policy) Dump() string {

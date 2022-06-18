@@ -64,7 +64,7 @@ func marshalValue(value reflect.Value) (Val, error) {
 	case reflect.Array:
 		return marshalArray(value)
 
-	case reflect.Interface, reflect.Pointer:
+	case reflect.Interface:
 		return marshalValue(value.Elem())
 
 	case reflect.Map:

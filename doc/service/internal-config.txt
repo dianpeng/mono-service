@@ -1,3 +1,47 @@
+#!/bin/mono --listener "@http_clear" --app "first_service"
+
+fn my_init() {
+}
+
+const {
+  variable1 = 100;
+  variable2 = http::GET("https://www.baidu.com");
+  _ = my_init();
+}
+
+// bcCmdGroupPush
+service {
+  name = "first_service"; // bcCmdAttr
+  comment = "Very cool services and should be looked at";
+  tag = "kewl";
+  router = "[GET, POST]/a/b/c/d";
+
+  // bcCmdGroupPush
+  middleware {
+    // emit "my_start" event
+
+    // bcCmdCall
+    emit("my_start", "yyy", "zzz");
+
+    // enable basic authentication
+    basic_auth(
+      100,
+      fn() : request.method == 'GET', /* evaluated when session is on */
+      my_username,
+      my_password
+    );
+
+    emit("main");
+  }
+  // bcCmdGroupPop
+}
+
+session {
+}
+
+rule main {
+}
+
 fn testBasicArithmetic() {
   assert::eq(1, 1, "done");
   assert::eq(1+1, 2);

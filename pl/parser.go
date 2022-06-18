@@ -151,10 +151,10 @@ func (s *lexicalScope) idx(i int) int {
 }
 
 func (s *lexicalScope) vname(x string) string {
-  if x == "_" {
-    return fmt.Sprintf("@ignore_%d", len(s.tbl))
-  }
-  return x
+	if x == "_" {
+		return fmt.Sprintf("@ignore_%d", len(s.tbl))
+	}
+	return x
 }
 
 func (s *lexicalScope) add(x string, st int) int {
@@ -227,7 +227,7 @@ type parser struct {
 func newParser(input string) *parser {
 	return &parser{
 		l:      newLexer(input),
-		policy: &Policy{},
+		policy: newPolicy(),
 	}
 }
 
@@ -518,7 +518,7 @@ func (p *parser) errf(f string, a ...interface{}) error {
 
 func (p *parser) parseExpression() (*Policy, error) {
 	p.l.next()
-	prog := newProgram("$expression", progExpression)
+	prog := newProgram(p.policy, "$expression", progExpression)
 	p.enterScopeTop(entryExpr, prog)
 	defer func() {
 		p.leaveScope()
@@ -656,7 +656,8 @@ func (p *parser) parseVarScope(rulename string,
 	}
 	p.l.next()
 
-	prog := newProgram(rulename, progSession)
+	prog := newProgram(p.policy, rulename, progSession)
+	must(p.policy.addEvent(rulename, prog), "session must be unique")
 
 	p.enterScopeTop(entryVar, prog)
 	defer func() {
@@ -727,7 +728,7 @@ func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 		return "", p.l.toError()
 	}
 
-	prog := newProgram(funcName, progFunc)
+	prog := newProgram(p.policy, funcName, progFunc)
 	p.enterScopeTop(entryFunc, prog)
 	defer func() {
 		p.leaveScope()
@@ -809,8 +810,9 @@ func (p *parser) parseRule() error {
 		}
 		p.l.next()
 	} else {
-		return p.err("unexpected token here, expect a string/identifier or a [id] to " +
-			"represent rule name")
+		return p.err("unexpected token here! A rule *MUST* have an identifier " +
+			"to represent event name, can be a string literal, an " +
+			"identifier or a '[' id ']' for documentation")
 	}
 
 	// notes the name must be none empty and also must not start with @, which is
@@ -822,7 +824,7 @@ func (p *parser) parseRule() error {
 		return p.err("invalid rule name, cannot start with @ which is builtin name")
 	}
 
-	prog := newProgram(name, progRule)
+	prog := newProgram(p.policy, name, progRule)
 	p.enterScopeTop(entryRule, prog)
 	p.mustAddLocalVar("#frame")
 	defer func() {
@@ -831,26 +833,11 @@ func (p *parser) parseRule() error {
 
 	localR := prog.patch(p.l)
 
-	// check whether we have a conditional when, otherwise generate default match
-	// condition
-	if p.l.token == tkWhen {
-		p.l.next()
-		err := p.parseExpr(prog)
-		if err != nil {
-			return err
-		}
-		prog.emit0(p.l, bcMatch)
-	} else {
-		// bytecode for compare current event to be the same as the rule name
-		// essentially is when event == "rule_name"
-		prog.emit0(p.l, bcLoadDollar)
-		idx := prog.addStr(name)
-		prog.emit1(p.l, bcLoadStr, idx)
-		prog.emit0(p.l, bcEq)
-		prog.emit0(p.l, bcMatch)
+	if !p.policy.addEvent(name, prog) {
+		return p.err("invalid rule name, the rule has already been existed")
 	}
 
-	// allow an optional arrow to indicate this is a rule, this is the preferred
+	// Allow an optional arrow to indicate this is a rule, this is the preferred
 	// grammar to indicate the rule definition inside
 	if p.l.token == tkArrow {
 		p.l.next()
@@ -1203,12 +1190,50 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme, popExpr bool) (boo
 		}
 		return true, nil
 	} else {
+		// try to consume rest as expression like grammar until we cannot eat any
+		// tokens
+		if err := p.parseBasicStmtExprRest(prog); err != nil {
+			return false, err
+		}
+
 		// pop the last expression just been evaluated
 		if popExpr {
 			prog.emit0(p.l, bcPop)
 		}
 		return false, nil
 	}
+}
+
+// this is used to catch up cases when the statement is not a statement, ie
+// not an assignment statement but really an expression. This is hard for
+// our case since it requires multiple look aheads to decide and we are one
+// pass generator/compiler which does not yield AST sorts of things. We cannot
+// turn back. The following parser will try to pick up where we left and continue
+// as an expression and generate expression code. It is relative complicated
+func (p *parser) parseBasicStmtExprRest(prog *program) error {
+
+	// (0) try to get the operator afterwards to see whether it is a bin
+	if prec := p.binPrecedence(p.l.token); prec != -1 {
+		// need to pick up until we hit a none binary operators
+		for prec != -1 {
+			if err := p.parseBinaryRest(prog, prec); err != nil {
+				return err
+			}
+			prec = p.binPrecedence(p.l.token)
+		}
+	}
+
+	// (1) after the section (0) we know that we have consumed all the possible
+	//     binary operators, now we should try the ternary dangling, which is
+	//     if like statement
+	if err := p.parseTernaryRest(prog); err != nil {
+		return err
+	}
+
+	// now we are done to consume up all the expression like statement and we
+	// should not see any other valid dangling, theoretically :)
+
+	return nil
 }
 
 func (p *parser) parseStmt(prog *program) error {
@@ -1256,13 +1281,8 @@ func (p *parser) parseTry(prog *program,
 	tryGen func(*program) error,
 	elseGen func(*program) error,
 ) error {
-	must(p.l.token == tkTry, "must be try")
-
 	// add a frame of exception
 	pushexp := prog.patch(p.l)
-
-	// eat the try
-	p.l.next()
 
 	// generate try body
 	if err := tryGen(prog); err != nil {
@@ -1325,6 +1345,8 @@ func (p *parser) parseTryStmt(prog *program) error {
 		p.leaveScope()
 		return nil
 	}
+
+	p.l.next()
 	return p.parseTry(prog, parseChunk, parseChunk)
 }
 
@@ -1333,13 +1355,8 @@ func (p *parser) parseBranch(prog *program,
 	dangling func(*program) error, /* invoked whenever a branch does have dangling,
 	   notes, could be elif or else */
 ) error {
-	must(p.l.token == tkIf, "must be if")
-
 	var jump_out []int
 	var prev_jmp int
-
-	// skip if
-	p.l.next()
 
 	// (0) Parse the leading If, which does not allow nested if
 	if err := p.parseTernary(prog); err != nil {
@@ -1442,6 +1459,7 @@ func (p *parser) parseBranchStmtBody(prog *program) error {
 }
 
 func (p *parser) parseBranchStmt(prog *program) error {
+	p.l.next()
 	return p.parseBranch(
 		prog,
 		p.parseBranchStmtBody,
@@ -1964,14 +1982,7 @@ func (p *parser) parseBody(prog *program) error {
 
 // Expression parsing, using simple precedence climbing style way
 func (p *parser) parseExpr(prog *program) error {
-	switch p.l.token {
-	case tkIf:
-		return p.parseBranchExpr(prog)
-	case tkTry:
-		return p.parseTryExpr(prog)
-	default:
-		return p.parseTernary(prog)
-	}
+	return p.parseTernary(prog)
 }
 
 func (p *parser) parseTryExpr(prog *program) error {
@@ -2010,6 +2021,9 @@ func (p *parser) parseExprStmt(prog *program) (bool, bool, error) {
 		return true, false, p.parseVarDecl(prog, symtConst)
 	case tkFor:
 		return false, false, p.parseFor(prog)
+	case tkSemicolon:
+		return false, false, nil
+
 	default:
 		lexeme := p.lexeme()
 		p.l.next()
@@ -2099,8 +2113,11 @@ func (p *parser) parseTernary(prog *program) error {
 	if err := p.parseBin(prog); err != nil {
 		return err
 	}
-	ntk := p.l.token
+	return p.parseTernaryRest(prog)
+}
 
+func (p *parser) parseTernaryRest(prog *program) error {
+	ntk := p.l.token
 	if ntk == tkIf {
 		patch_point := prog.patch(p.l)
 		p.l.next()
@@ -2169,6 +2186,10 @@ func (p *parser) parseBinary(prog *program, prec int) error {
 		return err
 	}
 
+	return p.parseBinaryRest(prog, prec)
+}
+
+func (p *parser) parseBinaryRest(prog *program, prec int) error {
 	for {
 		tk := p.l.token
 
@@ -2312,6 +2333,12 @@ func (p *parser) parseUnary(prog *program) error {
 func (p *parser) parsePrimary(prog *program, l lexeme) error {
 	tk := l.token
 	switch tk {
+	case tkIf:
+		return p.parseBranchExpr(prog)
+
+	case tkTry:
+		return p.parseTryExpr(prog)
+
 	case tkInt:
 		idx := prog.addInt(l.ival)
 		prog.emit1(p.l, bcLoadInt, idx)

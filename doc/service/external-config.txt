@@ -1,0 +1,50 @@
+@middleware basic_middleware(@a, @b, @c, @d) {
+  middleware(
+    // rate limiting the incomming requestes
+    leaky_bucket(
+      ...
+    )
+
+    // basic authentication
+    basic_auth(
+      name=@name,
+      value=@value,
+      statusCode=@statusCode,
+      rejectText=event "generator",
+    )
+
+    emit "after_basic_authentication"
+  )
+}
+
+
+@(ttl=10, freq=10)
+listener {
+  name "cool_stuff"
+  endpoint ":18080"
+  read_timeout 10
+  write_timeout 10
+  max_header_size @eval()
+
+  @(ttl=1200s, updater)
+  service @"file:///myrouter.router"
+
+  @(ttl=1200s, updater)
+  service "/a/b/c/d" {
+    middleware {
+      @basic_middleware(
+      )
+
+      // rest of the internal usage
+    }
+
+    policy {
+      rule "leaky_bucket.done" {
+      }
+    }
+  }
+}
+
+
+router /a/b/c/d {
+}

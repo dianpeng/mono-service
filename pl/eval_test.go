@@ -1859,27 +1859,12 @@ not_matched{
 }
 `))
 
-	assert.True(testBool(
-		`
-[my_policy] when $  == "test" {
-  output => true;
-}
-`, true))
-
 	assert.True(testNull(
 		`
 not_matched => {
   output => true;
 }
 `))
-
-	assert.True(testBool(
-		`
-"my_policy" when ($  == "test") => {
-  output => true;
-}
-`, true))
-
 }
 
 func TestRegex(t *testing.T) {
