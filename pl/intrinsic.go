@@ -14,7 +14,7 @@ type IntrinsicInfo struct {
 	argproto *FuncProto
 
 	// must be prototype of EvalCall, this is the entry of the vm interpreter
-	entry EvalCall
+	entry func(*Evaluator, string, []Val) (Val, error)
 
 	// used when need reflection to wrap the actual function
 	rawfunc   AnyFunc

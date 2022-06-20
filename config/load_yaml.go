@@ -125,10 +125,7 @@ func resolveEval(node *yaml.Node) (*yaml.Node, error) {
 	// now compile and run the
 	value, err := pl.EvalExpression(
 		v,
-		nil,
-		nil,
-		nil,
-		nil,
+		pl.NewNullEvalContext(),
 	)
 	if err != nil {
 		return nil, err

@@ -30,21 +30,15 @@ func modFuncName(m string, f string) string {
 // a all in one function for simplicity
 func EvalExpression(
 	expression string,
-	loadVarFn EvalLoadVar,
-	storeVarFn EvalStoreVar,
-	callFn EvalCall,
-	actionFn EvalAction,
+	context EvalContext,
 ) (Val, error) {
 	p, err := CompilePolicyAsExpression(expression)
 	if err != nil {
 		return NewValNull(), err
 	}
 
-	e := NewEvaluator(
-		loadVarFn,
-		storeVarFn,
-		callFn,
-		actionFn,
+	e := NewEvaluatorWithContext(
+		context,
 	)
 
 	return e.EvalExpr(p)

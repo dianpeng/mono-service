@@ -9,7 +9,7 @@ import (
 func runWithResult(code string) (Val, bool, *Policy) {
 	rr := NewValNull()
 	ret := &rr
-	eval := NewEvaluator(
+	eval := NewEvaluatorWithContextCallback(
 		func(_ *Evaluator, vname string) (Val, error) {
 			if vname == "a_int" {
 				return NewValInt(1), nil

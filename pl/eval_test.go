@@ -14,7 +14,7 @@ import (
 func test(code string) (Val, bool) {
 	rr := NewValNull()
 	ret := &rr
-	eval := NewEvaluator(
+	eval := NewEvaluatorWithContextCallback(
 		func(_ *Evaluator, vname string) (Val, error) {
 			if vname == "a_int" {
 				return NewValInt(1), nil
@@ -656,7 +656,7 @@ func TestEval1(t *testing.T) {
 	{
 		output := make(actionOutput)
 
-		eval := NewEvaluator(
+		eval := NewEvaluatorWithContextCallback(
 			func(_ *Evaluator, vname string) (Val, error) {
 				if vname == "a" {
 					return NewValStr("Hello World"), nil
@@ -774,7 +774,7 @@ policy => {
 	{
 		output := make(actionOutput)
 
-		eval := NewEvaluator(
+		eval := NewEvaluatorWithContextCallback(
 			func(_ *Evaluator, vname string) (Val, error) {
 				if vname == "a" {
 					return NewValStr("Hello World"), nil
@@ -920,7 +920,7 @@ func TestStrInterpo(t *testing.T) {
 	{
 		output := make(actionOutput)
 
-		eval := NewEvaluator(
+		eval := NewEvaluatorWithContextCallback(
 			func(_ *Evaluator, vname string) (Val, error) {
 				if vname == "a" {
 					return NewValStr("Hello World"), nil
@@ -971,7 +971,7 @@ func TestLocal(t *testing.T) {
 	{
 		output := make(actionOutput)
 
-		eval := NewEvaluator(
+		eval := NewEvaluatorWithContextCallback(
 			func(_ *Evaluator, vname string) (Val, error) {
 				if vname == "a" {
 					return NewValStr("Hello World"), nil
@@ -1793,7 +1793,7 @@ func TestAssign3(t *testing.T) {
 
 	dvar := &Val{}
 
-	eval := NewEvaluator(
+	eval := NewEvaluatorWithContextCallback(
 		func(_ *Evaluator, vname string) (Val, error) {
 			if vname == "a_int" {
 				return NewValInt(1), nil

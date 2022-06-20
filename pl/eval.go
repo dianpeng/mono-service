@@ -8,11 +8,82 @@ import (
 	"strings"
 )
 
-// Evaluation part of the VM
-type EvalLoadVar func(*Evaluator, string) (Val, error)
-type EvalStoreVar func(*Evaluator, string, Val) error
-type EvalCall func(*Evaluator, string, []Val) (Val, error)
-type EvalAction func(*Evaluator, string, Val) error
+// Config Population
+type EvalConfig interface {
+	PushConfig(*Evaluator, string, Val) error
+	PopConfig(*Evaluator) error
+	ConfigProperty(*Evaluator, string, Val, Val) error
+	ConfigCommand(*Evaluator, string, []Val, Val) error
+}
+
+type EvalContext interface {
+	LoadVar(*Evaluator, string) (Val, error)
+	StoreVar(*Evaluator, string, Val) error
+	Call(*Evaluator, string, []Val) (Val, error)
+	Action(*Evaluator, string, Val) error
+}
+
+type cbEvalContext struct {
+	loadVarFn  func(*Evaluator, string) (Val, error)
+	storeVarFn func(*Evaluator, string, Val) error
+	callFn     func(*Evaluator, string, []Val) (Val, error)
+	actionFn   func(*Evaluator, string, Val) error
+}
+
+func NewCbEvalContext(
+	f0 func(*Evaluator, string) (Val, error),
+	f1 func(*Evaluator, string, Val) error,
+	f2 func(*Evaluator, string, []Val) (Val, error),
+	f3 func(*Evaluator, string, Val) error,
+) EvalContext {
+	return &cbEvalContext{
+		loadVarFn:  f0,
+		storeVarFn: f1,
+		callFn:     f2,
+		actionFn:   f3,
+	}
+}
+
+func NewNullEvalContext() EvalContext {
+	return NewCbEvalContext(
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+}
+
+func (x *cbEvalContext) LoadVar(a *Evaluator, b string) (Val, error) {
+	if x.loadVarFn != nil {
+		return x.loadVarFn(a, b)
+	} else {
+		return NewValNull(), fmt.Errorf("load_var: %s is unknown", b)
+	}
+}
+
+func (x *cbEvalContext) StoreVar(a *Evaluator, b string, c Val) error {
+	if x.storeVarFn != nil {
+		return x.storeVarFn(a, b, c)
+	} else {
+		return fmt.Errorf("store_var: %s is unknown", b)
+	}
+}
+
+func (x *cbEvalContext) Call(a *Evaluator, b string, c []Val) (Val, error) {
+	if x.callFn != nil {
+		return x.callFn(a, b, c)
+	} else {
+		return NewValNull(), fmt.Errorf("call: %s is unknown", b)
+	}
+}
+
+func (x *cbEvalContext) Action(a *Evaluator, b string, c Val) error {
+	if x.actionFn != nil {
+		return x.actionFn(a, b, c)
+	} else {
+		return fmt.Errorf("action: %s is unknown", b)
+	}
+}
 
 // Notes on function call frame layout
 // The parser will generate bytecode to allow following stack value layout
@@ -27,11 +98,8 @@ type EvalAction func(*Evaluator, string, Val) error
 type Evaluator struct {
 	Stack   []Val
 	Session []Val
-
-	LoadVarFn  EvalLoadVar
-	StoreVarFn EvalStoreVar
-	CallFn     EvalCall
-	ActionFn   EvalAction
+	Context EvalContext
+	Config  EvalConfig
 
 	// internal states
 
@@ -163,22 +231,35 @@ func newfuncframe(
 }
 
 func NewEvaluatorSimple() *Evaluator {
-	return &Evaluator{}
+	return NewEvaluatorWithContext(
+		NewNullEvalContext(),
+	)
 }
 
-func NewEvaluator(
-	f0 EvalLoadVar,
-	f1 EvalStoreVar,
-	f2 EvalCall,
-	f3 EvalAction) *Evaluator {
+func NewEvaluatorWithContext(context EvalContext) *Evaluator {
+	return &Evaluator{
+		Stack:   nil,
+		Session: nil,
+		Context: context,
+	}
+}
+
+func NewEvaluatorWithContextCallback(
+	f0 func(*Evaluator, string) (Val, error),
+	f1 func(*Evaluator, string, Val) error,
+	f2 func(*Evaluator, string, []Val) (Val, error),
+	f3 func(*Evaluator, string, Val) error,
+) *Evaluator {
+	return NewEvaluatorWithContext(NewCbEvalContext(f0, f1, f2, f3))
+}
+
+func NewEvaluator(context EvalContext, config EvalConfig) *Evaluator {
 
 	return &Evaluator{
-		Stack:      nil,
-		Session:    nil,
-		LoadVarFn:  f0,
-		StoreVarFn: f1,
-		CallFn:     f2,
-		ActionFn:   f3,
+		Stack:   nil,
+		Session: nil,
+		Context: context,
+		Config:  config,
 	}
 }
 
@@ -548,11 +629,7 @@ FUNC:
 		case bcAction:
 			actName := prog.idxStr(bc.argument)
 			val := e.top0()
-			if e.ActionFn == nil {
-				return rrErrf(prog, pc, "action %s is not allowed", actName)
-			}
-
-			if err := e.ActionFn(e, actName, val); err != nil {
+			if err := e.Context.Action(e, actName, val); err != nil {
 				return rrErr(prog, pc, err)
 			}
 			e.pop()
@@ -745,14 +822,8 @@ FUNC:
 			must(funcName.Type == ValStr,
 				fmt.Sprintf("function name must be string but %s", funcName.Id()))
 
-			var r Val
-			var err error
+			r, err := e.Context.Call(e, funcName.String(), arg)
 
-			if e.CallFn != nil {
-				r, err = e.CallFn(e, funcName.String(), arg)
-			} else {
-				err = fmt.Errorf("function %s is not found", funcName.String())
-			}
 			if err != nil {
 				return rrErr(prog, pc, err)
 			}
@@ -915,10 +986,7 @@ FUNC:
 
 		case bcLoadVar:
 			vname := prog.idxStr(bc.argument)
-			if e.LoadVarFn == nil {
-				return rrErrf(prog, pc, "dynamic variable: %s is not fonud", vname)
-			}
-			val, err := e.LoadVarFn(e, vname)
+			val, err := e.Context.LoadVar(e, vname)
 			if err != nil {
 				return rrErr(prog, pc, err)
 			}
@@ -928,11 +996,9 @@ FUNC:
 		case bcStoreVar:
 			top := e.top0()
 			e.pop()
+
 			vname := prog.idxStr(bc.argument)
-			if e.StoreVarFn == nil {
-				return rrErrf(prog, pc, "dynamic variable: %s is not fonud", vname)
-			}
-			if err := e.StoreVarFn(e, vname, top); err != nil {
+			if err := e.Context.StoreVar(e, vname, top); err != nil {
 				return rrErr(prog, pc, err)
 			}
 			break
@@ -1056,6 +1122,90 @@ FUNC:
 			e.push(e.curexcep)
 			break
 
+		// configuration
+		case bcConfigPush, bcConfigPushWithAttr:
+			attr := NewValNull()
+			if bc.opcode == bcConfigPushWithAttr {
+				attr = e.top0()
+				e.pop()
+			}
+			if e.Config != nil {
+				if err := e.Config.PushConfig(e, prog.idxStr(bc.argument), attr); err != nil {
+					return rrErr(prog, pc, err)
+				}
+			}
+			break
+
+		case bcConfigPop:
+			if e.Config != nil {
+				if err := e.Config.PopConfig(e); err != nil {
+					return rrErr(prog, pc, err)
+				}
+			}
+			break
+
+		case bcConfigPropertySet, bcConfigPropertySetWithAttr:
+			attr := NewValNull()
+			name := e.top1()
+			value := e.top0()
+			e.popN(2)
+
+			if bc.opcode == bcConfigPropertySetWithAttr {
+				attr = e.top0()
+				e.pop()
+			}
+
+			str, err := name.ToString()
+			if err != nil {
+				return rrErr(prog, pc, err)
+			}
+
+			if e.Config != nil {
+				if err := e.Config.ConfigProperty(
+					e,
+					str,
+					value,
+					attr,
+				); err != nil {
+					return rrErr(prog, pc, err)
+				}
+			}
+			break
+
+		case bcConfigCommand, bcConfigCommandWithAttr:
+			attr := NewValNull()
+			pcnt := bc.argument
+			name := e.topN(pcnt)
+			popSize := pcnt + 1
+
+			str, err := name.ToString()
+			if err != nil {
+				return rrErr(prog, pc, err)
+			}
+
+			if bc.opcode == bcConfigPropertySetWithAttr {
+				popSize++
+				attr = e.topN(pcnt + 1)
+			}
+
+			argStart := len(e.Stack) - pcnt
+			argEnd := len(e.Stack)
+			arg := e.Stack[argStart:argEnd]
+
+			if e.Config != nil {
+				if err := e.Config.ConfigCommand(
+					e,
+					str,
+					arg,
+					attr,
+				); err != nil {
+					return rrErr(prog, pc, err)
+				}
+			}
+
+			e.popN(popSize)
+			break
+
 		// global
 		case bcSetConst:
 			ctx := e.top0()
@@ -1118,6 +1268,8 @@ FUNC:
 }
 
 func (e *Evaluator) doEval(event string, pp []*program, policy *Policy) error {
+	must(e.Context != nil, "Evaluator's context is nil!")
+
 	// just clear the stack size if needed before every run, since we need to reuse
 	// this evaluator
 	if cap(e.Stack) > 0 {

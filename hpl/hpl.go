@@ -245,10 +245,12 @@ func (h *Hpl) OnCustomize(selector string, session SessionWrapper) error {
 	h.isRunning = true
 	h.session = session
 
-	h.Eval.LoadVarFn = h.customizeLoadVar
-	h.Eval.StoreVarFn = h.customizeStoreVar
-	h.Eval.CallFn = h.customizeEvalCall
-	h.Eval.ActionFn = h.customizeAction
+	h.Eval.Context = pl.NewCbEvalContext(
+		h.customizeLoadVar,
+		h.customizeStoreVar,
+		h.customizeEvalCall,
+		h.customizeAction,
+	)
 
 	defer func() {
 		h.isRunning = false
@@ -292,10 +294,12 @@ func (h *Hpl) OnConst(session ConstSessionWrapper) error {
 	h.isRunning = true
 	h.constSession = session
 
-	h.Eval.LoadVarFn = h.constLoadVar
-	h.Eval.StoreVarFn = h.constStoreVar
-	h.Eval.CallFn = h.constEvalCall
-	h.Eval.ActionFn = h.constAction
+	h.Eval.Context = pl.NewCbEvalContext(
+		h.constLoadVar,
+		h.constStoreVar,
+		h.constEvalCall,
+		h.constAction,
+	)
 
 	defer func() {
 		h.isRunning = false
@@ -337,10 +341,12 @@ func (h *Hpl) OnInit(session SessionWrapper) error {
 	h.isRunning = true
 	h.session = session
 
-	h.Eval.LoadVarFn = h.initLoadVar
-	h.Eval.StoreVarFn = h.initStoreVar
-	h.Eval.CallFn = h.initEvalCall
-	h.Eval.ActionFn = h.initAction
+	h.Eval.Context = pl.NewCbEvalContext(
+		h.initLoadVar,
+		h.initStoreVar,
+		h.initEvalCall,
+		h.initAction,
+	)
 
 	defer func() {
 		h.isRunning = false
@@ -385,10 +391,12 @@ func (h *Hpl) OnAccess(selector string, req *http.Request, param hrouter.Params,
 	h.params = NewRouterParamsVal(param)
 	h.session = session
 
-	h.Eval.LoadVarFn = h.accessLoadVar
-	h.Eval.StoreVarFn = h.accessStoreVar
-	h.Eval.CallFn = h.accessEvalCall
-	h.Eval.ActionFn = h.accessAction
+	h.Eval.Context = pl.NewCbEvalContext(
+		h.accessLoadVar,
+		h.accessStoreVar,
+		h.accessEvalCall,
+		h.accessAction,
+	)
 
 	defer func() {
 		h.isRunning = false
@@ -432,10 +440,12 @@ func (h *Hpl) OnRequest(selector string, req *http.Request, param hrouter.Params
 	h.params = NewRouterParamsVal(param)
 	h.session = session
 
-	h.Eval.LoadVarFn = h.httpRequestLoadVar
-	h.Eval.StoreVarFn = h.httpRequestStoreVar
-	h.Eval.CallFn = h.httpRequestEvalCall
-	h.Eval.ActionFn = h.httpRequestAction
+	h.Eval.Context = pl.NewCbEvalContext(
+		h.httpRequestLoadVar,
+		h.httpRequestStoreVar,
+		h.httpRequestEvalCall,
+		h.httpRequestAction,
+	)
 
 	defer func() {
 		h.isRunning = false
@@ -576,10 +586,12 @@ func (h *Hpl) OnResponse(selector string,
 	h.params = NewRouterParamsVal(param)
 	h.session = session
 
-	h.Eval.LoadVarFn = h.httpResponseLoadVar
-	h.Eval.StoreVarFn = h.httpResponseStoreVar
-	h.Eval.CallFn = h.httpResponseEvalCall
-	h.Eval.ActionFn = h.httpResponseAction
+	h.Eval.Context = pl.NewCbEvalContext(
+		h.httpResponseLoadVar,
+		h.httpResponseStoreVar,
+		h.httpResponseEvalCall,
+		h.httpResponseAction,
+	)
 
 	defer func() {
 		h.isRunning = false
@@ -672,10 +684,12 @@ func (h *Hpl) OnLog(selector string, log *alog.SessionLog, session SessionWrappe
 	h.session = session
 	h.log = log
 
-	h.Eval.LoadVarFn = h.logLoadVar
-	h.Eval.StoreVarFn = h.logStoreVar
-	h.Eval.CallFn = h.logEvalCall
-	h.Eval.ActionFn = h.logAction
+	h.Eval.Context = pl.NewCbEvalContext(
+		h.logLoadVar,
+		h.logStoreVar,
+		h.logEvalCall,
+		h.logAction,
+	)
 
 	defer func() {
 		h.isRunning = false
@@ -727,10 +741,12 @@ func (h *Hpl) OnError(selector string, session SessionWrapper) error {
 
 	h.session = session
 
-	h.Eval.LoadVarFn = h.errorLoadVar
-	h.Eval.StoreVarFn = h.errorStoreVar
-	h.Eval.CallFn = h.errorEvalCall
-	h.Eval.ActionFn = h.errorAction
+	h.Eval.Context = pl.NewCbEvalContext(
+		h.errorLoadVar,
+		h.errorStoreVar,
+		h.errorEvalCall,
+		h.errorAction,
+	)
 
 	defer func() {
 		h.isRunning = false
