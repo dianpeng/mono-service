@@ -298,10 +298,6 @@ func (s *concateSession) OnStoreVar(phase int, _ *pl.Evaluator, name string, _ p
 	return fmt.Errorf("unknown variable %s", name)
 }
 
-func (s *concateSession) OnCall(phase int, _ *pl.Evaluator, name string, _ []pl.Val) (pl.Val, error) {
-	return pl.NewValNull(), fmt.Errorf("unknown function %s", name)
-}
-
 func (s *concateSession) onActionBackground(name string, val pl.Val) error {
 	x := s.curreq()
 

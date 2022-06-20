@@ -35,10 +35,6 @@ func (s *nullSession) OnStoreVar(_ int, _ *pl.Evaluator, name string, _ pl.Val) 
 	return fmt.Errorf("module(null): unknown variable %s for storing", name)
 }
 
-func (s *nullSession) OnCall(_ int, _ *pl.Evaluator, name string, _ []pl.Val) (pl.Val, error) {
-	return pl.NewValNull(), fmt.Errorf("module(null): unknown function %s", name)
-}
-
 func (s *nullSession) OnAction(_ int, _ *pl.Evaluator, name string, _ pl.Val) error {
 	return fmt.Errorf("module(null): unknown action %s", name)
 }

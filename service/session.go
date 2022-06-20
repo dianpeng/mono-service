@@ -39,7 +39,6 @@ type Session interface {
 	// HPL context usage
 	OnLoadVar(int, *pl.Evaluator, string) (pl.Val, error)
 	OnStoreVar(int, *pl.Evaluator, string, pl.Val) error
-	OnCall(int, *pl.Evaluator, string, []pl.Val) (pl.Val, error)
 	OnAction(int, *pl.Evaluator, string, pl.Val) error
 
 	// --------------------------------------------------------------------------

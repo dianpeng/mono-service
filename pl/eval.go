@@ -19,34 +19,29 @@ type EvalConfig interface {
 type EvalContext interface {
 	LoadVar(*Evaluator, string) (Val, error)
 	StoreVar(*Evaluator, string, Val) error
-	Call(*Evaluator, string, []Val) (Val, error)
 	Action(*Evaluator, string, Val) error
 }
 
 type cbEvalContext struct {
 	loadVarFn  func(*Evaluator, string) (Val, error)
 	storeVarFn func(*Evaluator, string, Val) error
-	callFn     func(*Evaluator, string, []Val) (Val, error)
 	actionFn   func(*Evaluator, string, Val) error
 }
 
 func NewCbEvalContext(
 	f0 func(*Evaluator, string) (Val, error),
 	f1 func(*Evaluator, string, Val) error,
-	f2 func(*Evaluator, string, []Val) (Val, error),
-	f3 func(*Evaluator, string, Val) error,
+	f2 func(*Evaluator, string, Val) error,
 ) EvalContext {
 	return &cbEvalContext{
 		loadVarFn:  f0,
 		storeVarFn: f1,
-		callFn:     f2,
-		actionFn:   f3,
+		actionFn:   f2,
 	}
 }
 
 func NewNullEvalContext() EvalContext {
 	return NewCbEvalContext(
-		nil,
 		nil,
 		nil,
 		nil,
@@ -66,14 +61,6 @@ func (x *cbEvalContext) StoreVar(a *Evaluator, b string, c Val) error {
 		return x.storeVarFn(a, b, c)
 	} else {
 		return fmt.Errorf("store_var: %s is unknown", b)
-	}
-}
-
-func (x *cbEvalContext) Call(a *Evaluator, b string, c []Val) (Val, error) {
-	if x.callFn != nil {
-		return x.callFn(a, b, c)
-	} else {
-		return NewValNull(), fmt.Errorf("call: %s is unknown", b)
 	}
 }
 
@@ -123,6 +110,7 @@ type funcframe struct {
 	farg   int
 	excep  []exception
 	sfunc  *scriptFunc
+	nfunc  *nativeFunc
 }
 
 func dupFuncFrameForErr(fr *funcframe) *funcframe {
@@ -138,24 +126,42 @@ func (ff *funcframe) isTop() bool {
 	return ff.prog == nil
 }
 
+func (ff *funcframe) isNative() bool {
+	return ff.nfunc != nil
+}
+
 func (ff *funcframe) frameInfo() string {
-	return fmt.Sprintf("[pc=%d]"+
-		"[framep=%d]"+
-		"[argcount=%d]"+
-		"[instr=%s]"+
-		"[type=%s]"+
-		"[name=%s]"+
-		"[localcount=%d]"+
-		"[source=]:\n%s",
-		ff.pc,
-		ff.framep,
-		ff.farg,
-		ff.prog.bcList[ff.pc].dumpWithProgram(ff.prog),
-		ff.prog.typeName(),
-		ff.prog.name,
-		ff.prog.localSize,
-		ff.prog.dbgList[ff.pc].where(),
-	)
+	if ff.prog != nil {
+		return fmt.Sprintf("[pc=%d]"+
+			"[framep=%d]"+
+			"[argcount=%d]"+
+			"[instr=%s]"+
+			"[type=%s]"+
+			"[name=%s]"+
+			"[localcount=%d]"+
+			"[source=]:\n%s",
+			ff.pc,
+			ff.framep,
+			ff.farg,
+			ff.prog.bcList[ff.pc].dumpWithProgram(ff.prog),
+			ff.prog.typeName(),
+			ff.prog.name,
+			ff.prog.localSize,
+			ff.prog.dbgList[ff.pc].where(),
+		)
+	} else {
+		must(ff.nfunc != nil, "must have native function")
+		return fmt.Sprintf("[pc=%d]"+
+			"[framep=%d]"+
+			"[argcount=%d]"+
+			"[native_function]"+
+			"[id=%s]",
+			ff.pc,
+			ff.framep,
+			ff.farg,
+			ff.nfunc.Id(),
+		)
+	}
 }
 
 func (e *Evaluator) curfuncframeVal() Val {
@@ -218,6 +224,7 @@ func newfuncframe(
 	farg int,
 	excep []exception,
 	sfunc *scriptFunc,
+	nfunc *nativeFunc,
 ) (*funcframe, Val) {
 	ff := &funcframe{
 		pc:     pc,
@@ -226,6 +233,7 @@ func newfuncframe(
 		farg:   farg,
 		excep:  excep,
 		sfunc:  sfunc,
+		nfunc:  nfunc,
 	}
 	return ff, newValFrame(ff)
 }
@@ -247,10 +255,9 @@ func NewEvaluatorWithContext(context EvalContext) *Evaluator {
 func NewEvaluatorWithContextCallback(
 	f0 func(*Evaluator, string) (Val, error),
 	f1 func(*Evaluator, string, Val) error,
-	f2 func(*Evaluator, string, []Val) (Val, error),
-	f3 func(*Evaluator, string, Val) error,
+	f2 func(*Evaluator, string, Val) error,
 ) *Evaluator {
-	return NewEvaluatorWithContext(NewCbEvalContext(f0, f1, f2, f3))
+	return NewEvaluatorWithContext(NewCbEvalContext(f0, f1, f2))
 }
 
 func NewEvaluator(context EvalContext, config EvalConfig) *Evaluator {
@@ -810,27 +817,6 @@ FUNC:
 			e.push(NewValPair(t0, t1))
 			break
 
-		case bcCall:
-			paramSize := bc.argument
-
-			// prepare argument list slice
-			argStart := len(e.Stack) - paramSize
-			argEnd := len(e.Stack)
-			arg := e.Stack[argStart:argEnd]
-
-			funcName := e.topN(paramSize)
-			must(funcName.Type == ValStr,
-				fmt.Sprintf("function name must be string but %s", funcName.Id()))
-
-			r, err := e.Context.Call(e, funcName.String(), arg)
-
-			if err != nil {
-				return rrErr(prog, pc, err)
-			}
-			e.popN(paramSize + 1)
-			e.push(r)
-			break
-
 		case bcICall:
 			paramSize := bc.argument
 
@@ -890,25 +876,41 @@ FUNC:
 				e.curframe.farg,
 				e.curframe.excep,
 				e.curframe.sfunc,
+				e.curframe.nfunc,
 			)
 
 			// setup new calling frame
 			e.push(newFV)
 
 			var sfunc *scriptFunc
+			var nfunc *nativeFunc
 
 			// enter into the new call
 			if bc.opcode == bcSCall {
 				idx := funcIndexOrEntry.Int()
-				newCall := prog.policy.fn[int(idx)]
-				prog = newCall
+				prog = prog.policy.fn[int(idx)]
 				must(prog.freeCall(), "must be freecall")
 			} else {
 				if funcIndexOrEntry.IsClosure() {
-					fn, ok := funcIndexOrEntry.Closure().(*scriptFunc)
-					must(ok, "must be a script function")
-					prog = fn.prog
-					sfunc = fn
+					closure := funcIndexOrEntry.Closure()
+					switch closure.Type() {
+					case ClosureScript:
+						fn, _ := closure.(*scriptFunc)
+						prog = fn.prog
+						sfunc = fn
+						break
+
+					case ClosureNative:
+						// native function call, we still need to setup the call
+						fn, _ := closure.(*nativeFunc)
+						prog = nil
+						nfunc = fn
+						break
+
+					default:
+						return rrErrf(prog, pc, "object must be function, but got type: %s",
+							funcIndexOrEntry.Id())
+					}
 				} else {
 					return rrErrf(prog, pc, "object must be function, but got type: %s",
 						funcIndexOrEntry.Id())
@@ -920,12 +922,43 @@ FUNC:
 			e.curframe.framep = len(e.Stack) - paramSize - 2
 			e.curframe.farg = paramSize
 			e.curframe.excep = nil
-			e.curframe.sfunc = sfunc
 
-			// make sure to reset the PC when entering into the new function
-			pc = 0
+			if prog != nil {
+				e.curframe.sfunc = sfunc
+				// make sure to reset the PC when entering into the new function
+				pc = 0
+				goto FUNC
+			} else {
+				must(nfunc != nil, "nfunc cannot be nil")
+				e.curframe.nfunc = nfunc
 
-			goto FUNC
+				// call the native function as if we are in a new frame, this is thee
+				// native call trampoline, thought written inline here as go code
+
+				stackSize := len(e.Stack)
+				argStart := stackSize - paramSize - 1 // NOTES, we just push a frame
+				argEnd := stackSize
+				args := e.Stack[argStart:argEnd]
+
+				val, err := nfunc.entry(
+					args,
+				)
+
+				if err != nil {
+					return rrErr(prog, pc, err)
+				}
+
+				// simulate the inline return and resume from where we stop
+				prevcf := e.prevfuncframe()
+
+				// return to where just stopped
+				pc, prog = e.popfuncframe(prevcf)
+
+				e.push(val)
+				break
+			}
+
+			unreachable("bcXCall")
 
 		case bcReturn:
 			rv := e.top0()
@@ -1295,6 +1328,7 @@ func (e *Evaluator) doEval(event string, pp []*program, policy *Policy) error {
 		0,
 		nil,
 		&scriptFunc{},
+		nil,
 	)
 	e.push(entryV)
 
@@ -1332,31 +1366,37 @@ func (e *Evaluator) doEval(event string, pp []*program, policy *Policy) error {
 
 			// now check whether the current frame has exception or not
 			if xp := e.curExcep(); xp != nil {
-				// try to handle it, we haven't used a table based exception handler
-				// but rely on bytecode so the current exception must be the exception
-				// that is matched
+				// notes native frame on the stack cannot be used to handle exception,
+				// then just jump forward
+				if !cf.isNative() {
+					// try to handle it, we haven't used a table based exception handler
+					// but rely on bytecode so the current exception must be the exception
+					// that is matched
 
-				e.popTo(xp.stackSize)
-				pc = xp.handlerPc
-				prog = cf.prog
-				cf.pc = pc
+					e.popTo(xp.stackSize)
+					pc = xp.handlerPc
+					prog = cf.prog
+					cf.pc = pc
 
-				// currently just convert error to a string
-				e.curexcep = NewValStr(rr.e.Error())
+					// currently just convert error to a string
+					e.curexcep = NewValStr(rr.e.Error())
 
-				// okay recover the frame
-				goto RECOVER
-			} else {
-				pframe := e.prevfuncframe()
-				if !pframe.isTop() {
-					bt = append(bt, pframe)
+					// okay recover the frame
+					goto RECOVER
 				}
-
-				// unwind current frame and go back to the previous frame to check whether
-				// we have exception handler or not
-				e.popfuncframe(pframe)
 			}
+
+			// unwind the frame
+			pframe := e.prevfuncframe()
+			if !pframe.isTop() {
+				bt = append(bt, pframe)
+			}
+
+			// unwind current frame and go back to the previous frame to check whether
+			// we have exception handler or not
+			e.popfuncframe(pframe)
 		}
+
 		return e.doErr(bt, rr.prog, rr.pc, rr.e)
 	}
 

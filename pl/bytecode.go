@@ -99,7 +99,6 @@ const (
 	bcLoadConst = 76
 
 	// call
-	bcCall  = 81
 	bcMCall = 82
 	bcICall = 83
 	bcSCall = 84
@@ -440,7 +439,6 @@ func (x *bytecode) dump(resolver func(int, int) string) string {
 
 	case bcAddList,
 		bcAddMap,
-		bcCall,
 		bcICall,
 		bcMCall,
 		bcSCall,
@@ -500,8 +498,6 @@ func getBytecodeName(bc int) string {
 		return "add-map"
 	case bcNewPair:
 		return "new-pair"
-	case bcCall:
-		return "call"
 	case bcICall:
 		return "icall"
 	case bcMCall:

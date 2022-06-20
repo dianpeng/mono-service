@@ -235,14 +235,6 @@ func (s *sessionHandler) OnStoreVar(e *pl.Evaluator, name string, v pl.Val) erro
 	return s.session.OnStoreVar(s.phaseIndex, e, name, v)
 }
 
-func (s *sessionHandler) OnCall(e *pl.Evaluator, name string, args []pl.Val) (pl.Val, error) {
-	if s.inError {
-		return pl.NewValNull(), fmt.Errorf("unknown function: %s", name)
-	}
-
-	return s.session.OnCall(s.phaseIndex, e, name, args)
-}
-
 func (s *sessionHandler) OnAction(e *pl.Evaluator, name string, v pl.Val) error {
 	if s.inError {
 		switch name {

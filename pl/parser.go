@@ -2682,7 +2682,7 @@ func (p *parser) parseVCall(prog *program) error {
 // The unbounded call's name resolution is little bit different from the normal
 // symbol resolution. The difference is that when we don't know a name for
 // variable loading/storing, we issue bcLoadVar/bcStoreVar; for function call
-// we issue bcCall.
+// we issue bcVCall.
 // In general, the name of unbounded function call is as following:
 // 1) try to resolve it as known symbol
 //    ie local, session or const
@@ -2690,9 +2690,10 @@ func (p *parser) parseVCall(prog *program) error {
 // 3) Once all compilation is done, we try to lookup the name as following :
 //   3.1) If it is an intrinsic function call, then just issue it
 //   3.2) If it is a script function call, then just issue it
-//   3.3) Issue the function call with bcCall, which is the dynamic call's
-//        up call instruction. Ultimately, this instruction will become a
-//        embedder's call function callback invokation.
+//   3.3) Otherwise, try to load the function name as dynamic variable on to
+//        the stack and then issue the bcVCall
+//
+// NOTES(dpeng): bcCall is depracated
 
 func (p *parser) parseUnboundCall(prog *program,
 	name string,
@@ -2745,7 +2746,8 @@ func (p *parser) parseUnboundCall(prog *program,
 		break
 
 	default:
-		// notes if it is dynamic variable then just dispatch it with bcCall
+		// notes if it is dynamic variable then just dispatch it with bcVCall later
+		// on instead of eargly issue it
 		p.callPatch = append(p.callPatch, callentry{
 			entryPos: entryIndex,
 			swapPos:  swapPos,
@@ -2796,10 +2798,11 @@ func (p *parser) patchAllCall() {
 				e.prog.emit1At(p.l, e.entryPos, bcLoadInt, idx)
 				e.prog.emit1At(p.l, e.callPos, bcSCall, e.arg)
 			} else {
-
+				// okay, the variable here is unknow to us, now let's just issue it
+				// as dynamic variable loading and then call on this dynamic variable
 				idx := e.prog.addStr(e.symbol)
-				e.prog.emit1At(p.l, e.entryPos, bcLoadStr, idx)
-				e.prog.emit1At(p.l, e.callPos, bcCall, e.arg)
+				e.prog.emit1At(p.l, e.entryPos, bcLoadVar, idx)
+				e.prog.emit1At(p.l, e.callPos, bcVCall, e.arg)
 			}
 		}
 	}

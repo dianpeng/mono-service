@@ -98,10 +98,6 @@ func (s *bodySignSession) OnStoreVar(_ int, _ *pl.Evaluator, name string, _ pl.V
 	return fmt.Errorf("module(body_sign): unknown variable %s for storing", name)
 }
 
-func (s *bodySignSession) OnCall(_ int, _ *pl.Evaluator, name string, _ []pl.Val) (pl.Val, error) {
-	return pl.NewValNull(), fmt.Errorf("module(body_sign): unknown function %s", name)
-}
-
 func (s *bodySignSession) OnAction(_ int, _ *pl.Evaluator, name string, _ pl.Val) error {
 	return fmt.Errorf("module(body_sign): unknown action %s", name)
 }

@@ -28,10 +28,6 @@ func test(code string) (Val, bool) {
 			return NewValNull(), fmt.Errorf("%s unknown var", vname)
 		},
 		nil,
-		func(_ *Evaluator, fname string, args []Val) (Val, error) {
-			return NewValNull(), fmt.Errorf("%s unknown func", fname)
-		},
-
 		func(_ *Evaluator, aname string, aval Val) error {
 			if aname == "output" {
 				*ret = aval
@@ -340,7 +336,7 @@ func TestTryExpr(t *testing.T) {
 	    let a = try foo() else let reason reason;
 	    output => a;
 	  }
-	  `, "foo unknown func"))
+	  `, "foo unknown var"))
 
 	assert.True(testString(
 		`
@@ -349,7 +345,7 @@ func TestTryExpr(t *testing.T) {
 	    let a = try foo() else reason reason;
 	    output => a;
 	  }
-	  `, "foo unknown func"))
+	  `, "foo unknown var"))
 
 	assert.True(testString(
 		`
@@ -661,18 +657,19 @@ func TestEval1(t *testing.T) {
 				if vname == "a" {
 					return NewValStr("Hello World"), nil
 				}
+				if vname == "abs" {
+					return NewValNativeFunction(
+						"abs",
+						func(args []Val) (Val, error) {
+							a0 := args[0]
+							must(a0.Type == ValInt, "must be int")
+							return NewValInt64(-a0.Int()), nil
+						},
+					), nil
+				}
 				return NewValNull(), fmt.Errorf("%s unknown var", vname)
 			},
 			nil,
-			func(_ *Evaluator, fname string, args []Val) (Val, error) {
-				if fname == "abs" {
-					a0 := args[0]
-					must(a0.Type == ValInt, "must be int")
-					return NewValInt64(-a0.Int()), nil
-				}
-				return NewValNull(), fmt.Errorf("%s unknown func", fname)
-			},
-
 			func(_ *Evaluator, aname string, aval Val) error {
 				output[aname] = aval
 				return nil
@@ -779,18 +776,20 @@ policy => {
 				if vname == "a" {
 					return NewValStr("Hello World"), nil
 				}
+				if vname == "abs" {
+					return NewValNativeFunction(
+						"abs",
+						func(args []Val) (Val, error) {
+							a0 := args[0]
+							must(a0.Type == ValInt, "must be int")
+							return NewValInt64(-a0.Int()), nil
+						},
+					), nil
+				}
 				return NewValNull(), fmt.Errorf("%s unknown var", vname)
+
 			},
 			nil,
-			func(_ *Evaluator, fname string, args []Val) (Val, error) {
-				if fname == "abs" {
-					a0 := args[0]
-					must(a0.Type == ValInt, "must be int")
-					return NewValInt64(-a0.Int()), nil
-				}
-				return NewValNull(), fmt.Errorf("%s unknown func", fname)
-			},
-
 			func(_ *Evaluator, aname string, aval Val) error {
 				output[aname] = aval
 				return nil
@@ -925,17 +924,19 @@ func TestStrInterpo(t *testing.T) {
 				if vname == "a" {
 					return NewValStr("Hello World"), nil
 				}
+				if vname == "abs" {
+					return NewValNativeFunction(
+						"abs",
+						func(args []Val) (Val, error) {
+							a0 := args[0]
+							must(a0.Type == ValInt, "must be int")
+							return NewValInt64(-a0.Int()), nil
+						},
+					), nil
+				}
 				return NewValNull(), fmt.Errorf("%s unknown var", vname)
 			},
 			nil,
-			func(_ *Evaluator, fname string, args []Val) (Val, error) {
-				if fname == "abs" {
-					a0 := args[0]
-					must(a0.Type == ValInt, "must be int")
-					return NewValInt64(-a0.Int()), nil
-				}
-				return NewValNull(), fmt.Errorf("%s unknown func", fname)
-			},
 
 			func(_ *Evaluator, aname string, aval Val) error {
 				output[aname] = aval
@@ -976,18 +977,19 @@ func TestLocal(t *testing.T) {
 				if vname == "a" {
 					return NewValStr("Hello World"), nil
 				}
+				if vname == "abs" {
+					return NewValNativeFunction(
+						"abs",
+						func(args []Val) (Val, error) {
+							a0 := args[0]
+							must(a0.Type == ValInt, "must be int")
+							return NewValInt64(-a0.Int()), nil
+						},
+					), nil
+				}
 				return NewValNull(), fmt.Errorf("%s unknown var", vname)
 			},
 			nil,
-			func(_ *Evaluator, fname string, args []Val) (Val, error) {
-				if fname == "abs" {
-					a0 := args[0]
-					must(a0.Type == ValInt, "must be int")
-					return NewValInt64(-a0.Int()), nil
-				}
-				return NewValNull(), fmt.Errorf("%s unknown func", fname)
-			},
-
 			func(_ *Evaluator, aname string, aval Val) error {
 				output[aname] = aval
 				return nil
@@ -1815,9 +1817,6 @@ func TestAssign3(t *testing.T) {
 				return nil
 			}
 			return fmt.Errorf("%s is unknown var", fname)
-		},
-		func(_ *Evaluator, fname string, args []Val) (Val, error) {
-			return NewValNull(), fmt.Errorf("%s unknown func", fname)
 		},
 		func(_ *Evaluator, aname string, aval Val) error {
 			if aname == "output" {

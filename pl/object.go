@@ -472,6 +472,19 @@ func newValScriptFunction(
 	}
 }
 
+func NewValNativeFunction(
+	id string,
+	entry func([]Val) (Val, error),
+) Val {
+	return Val{
+		Type: ValClosure,
+		vData: NewNativeFunction(
+			id,
+			entry,
+		),
+	}
+}
+
 func newValSFunc(sfunc *scriptFunc) Val {
 	return Val{
 		Type:  ValClosure,

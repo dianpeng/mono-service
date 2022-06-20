@@ -20,10 +20,6 @@ func (b *bgSessionWrapper) OnStoreVar(x *pl.Evaluator, name string, value pl.Val
 	return b.session.OnStoreVar(phase.PhaseBackground, x, name, value)
 }
 
-func (b *bgSessionWrapper) OnCall(x *pl.Evaluator, name string, args []pl.Val) (pl.Val, error) {
-	return b.session.OnCall(phase.PhaseBackground, x, name, args)
-}
-
 func (b *bgSessionWrapper) OnAction(x *pl.Evaluator, name string, val pl.Val) error {
 	return b.session.OnAction(phase.PhaseBackground, x, name, val)
 }

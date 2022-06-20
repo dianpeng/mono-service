@@ -40,7 +40,6 @@ type SessionWrapper interface {
 	// HPL/PL scriptting callback
 	OnLoadVar(*pl.Evaluator, string) (pl.Val, error)
 	OnStoreVar(*pl.Evaluator, string, pl.Val) error
-	OnCall(*pl.Evaluator, string, []pl.Val) (pl.Val, error)
 	OnAction(*pl.Evaluator, string, pl.Val) error
 
 	// other utilities
@@ -161,6 +160,9 @@ func (h *Hpl) SetPolicy(p *pl.Policy) {
 }
 
 func (p *Hpl) loadVarBasic(x *pl.Evaluator, n string) (pl.Val, error) {
+	if v, ok := p.loadFnVar(x, n); ok {
+		return v, nil
+	}
 	switch n {
 	case "request":
 		return p.request, nil
@@ -191,40 +193,50 @@ func (h *Hpl) fnHttp(args []pl.Val,
 	return entry(fac, args)
 }
 
-func (p *Hpl) doEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
+func (p *Hpl) loadFnVar(_ *pl.Evaluator, n string) (pl.Val, bool) {
 	switch n {
 	case "http::do":
-		return p.fnHttp(
-			args,
-			fnHttpDo,
-		)
+		return pl.NewValNativeFunction(
+			"http::do",
+			func(args []pl.Val) (pl.Val, error) {
+				return p.fnHttp(args, fnHttpDo)
+			},
+		), true
+
 	case "http::get":
-		return p.fnHttp(
-			args,
-			fnHttpGet,
-		)
+		return pl.NewValNativeFunction(
+			"http::do",
+			func(args []pl.Val) (pl.Val, error) {
+				return p.fnHttp(args, fnHttpGet)
+			},
+		), true
+
 	case "http::post":
-		return p.fnHttp(
-			args,
-			fnHttpPost,
-		)
+		return pl.NewValNativeFunction(
+			"http::do",
+			func(args []pl.Val) (pl.Val, error) {
+				return p.fnHttp(args, fnHttpPost)
+			},
+		), true
+
 	default:
-		return p.session.OnCall(x, n, args)
+		break
 	}
+
+	return pl.NewValNull(), false
 }
 
 // -----------------------------------------------------------------------------
 // customize phase
 func (h *Hpl) customizeLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
+	if v, ok := h.loadFnVar(x, n); ok {
+		return v, nil
+	}
 	return h.session.OnLoadVar(x, n)
 }
 
 func (p *Hpl) customizeStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 	return p.session.OnStoreVar(x, n, v)
-}
-
-func (h *Hpl) customizeEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	return h.doEvalCall(x, n, args)
 }
 
 func (h *Hpl) customizeAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
@@ -248,7 +260,6 @@ func (h *Hpl) OnCustomize(selector string, session SessionWrapper) error {
 	h.Eval.Context = pl.NewCbEvalContext(
 		h.customizeLoadVar,
 		h.customizeStoreVar,
-		h.customizeEvalCall,
 		h.customizeAction,
 	)
 
@@ -265,15 +276,14 @@ func (h *Hpl) OnCustomize(selector string, session SessionWrapper) error {
 // const phase
 
 func (h *Hpl) constLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
+	if v, ok := h.loadFnVar(x, n); ok {
+		return v, nil
+	}
 	return pl.NewValNull(), fmt.Errorf("const initialization: unknown variable %s", n)
 }
 
 func (p *Hpl) constStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 	return fmt.Errorf("const initialization: unknown variable set %s", n)
-}
-
-func (h *Hpl) constEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	return h.doEvalCall(x, n, args)
 }
 
 func (h *Hpl) constAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
@@ -297,7 +307,6 @@ func (h *Hpl) OnConst(session ConstSessionWrapper) error {
 	h.Eval.Context = pl.NewCbEvalContext(
 		h.constLoadVar,
 		h.constStoreVar,
-		h.constEvalCall,
 		h.constAction,
 	)
 
@@ -312,15 +321,14 @@ func (h *Hpl) OnConst(session ConstSessionWrapper) error {
 // -----------------------------------------------------------------------------
 // init phase
 func (h *Hpl) initLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
+	if v, ok := h.loadFnVar(x, n); ok {
+		return v, nil
+	}
 	return h.session.OnLoadVar(x, n)
 }
 
 func (p *Hpl) initStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 	return p.session.OnStoreVar(x, n, v)
-}
-
-func (h *Hpl) initEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	return h.doEvalCall(x, n, args)
 }
 
 func (h *Hpl) initAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
@@ -344,7 +352,6 @@ func (h *Hpl) OnInit(session SessionWrapper) error {
 	h.Eval.Context = pl.NewCbEvalContext(
 		h.initLoadVar,
 		h.initStoreVar,
-		h.initEvalCall,
 		h.initAction,
 	)
 
@@ -365,10 +372,6 @@ func (h *Hpl) accessLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
 
 func (h *Hpl) accessStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 	return h.session.OnStoreVar(x, n, v)
-}
-
-func (h *Hpl) accessEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	return h.doEvalCall(x, n, args)
 }
 
 func (h *Hpl) accessAction(x *pl.Evaluator, n string, arg pl.Val) error {
@@ -394,7 +397,6 @@ func (h *Hpl) OnAccess(selector string, req *http.Request, param hrouter.Params,
 	h.Eval.Context = pl.NewCbEvalContext(
 		h.accessLoadVar,
 		h.accessStoreVar,
-		h.accessEvalCall,
 		h.accessAction,
 	)
 
@@ -414,10 +416,6 @@ func (h *Hpl) httpRequestLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
 
 func (h *Hpl) httpRequestStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 	return h.session.OnStoreVar(x, n, v)
-}
-
-func (h *Hpl) httpRequestEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	return h.doEvalCall(x, n, args)
 }
 
 func (h *Hpl) httpRequestAction(x *pl.Evaluator, n string, arg pl.Val) error {
@@ -443,7 +441,6 @@ func (h *Hpl) OnRequest(selector string, req *http.Request, param hrouter.Params
 	h.Eval.Context = pl.NewCbEvalContext(
 		h.httpRequestLoadVar,
 		h.httpRequestStoreVar,
-		h.httpRequestEvalCall,
 		h.httpRequestAction,
 	)
 
@@ -559,10 +556,6 @@ func (p *Hpl) httpResponseStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 	return p.session.OnStoreVar(x, n, v)
 }
 
-func (p *Hpl) httpResponseEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	return p.doEvalCall(x, n, args)
-}
-
 func (h *Hpl) OnResponse(selector string,
 	resp http.ResponseWriter,
 	req *http.Request,
@@ -589,7 +582,6 @@ func (h *Hpl) OnResponse(selector string,
 	h.Eval.Context = pl.NewCbEvalContext(
 		h.httpResponseLoadVar,
 		h.httpResponseStoreVar,
-		h.httpResponseEvalCall,
 		h.httpResponseAction,
 	)
 
@@ -620,10 +612,6 @@ func (h *Hpl) logLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
 
 func (p *Hpl) logStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 	return p.session.OnStoreVar(x, n, v)
-}
-
-func (h *Hpl) logEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	return h.doEvalCall(x, n, args)
 }
 
 func (h *Hpl) logAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
@@ -687,7 +675,6 @@ func (h *Hpl) OnLog(selector string, log *alog.SessionLog, session SessionWrappe
 	h.Eval.Context = pl.NewCbEvalContext(
 		h.logLoadVar,
 		h.logStoreVar,
-		h.logEvalCall,
 		h.logAction,
 	)
 
@@ -718,10 +705,6 @@ func (p *Hpl) errorStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 	return p.session.OnStoreVar(x, n, v)
 }
 
-func (h *Hpl) errorEvalCall(x *pl.Evaluator, n string, args []pl.Val) (pl.Val, error) {
-	return h.doEvalCall(x, n, args)
-}
-
 func (h *Hpl) errorAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
 	return h.session.OnAction(x, actionName, arg)
 }
@@ -744,7 +727,6 @@ func (h *Hpl) OnError(selector string, session SessionWrapper) error {
 	h.Eval.Context = pl.NewCbEvalContext(
 		h.errorLoadVar,
 		h.errorStoreVar,
-		h.errorEvalCall,
 		h.errorAction,
 	)
 
