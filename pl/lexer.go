@@ -45,6 +45,7 @@ const (
 	tkAt
 	tkSharp
 	tkPipe
+	tkLExprBra
 
 	// unary
 	tkNot
@@ -110,6 +111,7 @@ const (
 	tkContinue
 	tkBreak
 	tkFunction
+	tkConfig
 
 	tkRule
 	tkEmit
@@ -216,6 +218,8 @@ func getTokenName(tk int) string {
 		return "#"
 	case tkPipe:
 		return "|"
+	case tkLExprBra:
+		return "|{"
 
 	case tkAdd:
 		return "+"
@@ -286,6 +290,7 @@ func getTokenName(tk int) string {
 		return "import"
 	case tkExport:
 		return "export"
+
 	case tkTry:
 		return "try"
 	case tkIf:
@@ -309,6 +314,9 @@ func getTokenName(tk int) string {
 		return "emit"
 	case tkReturn:
 		return "return"
+
+	case tkConfig:
+		return "config"
 
 	case tkTemplate:
 		return "template"
@@ -636,6 +644,8 @@ var lexerkeyword = map[string]int{
 	"rule": tkRule,
 	"emit": tkEmit,
 
+	"config": tkConfig,
+
 	/* intrinsic keywords */
 	"template": tkTemplate,
 }
@@ -921,7 +931,7 @@ func (t *lexer) next() int {
 			return t.pp(tkAnd, '&')
 
 		case '|':
-			return t.p2(tkPipe, tkOr, '|')
+			return t.pp2(tkPipe, tkOr, tkLExprBra, '|', '{')
 
 		case '!':
 			return t.pp2(tkNot, tkNe, tkRegexpNMatch, '=', '~')

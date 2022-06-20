@@ -47,6 +47,7 @@ const (
 	bcLoadLocal    = 21
 	bcStoreLocal   = 22
 	bcReserveLocal = 23
+	bcLoadRegexp   = 24
 
 	bcAction = 30
 
@@ -125,10 +126,18 @@ const (
 	// tos
 	bcLoadException = 103
 
-	// extensions
-	bcLoadRegexp = 150
+	// config extension part ---------------------------------------------------
+	bcConfigPush         = 151
+	bcConfigPushWithAttr = 152
+	bcConfigPop          = 153
 
-	// special functions
+	bcConfigPropertySet         = 155
+	bcConfigPropertySetWithAttr = 156
+
+	bcConfigCommand         = 157
+	bcConfigCommandWithAttr = 158
+
+	// intrinsic ---------------------------------------------------------------
 	// render template
 	bcTemplate = 200
 
@@ -173,6 +182,7 @@ const (
 	progFunc
 	progSession
 	progExpression
+	progConfig
 )
 
 type upvalue struct {
@@ -596,7 +606,26 @@ func getBytecodeName(bc int) string {
 		return "push-exception"
 	case bcPopException:
 		return "pop-exception"
+	case bcLoadException:
+		return "load-exception"
 
+	// config
+	case bcConfigPush:
+		return "config-push"
+	case bcConfigPushWithAttr:
+		return "config-push-with-attr"
+	case bcConfigPop:
+		return "config-pop"
+	case bcConfigPropertySet:
+		return "config-property-set"
+	case bcConfigPropertySetWithAttr:
+		return "config-property-set-with-attr"
+	case bcConfigCommand:
+		return "config-command"
+	case bcConfigCommandWithAttr:
+		return "config-command-with-attr"
+
+		// closure
 	case bcNewClosure:
 		return "new-closure"
 	case bcStoreUpvalue:

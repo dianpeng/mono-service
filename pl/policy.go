@@ -20,6 +20,9 @@ type Policy struct {
 	// code then this part is empty
 	session *program
 
+	// config scope, ie used for configuration initialization etc ...
+	config *program
+
 	// dispatch table, ie event matching hash table. Ie each program's event name
 	// will become key in this table for finding out which rule should be used
 	// NOTES(dpeng): for optimization purpose, this table *MAY* be nil since if
