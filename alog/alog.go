@@ -69,7 +69,6 @@ type VHostInformation interface {
 type SessionInfo interface {
 	ServiceName() string
 	SessionPhase() string
-	ErrorDescription() string
 }
 
 type SessionLog struct {

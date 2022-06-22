@@ -12,6 +12,10 @@ import (
 // loop which means certain statement may become valid, ie break, continue etc..
 
 const (
+	varPlaceholder = "_"
+)
+
+const (
 	scpNormal = iota
 	scpLoop
 	scpInLoop
@@ -22,6 +26,7 @@ const (
 	entryRule
 	entryVar
 	entryExpr
+	entryConfig
 )
 
 const (
@@ -150,18 +155,9 @@ func (s *lexicalScope) idx(i int) int {
 	return i - s.offset
 }
 
-func (s *lexicalScope) vname(x string) string {
-  if x == "_" {
-    return fmt.Sprintf("@ignore_%d", len(s.tbl))
-  }
-  return x
-}
-
 func (s *lexicalScope) add(x string, st int) int {
-	idx := s.find(x)
-	if idx != symError {
-		return idx
-	}
+	must(s.find(x) == symError, "forget to put variable check?")
+
 	s.tbl = append(s.tbl, syminfo{
 		name: x,
 		dec:  st,
@@ -172,11 +168,11 @@ func (s *lexicalScope) add(x string, st int) int {
 }
 
 func (s *lexicalScope) addVar(x string) int {
-	return s.add(s.vname(x), symtVar)
+	return s.add(x, symtVar)
 }
 
 func (s *lexicalScope) addConst(x string) int {
-	return s.add(s.vname(x), symtConst)
+	return s.add(x, symtConst)
 }
 
 func (s *lexicalScope) find(x string) int {
@@ -222,12 +218,13 @@ type parser struct {
 	constVar  []string
 	sessVar   []string
 	callPatch []callentry
+	counter   uint64 // random counter used to generate unique id etc ...
 }
 
 func newParser(input string) *parser {
 	return &parser{
 		l:      newLexer(input),
-		policy: &Policy{},
+		policy: newPolicy(),
 	}
 }
 
@@ -238,6 +235,11 @@ const (
 	symConst
 	symDynamic
 )
+
+func (p *parser) uid() string {
+	p.counter++
+	return fmt.Sprintf("@uid_%d", p.counter)
+}
 
 // lexical scope management
 func (p *parser) enterScope(t int, isTop bool) *lexicalScope {
@@ -326,7 +328,17 @@ func (p *parser) isEntryExpr() bool {
 	return p.stbl.eType == entryExpr
 }
 
+func (p *parser) varName(x string) string {
+	// placeholder name, then just randomly generate a unique name and return
+	if x == varPlaceholder {
+		return p.uid()
+	}
+	return x
+}
+
 func (p *parser) defLocalVar(x string) int {
+	x = p.varName(x)
+
 	idx := p.stbl.find(x)
 	if idx != symError {
 		return symError
@@ -335,6 +347,8 @@ func (p *parser) defLocalVar(x string) int {
 }
 
 func (p *parser) defLocalConst(x string) int {
+	x = p.varName(x)
+
 	idx := p.stbl.find(x)
 	if idx != symError {
 		return symError
@@ -518,7 +532,7 @@ func (p *parser) errf(f string, a ...interface{}) error {
 
 func (p *parser) parseExpression() (*Policy, error) {
 	p.l.next()
-	prog := newProgram("$expression", progExpression)
+	prog := newProgram(p.policy, "$expression", progExpression)
 	p.enterScopeTop(entryExpr, prog)
 	defer func() {
 		p.leaveScope()
@@ -540,8 +554,7 @@ func (p *parser) parseExpression() (*Policy, error) {
 	return p.policy, nil
 }
 
-func (p *parser) parse() (*Policy, error) {
-	p.l.next()
+func (p *parser) parseFwd() error {
 
 	// top of the program allow user to write 2 types of special scope
 	//
@@ -552,22 +565,52 @@ func (p *parser) parse() (*Policy, error) {
 	//    The definition of session is defined by user
 	if p.l.token == tkConst {
 		if err := p.parseConstScope(); err != nil {
-			return nil, err
+			return err
+		}
+	} else if p.l.token == tkConfig {
+		p.l.next()
+		if err := p.parseConfig(); err != nil {
+			return err
 		}
 	}
 
 	if p.l.token == tkSession {
 		if err := p.parseSessionScope(); err != nil {
-			return nil, err
+			return err
+		}
+	} else if p.l.token == tkConfig {
+		p.l.next()
+		if err := p.parseConfig(); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+func (p *parser) parse() (*Policy, error) {
+	p.l.next()
+
+	if err := p.parseFwd(); err != nil {
+		return nil, err
+	}
+
+	// top most statement allowed ------------------------------------------------
 LOOP:
 	for {
 		tk := p.l.token
 		switch tk {
 		case tkRule, tkId, tkStr, tkLSqr:
 			if err := p.parseRule(); err != nil {
+				return nil, err
+			}
+			break
+
+		case tkConfig:
+			// try to parse the config section, which will be merged into @config
+			// rule for internal use cases.
+			p.l.next()
+			if err := p.parseConfig(); err != nil {
 				return nil, err
 			}
 			break
@@ -603,6 +646,12 @@ LOOP:
 
 	p.patchAllCall()
 
+	// lastly check whether we have config scope, if so, we need to patch config
+	// to include a bcHalt otherwise will break our VM
+	if p.policy.config != nil {
+		p.policy.config.emit0(p.l, bcHalt)
+	}
+
 	return p.policy, nil
 }
 
@@ -620,7 +669,7 @@ func (p *parser) parseSessionLoad(prog *program) error {
 }
 
 func (p *parser) parseSessionScope() error {
-	x, list, err := p.parseVarScope("@session",
+	x, list, err := p.parseVarScope(ConfigRule,
 		func(_ string, prog *program, p *parser) {
 			prog.emit0(p.l, bcSetSession)
 		},
@@ -635,7 +684,7 @@ func (p *parser) parseSessionScope() error {
 }
 
 func (p *parser) parseConstScope() error {
-	x, list, err := p.parseVarScope("@const",
+	x, list, err := p.parseVarScope(ConstRule,
 		func(_ string, prog *program, p *parser) {
 			prog.emit0(p.l, bcSetConst)
 		},
@@ -656,7 +705,8 @@ func (p *parser) parseVarScope(rulename string,
 	}
 	p.l.next()
 
-	prog := newProgram(rulename, progSession)
+	prog := newProgram(p.policy, rulename, progSession)
+	must(p.policy.addEvent(rulename, prog), "session must be unique")
 
 	p.enterScopeTop(entryVar, prog)
 	defer func() {
@@ -673,7 +723,9 @@ func (p *parser) parseVarScope(rulename string,
 			if p.l.token != tkId {
 				return nil, nil, p.err("expect a symbol as variable name")
 			}
-			gname := p.l.valueText
+
+			// allow placeholder inside of the var scope
+			gname := p.varName(p.l.valueText)
 
 			if !p.l.expect(tkAssign) {
 				return nil, nil, p.err("expect a '=' for variable assignment")
@@ -706,10 +758,6 @@ func (p *parser) parseVarScope(rulename string,
 	return prog, nlist, nil
 }
 
-// parsing a user defined script function
-// function name'(' arg-list ')'
-// function's argument are been treated just like local variables, since they
-// will be put into the stack by the caller
 func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 	funcName := ""
 
@@ -723,11 +771,8 @@ func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 	} else {
 		funcName = p.policy.nextAnonymousFuncName()
 	}
-	if !p.l.expectCurrent(tkLPar) {
-		return "", p.l.toError()
-	}
 
-	prog := newProgram(funcName, progFunc)
+	prog := newProgram(p.policy, funcName, progFunc)
 	p.enterScopeTop(entryFunc, prog)
 	defer func() {
 		p.leaveScope()
@@ -742,6 +787,12 @@ func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 		}
 	}()
 
+	// (0) Parsing function's argument list section
+
+	if !p.l.expectCurrent(tkLPar) {
+		return "", p.l.toError()
+	}
+
 	// parsing the function's argument and just treat them as
 	if p.l.next() != tkRPar {
 		argcnt := 0
@@ -749,6 +800,10 @@ func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 			if !p.l.expectCurrent(tkId) {
 				return "", p.l.toError()
 			}
+			if p.l.valueText == varPlaceholder {
+				return "", p.err("argument name cannot be defined as placeholder")
+			}
+
 			idx := p.defLocalVar(p.l.valueText)
 			if idx == symError {
 				return "", p.err("argument name duplicated")
@@ -769,17 +824,33 @@ func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 	}
 	p.l.next()
 
-	// reserve a frame slot
+	// After all the argument been reserved, lastly reserve a frame slot to maintain
+	// ABI
 	p.mustAddLocalVar("#frame")
 
-	// now parsing the function body
-	if err := p.parseBody(prog); err != nil {
-		return "", err
+	// (1) Parsing function body
+
+	// We currently support 2 types of function style, one is one line short
+	// function definition and the other is full function definition
+
+	if p.l.token == tkColon {
+		p.l.next()
+		// one liner function will have to return an expression
+		if err := p.parseExpr(prog); err != nil {
+			return "", err
+		}
+		prog.emit0(p.l, bcReturn)
+	} else {
+		// now parsing the function body
+		if err := p.parseBody(prog); err != nil {
+			return "", err
+		}
+		// always generate a return nil at the end of the function
+		prog.emit0(p.l, bcLoadNull)
+		prog.emit0(p.l, bcReturn)
 	}
 
-	// always generate a return nil at the end of the function
-	prog.emit0(p.l, bcLoadNull)
-	prog.emit0(p.l, bcReturn)
+	// (2) Finish the function population
 	prog.localSize = p.stbl.topMaxLocal() - 1
 	prog.emit1At(p.l, localR, bcReserveLocal, p.stbl.topMaxLocal()-1)
 
@@ -809,8 +880,9 @@ func (p *parser) parseRule() error {
 		}
 		p.l.next()
 	} else {
-		return p.err("unexpected token here, expect a string/identifier or a [id] to " +
-			"represent rule name")
+		return p.err("unexpected token here! A rule *MUST* have an identifier " +
+			"to represent event name, can be a string literal, an " +
+			"identifier or a '[' id ']' for documentation")
 	}
 
 	// notes the name must be none empty and also must not start with @, which is
@@ -822,7 +894,7 @@ func (p *parser) parseRule() error {
 		return p.err("invalid rule name, cannot start with @ which is builtin name")
 	}
 
-	prog := newProgram(name, progRule)
+	prog := newProgram(p.policy, name, progRule)
 	p.enterScopeTop(entryRule, prog)
 	p.mustAddLocalVar("#frame")
 	defer func() {
@@ -831,26 +903,11 @@ func (p *parser) parseRule() error {
 
 	localR := prog.patch(p.l)
 
-	// check whether we have a conditional when, otherwise generate default match
-	// condition
-	if p.l.token == tkWhen {
-		p.l.next()
-		err := p.parseExpr(prog)
-		if err != nil {
-			return err
-		}
-		prog.emit0(p.l, bcMatch)
-	} else {
-		// bytecode for compare current event to be the same as the rule name
-		// essentially is when event == "rule_name"
-		prog.emit0(p.l, bcLoadDollar)
-		idx := prog.addStr(name)
-		prog.emit1(p.l, bcLoadStr, idx)
-		prog.emit0(p.l, bcEq)
-		prog.emit0(p.l, bcMatch)
+	if !p.policy.addEvent(name, prog) {
+		return p.err("invalid rule name, the rule has already been existed")
 	}
 
-	// allow an optional arrow to indicate this is a rule, this is the preferred
+	// Allow an optional arrow to indicate this is a rule, this is the preferred
 	// grammar to indicate the rule definition inside
 	if p.l.token == tkArrow {
 		p.l.next()
@@ -1203,12 +1260,50 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme, popExpr bool) (boo
 		}
 		return true, nil
 	} else {
+		// try to consume rest as expression like grammar until we cannot eat any
+		// tokens
+		if err := p.parseBasicStmtExprRest(prog); err != nil {
+			return false, err
+		}
+
 		// pop the last expression just been evaluated
 		if popExpr {
 			prog.emit0(p.l, bcPop)
 		}
 		return false, nil
 	}
+}
+
+// this is used to catch up cases when the statement is not a statement, ie
+// not an assignment statement but really an expression. This is hard for
+// our case since it requires multiple look aheads to decide and we are one
+// pass generator/compiler which does not yield AST sorts of things. We cannot
+// turn back. The following parser will try to pick up where we left and continue
+// as an expression and generate expression code. It is relative complicated
+func (p *parser) parseBasicStmtExprRest(prog *program) error {
+
+	// (0) try to get the operator afterwards to see whether it is a bin
+	if prec := p.binPrecedence(p.l.token); prec != -1 {
+		// need to pick up until we hit a none binary operators
+		for prec != -1 {
+			if err := p.parseBinaryRest(prog, prec); err != nil {
+				return err
+			}
+			prec = p.binPrecedence(p.l.token)
+		}
+	}
+
+	// (1) after the section (0) we know that we have consumed all the possible
+	//     binary operators, now we should try the ternary dangling, which is
+	//     if like statement
+	if err := p.parseTernaryRest(prog); err != nil {
+		return err
+	}
+
+	// now we are done to consume up all the expression like statement and we
+	// should not see any other valid dangling, theoretically :)
+
+	return nil
 }
 
 func (p *parser) parseStmt(prog *program) error {
@@ -1256,13 +1351,8 @@ func (p *parser) parseTry(prog *program,
 	tryGen func(*program) error,
 	elseGen func(*program) error,
 ) error {
-	must(p.l.token == tkTry, "must be try")
-
 	// add a frame of exception
 	pushexp := prog.patch(p.l)
-
-	// eat the try
-	p.l.next()
 
 	// generate try body
 	if err := tryGen(prog); err != nil {
@@ -1325,6 +1415,8 @@ func (p *parser) parseTryStmt(prog *program) error {
 		p.leaveScope()
 		return nil
 	}
+
+	p.l.next()
 	return p.parseTry(prog, parseChunk, parseChunk)
 }
 
@@ -1333,13 +1425,8 @@ func (p *parser) parseBranch(prog *program,
 	dangling func(*program) error, /* invoked whenever a branch does have dangling,
 	   notes, could be elif or else */
 ) error {
-	must(p.l.token == tkIf, "must be if")
-
 	var jump_out []int
 	var prev_jmp int
-
-	// skip if
-	p.l.next()
 
 	// (0) Parse the leading If, which does not allow nested if
 	if err := p.parseTernary(prog); err != nil {
@@ -1442,6 +1529,7 @@ func (p *parser) parseBranchStmtBody(prog *program) error {
 }
 
 func (p *parser) parseBranchStmt(prog *program) error {
+	p.l.next()
 	return p.parseBranch(
 		prog,
 		p.parseBranchStmtBody,
@@ -1497,12 +1585,12 @@ func (p *parser) parseReturn(prog *program) error {
 }
 
 // 1) froever loop, just jump back to where it starts
-func (p *parser) parseForeverLoop(prog *program) error {
+func (p *parser) parseForeverLoop(prog *program, bodyGen func(*program) error) error {
 	p.enterLoopScope()
 
 	loopHeader := prog.label()
 
-	if err := p.parseBody(prog); err != nil {
+	if err := bodyGen(prog); err != nil {
 		return err
 	}
 
@@ -1526,7 +1614,7 @@ func (p *parser) parseForeverLoop(prog *program) error {
 //        let key, val = ...
 //               ^
 // -------------------------------------------------------------------
-func (p *parser) parseIteratorLoop(prog *program, key string) error {
+func (p *parser) parseIteratorLoop(prog *program, key string, bodyGen func(*program) error) error {
 	must(p.l.token == tkComma, "must be comma")
 
 	// 1. parsing the value local variable name
@@ -1579,7 +1667,7 @@ func (p *parser) parseIteratorLoop(prog *program, key string) error {
 	prog.emit1(p.l, bcStoreLocal, keyIdx)
 
 	// 4.2 loop body parsing
-	if err := p.parseBody(prog); err != nil {
+	if err := bodyGen(prog); err != nil {
 		return err
 	}
 
@@ -1608,7 +1696,7 @@ func (p *parser) parseIteratorLoop(prog *program, key string) error {
 }
 
 // notes, this assumes the trip count's initial statement has been finished
-func (p *parser) parseTripCountLoopRest(prog *program) error {
+func (p *parser) parseTripCountLoopRest(prog *program, bodyGen func(*program) error) error {
 	must(p.l.token == tkSemicolon, "must be ;")
 	must(p.isLoop(), "loop must already setup")
 
@@ -1693,7 +1781,7 @@ func (p *parser) parseTripCountLoopRest(prog *program) error {
 	// after condition jump to the loop body
 	prog.emit1At(p.l, condJump, bcJump, prog.label())
 
-	if err := p.parseBody(prog); err != nil {
+	if err := bodyGen(prog); err != nil {
 		return err
 	}
 
@@ -1714,7 +1802,7 @@ func (p *parser) parseTripCountLoopRest(prog *program) error {
 }
 
 // full entry, ie start with let key
-func (p *parser) parseTripCountLoopFull(prog *program, key string) error {
+func (p *parser) parseTripCountLoopFull(prog *program, key string, bodyGen func(*program) error) error {
 	must(p.l.token == tkAssign, "must be =")
 	p.enterLoopScope()
 	defer func() {
@@ -1732,20 +1820,20 @@ func (p *parser) parseTripCountLoopFull(prog *program, key string) error {
 	if !p.l.expectCurrent(tkSemicolon) {
 		return p.l.toError()
 	}
-	return p.parseTripCountLoopRest(prog)
+	return p.parseTripCountLoopRest(prog, bodyGen)
 }
 
-func (p *parser) parseTripCountLoopNoInit(prog *program) error {
+func (p *parser) parseTripCountLoopNoInit(prog *program, bodyGen func(*program) error) error {
 	must(p.l.token == tkSemicolon, "must be ;")
 	p.enterLoopScope()
 	defer func() {
 		p.leaveScope()
 	}()
 
-	return p.parseTripCountLoopRest(prog)
+	return p.parseTripCountLoopRest(prog, bodyGen)
 }
 
-func (p *parser) parseIteratorOrTripLoop(prog *program) error {
+func (p *parser) parseIteratorOrTripLoop(prog *program, bodyGen func(*program) error) error {
 	must(p.l.token == tkLet, "must be let")
 
 	if !p.l.expect(tkId) {
@@ -1756,9 +1844,9 @@ func (p *parser) parseIteratorOrTripLoop(prog *program) error {
 	p.l.next()
 
 	if p.l.token == tkComma {
-		return p.parseIteratorLoop(prog, key)
+		return p.parseIteratorLoop(prog, key, bodyGen)
 	} else if p.l.token == tkAssign {
-		return p.parseTripCountLoopFull(prog, key)
+		return p.parseTripCountLoopFull(prog, key, bodyGen)
 	} else {
 		return p.err("invalid token, expect a ',' for a range for loop or " +
 			"a '=' to start a trip count foreach's initial statement")
@@ -1766,7 +1854,7 @@ func (p *parser) parseIteratorOrTripLoop(prog *program) error {
 }
 
 // 3) condition loop
-func (p *parser) parseConditionLoop(prog *program) error {
+func (p *parser) parseConditionLoop(prog *program, bodyGen func(*program) error) error {
 
 	loopHeader := prog.label()
 
@@ -1780,7 +1868,7 @@ func (p *parser) parseConditionLoop(prog *program) error {
 
 	// lastly, parse the body of the loop
 	p.enterLoopScope()
-	if err := p.parseBody(prog); err != nil {
+	if err := bodyGen(prog); err != nil {
 		return err
 	}
 
@@ -1800,7 +1888,7 @@ func (p *parser) parseConditionLoop(prog *program) error {
 	return nil
 }
 
-func (p *parser) parseFor(prog *program) error {
+func (p *parser) parseForImpl(prog *program, bodyGen func(*program) error) error {
 	p.l.next()
 
 	switch p.l.token {
@@ -1810,7 +1898,7 @@ func (p *parser) parseFor(prog *program) error {
 		// for {
 		//   ...
 		// }
-		return p.parseForeverLoop(prog)
+		return p.parseForeverLoop(prog, bodyGen)
 
 	case tkLet:
 		// for let loop, ie iterator or trip style
@@ -1824,13 +1912,13 @@ func (p *parser) parseFor(prog *program) error {
 		// Trip style: only one induction variable
 		// for let i = expression; i < 100; i = i + 1 {
 		// }
-		return p.parseIteratorOrTripLoop(prog)
+		return p.parseIteratorOrTripLoop(prog, bodyGen)
 
 	case tkSemicolon:
 		// trip count loop, but ignore the initial statement // ie
 		// for ; condition; step {
 		// }
-		return p.parseTripCountLoopNoInit(prog)
+		return p.parseTripCountLoopNoInit(prog, bodyGen)
 
 	default:
 		// condition loop, ie the expression been setup is been treated as a
@@ -1838,8 +1926,15 @@ func (p *parser) parseFor(prog *program) error {
 		// for condition {
 		//   ..
 		// }
-		return p.parseConditionLoop(prog)
+		return p.parseConditionLoop(prog, bodyGen)
 	}
+}
+
+func (p *parser) parseFor(prog *program) error {
+	return p.parseForImpl(
+		prog,
+		p.parseBody,
+	)
 }
 
 // loop control
@@ -1861,7 +1956,85 @@ func (p *parser) parseContinue(prog *program) error {
 	return nil
 }
 
-func (p *parser) parseBody(prog *program) error {
+func (p *parser) parseBodyStmt(prog *program) (bool, error) {
+	hasSep := true
+
+	switch p.l.token {
+	case tkSemicolon:
+		break
+
+	case tkLBra:
+		p.enterNormalScope()
+		if err := p.parseBody(prog); err != nil {
+			return false, err
+		}
+		p.leaveScope()
+		hasSep = false
+		break
+
+	case tkLet:
+		if err := p.parseVarDecl(prog, symtVar); err != nil {
+			return false, err
+		}
+		break
+
+	case tkConst:
+		if err := p.parseVarDecl(prog, symtConst); err != nil {
+			return false, err
+		}
+		break
+
+	case tkIf:
+		if err := p.parseBranchStmt(prog); err != nil {
+			return false, err
+		}
+		hasSep = false
+		break
+
+	case tkTry:
+		if err := p.parseTryStmt(prog); err != nil {
+			return false, err
+		}
+		hasSep = false
+		break
+
+	case tkFor:
+		if err := p.parseFor(prog); err != nil {
+			return false, err
+		}
+		hasSep = false
+		break
+
+	case tkBreak:
+		if err := p.parseBreak(prog); err != nil {
+			return false, err
+		}
+		break
+
+	case tkContinue:
+		if err := p.parseContinue(prog); err != nil {
+			return false, err
+		}
+		break
+
+	case tkReturn:
+		if err := p.parseReturn(prog); err != nil {
+			return false, err
+		}
+		break
+
+	default:
+		if err := p.parseStmt(prog); err != nil {
+			return false, err
+		}
+		break
+	}
+
+	return hasSep, nil
+}
+
+func (p *parser) parseBodyImpl(prog *program,
+	stmt func(*program) (bool, error)) error {
 	if !p.l.expectCurrent(tkLBra) {
 		return p.l.toError()
 	}
@@ -1873,77 +2046,9 @@ func (p *parser) parseBody(prog *program) error {
 	}
 
 	for {
-		hasSep := true
-
-		switch p.l.token {
-		case tkSemicolon:
-			break
-
-		case tkLBra:
-			p.enterNormalScope()
-			if err := p.parseBody(prog); err != nil {
-				return err
-			}
-			p.leaveScope()
-			hasSep = false
-			break
-
-		case tkLet:
-			if err := p.parseVarDecl(prog, symtVar); err != nil {
-				return err
-			}
-			break
-
-		case tkConst:
-			if err := p.parseVarDecl(prog, symtConst); err != nil {
-				return err
-			}
-			break
-
-		case tkIf:
-			if err := p.parseBranchStmt(prog); err != nil {
-				return err
-			}
-			hasSep = false
-			break
-
-		case tkTry:
-			if err := p.parseTryStmt(prog); err != nil {
-				return err
-			}
-			hasSep = false
-			break
-
-		case tkFor:
-			if err := p.parseFor(prog); err != nil {
-				return err
-			}
-			hasSep = false
-			break
-
-		case tkBreak:
-			if err := p.parseBreak(prog); err != nil {
-				return err
-			}
-			break
-
-		case tkContinue:
-			if err := p.parseContinue(prog); err != nil {
-				return err
-			}
-			break
-
-		case tkReturn:
-			if err := p.parseReturn(prog); err != nil {
-				return err
-			}
-			break
-
-		default:
-			if err := p.parseStmt(prog); err != nil {
-				return err
-			}
-			break
+		hasSep, err := stmt(prog)
+		if err != nil {
+			return err
 		}
 
 		if hasSep {
@@ -1962,16 +2067,16 @@ func (p *parser) parseBody(prog *program) error {
 	return nil
 }
 
+func (p *parser) parseBody(prog *program) error {
+	return p.parseBodyImpl(
+		prog,
+		p.parseBodyStmt,
+	)
+}
+
 // Expression parsing, using simple precedence climbing style way
 func (p *parser) parseExpr(prog *program) error {
-	switch p.l.token {
-	case tkIf:
-		return p.parseBranchExpr(prog)
-	case tkTry:
-		return p.parseTryExpr(prog)
-	default:
-		return p.parseTernary(prog)
-	}
+	return p.parseTernary(prog)
 }
 
 func (p *parser) parseTryExpr(prog *program) error {
@@ -2010,6 +2115,9 @@ func (p *parser) parseExprStmt(prog *program) (bool, bool, error) {
 		return true, false, p.parseVarDecl(prog, symtConst)
 	case tkFor:
 		return false, false, p.parseFor(prog)
+	case tkSemicolon:
+		return false, false, nil
+
 	default:
 		lexeme := p.lexeme()
 		p.l.next()
@@ -2099,35 +2207,37 @@ func (p *parser) parseTernary(prog *program) error {
 	if err := p.parseBin(prog); err != nil {
 		return err
 	}
-	ntk := p.l.token
+	return p.parseTernaryRest(prog)
+}
 
+func (p *parser) parseTernaryRest(prog *program) error {
+	ntk := p.l.token
 	if ntk == tkIf {
-		patch_point := prog.patch(p.l)
 		p.l.next()
 
+		// this is the if condition
 		if err := p.parseBin(prog); err != nil {
 			return err
 		}
 
-		// notes we need to use comma instead of colon, since clone is already used
-		// as method call, otherwise the parser has ambigiuty which needs extra
-		// rules to resolve
+		// position to insert bcTernary instruction
+		patch_point := prog.patch(p.l)
+
 		if !p.l.expectCurrent(tkElse) {
 			return p.l.toError()
 		}
 		p.l.next()
 
-		jump_out := prog.patch(p.l)
-
-		// ternary operator, jump when false
-		prog.emit1At(p.l, patch_point, bcTernary, prog.label())
-
+		// else branch generated value, when bcTernary evaluates to false, it will
+		// jump here
 		if err := p.parseBin(prog); err != nil {
 			return err
 		}
 
-		// lastly, patch jump out to here
-		prog.emit1At(p.l, jump_out, bcJump, prog.label())
+		// if condition evaluation to be true, then jumpping here, otherwise it
+		// fallthrough to else branch experssion evaluation
+		prog.emit1At(p.l, patch_point, bcTernary, prog.label())
+
 		return nil
 	} else {
 		return nil
@@ -2169,6 +2279,10 @@ func (p *parser) parseBinary(prog *program, prec int) error {
 		return err
 	}
 
+	return p.parseBinaryRest(prog, prec)
+}
+
+func (p *parser) parseBinaryRest(prog *program, prec int) error {
 	for {
 		tk := p.l.token
 
@@ -2309,9 +2423,81 @@ func (p *parser) parseUnary(prog *program) error {
 	return nil
 }
 
+func (p *parser) parseExprScope(prog *program) error {
+	p.enterNormalScope()
+	defer func() {
+		p.leaveScope()
+	}()
+
+	isExpr := false
+
+	if p.l.token != tkRBra {
+		needSemicolon, ise, err := p.parseExprStmt(prog)
+		if err != nil {
+			return err
+		}
+		isExpr = ise
+
+		// if the expression expects a ; afterwards, then we need to check it
+		if needSemicolon {
+			if !p.l.expectCurrent(tkSemicolon) {
+				return p.l.toError()
+			}
+			p.l.next()
+		}
+	}
+
+	for {
+		if p.l.token == tkRBra {
+			break
+		}
+
+		// pop previous expression if applicable
+		if isExpr {
+			// pop the expression out of the stack in case it is an expression and we
+			// have following statement. If this is the last expression then we will
+			// undo it at very last when we are
+			prog.emit0(p.l, bcPop)
+		}
+
+		// next statement
+		needSemicolon, ise, err := p.parseExprStmt(prog)
+		if err != nil {
+			return err
+		}
+		isExpr = ise
+
+		// if the expression expects a ; afterwards, then we need to check it
+		if needSemicolon {
+			if !p.l.expectCurrent(tkSemicolon) {
+				return p.l.toError()
+			}
+			p.l.next()
+		}
+	}
+
+	if !isExpr {
+		// lastone isnot an expression, then report error
+		return p.err("expression scope's last statement must be an expression " +
+			"which can generate a value. It cannot be things like " +
+			"for loop, let/const declarations!")
+	}
+
+	// eat the last }
+	must(p.l.token == tkRBra, "must be }")
+	p.l.next()
+	return nil
+}
+
 func (p *parser) parsePrimary(prog *program, l lexeme) error {
 	tk := l.token
 	switch tk {
+	case tkIf:
+		return p.parseBranchExpr(prog)
+
+	case tkTry:
+		return p.parseTryExpr(prog)
+
 	case tkInt:
 		idx := prog.addInt(l.ival)
 		prog.emit1(p.l, bcLoadInt, idx)
@@ -2322,9 +2508,15 @@ func (p *parser) parsePrimary(prog *program, l lexeme) error {
 		prog.emit1(p.l, bcLoadReal, idx)
 		break
 
-	case tkStr, tkMStr:
+	case tkStr:
 		strV := l.sval
 		return p.parseStrInterpolation(prog, strV)
+
+	// long string does not support interpolation
+	case tkMStr:
+		strV := l.sval
+		prog.emit1(p.l, bcLoadStr, prog.addStr(strV))
+		break
 
 	case tkTrue:
 		prog.emit0(p.l, bcLoadTrue)
@@ -2376,6 +2568,13 @@ func (p *parser) parsePrimary(prog *program, l lexeme) error {
 
 	case tkDollar, tkId, tkCId, tkSId, tkDId:
 		if err := p.parsePExpr(prog, tk, l.sval); err != nil {
+			return err
+		}
+		break
+
+	case tkLExprBra:
+		// experssion scope value, same as if true { ... }
+		if err := p.parseExprScope(prog); err != nil {
 			return err
 		}
 		break
@@ -2512,7 +2711,7 @@ func (p *parser) parseVCall(prog *program) error {
 // The unbounded call's name resolution is little bit different from the normal
 // symbol resolution. The difference is that when we don't know a name for
 // variable loading/storing, we issue bcLoadVar/bcStoreVar; for function call
-// we issue bcCall.
+// we issue bcVCall.
 // In general, the name of unbounded function call is as following:
 // 1) try to resolve it as known symbol
 //    ie local, session or const
@@ -2520,9 +2719,10 @@ func (p *parser) parseVCall(prog *program) error {
 // 3) Once all compilation is done, we try to lookup the name as following :
 //   3.1) If it is an intrinsic function call, then just issue it
 //   3.2) If it is a script function call, then just issue it
-//   3.3) Issue the function call with bcCall, which is the dynamic call's
-//        up call instruction. Ultimately, this instruction will become a
-//        embedder's call function callback invokation.
+//   3.3) Otherwise, try to load the function name as dynamic variable on to
+//        the stack and then issue the bcVCall
+//
+// NOTES(dpeng): bcCall is depracated
 
 func (p *parser) parseUnboundCall(prog *program,
 	name string,
@@ -2575,7 +2775,8 @@ func (p *parser) parseUnboundCall(prog *program,
 		break
 
 	default:
-		// notes if it is dynamic variable then just dispatch it with bcCall
+		// notes if it is dynamic variable then just dispatch it with bcVCall later
+		// on instead of eargly issue it
 		p.callPatch = append(p.callPatch, callentry{
 			entryPos: entryIndex,
 			swapPos:  swapPos,
@@ -2626,10 +2827,11 @@ func (p *parser) patchAllCall() {
 				e.prog.emit1At(p.l, e.entryPos, bcLoadInt, idx)
 				e.prog.emit1At(p.l, e.callPos, bcSCall, e.arg)
 			} else {
-
+				// okay, the variable here is unknow to us, now let's just issue it
+				// as dynamic variable loading and then call on this dynamic variable
 				idx := e.prog.addStr(e.symbol)
-				e.prog.emit1At(p.l, e.entryPos, bcLoadStr, idx)
-				e.prog.emit1At(p.l, e.callPos, bcCall, e.arg)
+				e.prog.emit1At(p.l, e.entryPos, bcLoadVar, idx)
+				e.prog.emit1At(p.l, e.callPos, bcVCall, e.arg)
 			}
 		}
 	}
@@ -3013,14 +3215,28 @@ func (p *parser) parseMap(prog *program) error {
 		for {
 			cnt++
 
-			if p.l.token == tkStr || p.l.token == tkId {
+			switch p.l.token {
+			case tkStr, tkId:
 				idx := prog.addStr(p.l.valueText)
 				prog.emit1(p.l, bcLoadStr, idx)
-			} else {
+				p.l.next()
+				break
+
+			case tkLSqr:
+				p.l.next()
+				if err := p.parseExpr(prog); err != nil {
+					return err
+				}
+				if !p.l.expectCurrent(tkRSqr) {
+					return p.l.toError()
+				}
+				p.l.next()
+
+			default:
 				return p.err("unexpected token, expect a quoted string or identifier as map key")
 			}
 
-			if !p.l.expect(tkColon) {
+			if !p.l.expectCurrent(tkColon) {
 				return p.l.toError()
 			}
 			p.l.next()
@@ -3192,4 +3408,287 @@ func (p *parser) parseStrInterpolation(prog *program, strV string) error {
 	}
 
 	return nil
+}
+
+// -----------------------------------------------------------------------------
+// Configuration section parsing. The configuration section is mostly a unqiue
+// feature provide by us. Instead of allowing another freaking configuration
+// file to be used by user, we try to embed configuration, normal yaml, json,
+// xml into our code. Thus we can blur the boundary between configuration and
+// script evaluation. Additionally, this makes the code much more compact and
+// we do not need to extend the existed configuration format, or even invent
+// our own configuration style to support dynamic expression/code, which is
+// typical headache for many users.
+func (p *parser) parseConfig() error {
+	// try to find an existed config scope
+	prog := p.policy.config
+	if prog == nil {
+		prog = newProgram(p.policy, ConfigRule, progConfig)
+		p.policy.config = prog
+	}
+	return p.parseConfigScope(prog)
+}
+
+// config scope related if branch statement ------------------------------------
+func (p *parser) parseConfigScopeBranchStmtBody(prog *program) error {
+	if !p.l.expectCurrent(tkLBra) {
+		return p.l.toError()
+	}
+	{
+		p.enterNormalScope()
+		if err := p.parseConfigScopeBody(prog); err != nil {
+			return err
+		}
+		p.leaveScope()
+	}
+
+	return nil
+}
+
+func (p *parser) parseConfigScopeBranchStmt(prog *program) error {
+	p.l.next()
+	return p.parseBranch(
+		prog,
+		p.parseConfigScopeBranchStmtBody,
+		func(_ *program) error {
+			return nil
+		},
+	)
+}
+
+// config scope related try statement ------------------------------------------
+func (p *parser) parseConfigScopeTryStmt(prog *program) error {
+	parseChunk := func(prog *program) error {
+		p.enterNormalScope()
+		if err := p.parseConfigScopeBody(prog); err != nil {
+			return err
+		}
+		p.leaveScope()
+		return nil
+	}
+
+	p.l.next()
+	return p.parseTry(prog, parseChunk, parseChunk)
+}
+
+// config scope related loop statement ------------------------------------------
+func (p *parser) parseConfigScopeFor(prog *program) error {
+	return p.parseForImpl(
+		prog,
+		p.parseConfigScopeBody,
+	)
+}
+
+// this syntax is desigend to distinguish normal statement from configuration
+// statement and also keep the bare minimum syntax needs to be learnt from.
+func (p *parser) parseConfigScopeCmd(prog *program) error {
+	if p.l.token == tkDot {
+		if !p.l.expect(tkId) {
+			return p.l.toError()
+		}
+		prog.emit1(p.l, bcLoadStr, prog.addStr(p.l.valueText))
+		p.l.next()
+	} else if p.l.token == tkLSqr {
+		p.l.next()
+		if err := p.parseExpr(prog); err != nil {
+			return err
+		}
+
+		// ] following the expression
+		if !p.l.expectCurrent(tkRSqr) {
+			return p.l.toError()
+		}
+		p.l.next()
+	} else if p.l.token == tkId {
+		prog.emit1(p.l, bcLoadStr, prog.addStr(p.l.valueText))
+		p.l.next()
+	} else {
+		return p.err("unknown token for config command instruction")
+	}
+
+	switch p.l.token {
+	case tkAssign:
+		p.l.next()
+		if err := p.parseExpr(prog); err != nil {
+			return err
+		}
+
+		prog.emit0(
+			p.l,
+			bcConfigPropertySet,
+		)
+		break
+
+	case tkLPar:
+		// command invocation
+		if cnt, err := p.parseCallArgs(prog); err != nil {
+			return err
+		} else {
+			prog.emit1(
+				p.l,
+				bcConfigCommand,
+				cnt,
+			)
+		}
+		break
+
+	default:
+		return p.err("unknown statement inside of config scope, " +
+			"you are trying to set a config item, but with " +
+			"invalid operator. A config name, like .foo or [\"bar\"] " +
+			"should follow a '=' to set a property or a '(' argument ')' " +
+			"set a config command")
+	}
+	return nil
+}
+
+func (p *parser) parseConfigScopeBasicStmt(prog *program) (bool, error) {
+	lexeme := p.lexeme()
+	p.l.next()
+
+	if lexeme.token == tkId {
+		if p.l.token == tkLBra {
+			// we specifically treat any UNKNOWN identifier suffixed with a { as a
+			// config scope statement, ie getting config scope statement
+			return false, p.parseConfigScopeInner(prog, lexeme.sval)
+		} else if p.l.token == tkId || p.l.token == tkLSqr || p.l.token == tkDot {
+			p.enterNormalScope()
+			prog.emit1(p.l, bcConfigPush, prog.addStr(lexeme.sval))
+
+			// 1. xxx name(...)
+			// 2. xxx .name(...)
+			// 3. xxx [name](...)
+			if err := p.parseConfigScopeCmd(prog); err != nil {
+				return false, err
+			}
+
+			prog.emit0(p.l, bcConfigPop)
+			p.leaveScope()
+
+			// notes this format of syntax require a semicolon afterwards
+			return true, nil
+		}
+	}
+
+	_, err := p.parseBasicStmt(prog, lexeme, true)
+	return true, err
+}
+
+func (p *parser) parseConfigScopeBodyStmt(prog *program) (bool, error) {
+	hasSep := true
+
+	switch p.l.token {
+	case tkSemicolon:
+		break
+
+	case tkLBra:
+		p.enterNormalScope()
+		if err := p.parseConfigScopeBody(prog); err != nil {
+			return false, err
+		}
+		p.leaveScope()
+		hasSep = false
+		break
+
+	case tkLet:
+		if err := p.parseVarDecl(prog, symtVar); err != nil {
+			return false, err
+		}
+		break
+
+	case tkConst:
+		if err := p.parseVarDecl(prog, symtConst); err != nil {
+			return false, err
+		}
+		break
+
+	case tkIf:
+		if err := p.parseConfigScopeBranchStmt(prog); err != nil {
+			return false, err
+		}
+		hasSep = false
+		break
+
+	case tkTry:
+		if err := p.parseConfigScopeTryStmt(prog); err != nil {
+			return false, err
+		}
+		hasSep = false
+		break
+
+	case tkFor:
+		if err := p.parseConfigScopeFor(prog); err != nil {
+			return false, err
+		}
+		hasSep = false
+		break
+
+	case tkBreak:
+		if err := p.parseBreak(prog); err != nil {
+			return false, err
+		}
+		break
+
+	case tkContinue:
+		if err := p.parseContinue(prog); err != nil {
+			return false, err
+		}
+		break
+
+	// notes inside of the configuration, user are not allowed to return from
+	// the process since this will just break the configuration process. If
+	// user want to terminate the process user needs to just raise an error
+	// via other statement, like abort
+
+	// setting the configuration section's own property and its call, etc ...
+	case tkDot, tkLSqr:
+		if err := p.parseConfigScopeCmd(prog); err != nil {
+			return false, err
+		}
+		break
+
+	default:
+		if x, err := p.parseConfigScopeBasicStmt(prog); err != nil {
+			return false, err
+		} else {
+			hasSep = x
+		}
+		break
+	}
+
+	return hasSep, nil
+}
+
+func (p *parser) parseConfigScopeBody(prog *program) error {
+	return p.parseBodyImpl(
+		prog,
+		p.parseConfigScopeBodyStmt,
+	)
+}
+
+func (p *parser) parseConfigScopeInner(prog *program, name string) error {
+	p.enterNormalScope()
+	prog.emit1(p.l, bcConfigPush, prog.addStr(name))
+	if err := p.parseConfigScopeBody(prog); err != nil {
+		return err
+	}
+	prog.emit0(p.l, bcConfigPop)
+	p.leaveScope()
+	return nil
+}
+
+func (p *parser) parseConfigScope(prog *program) error {
+	p.enterScopeTop(entryConfig, prog)
+	defer func() {
+		p.leaveScope()
+	}()
+
+	if !p.l.expectCurrent(tkId) {
+		return p.l.toError()
+	}
+
+	// push the current config scope into the stack for evaluation
+	svcName := p.l.valueText
+	p.l.next()
+	return p.parseConfigScopeInner(prog, svcName)
 }

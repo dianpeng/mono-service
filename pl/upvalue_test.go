@@ -9,7 +9,7 @@ import (
 func runWithResult(code string) (Val, bool, *Policy) {
 	rr := NewValNull()
 	ret := &rr
-	eval := NewEvaluator(
+	eval := NewEvaluatorWithContextCallback(
 		func(_ *Evaluator, vname string) (Val, error) {
 			if vname == "a_int" {
 				return NewValInt(1), nil
@@ -23,10 +23,6 @@ func runWithResult(code string) (Val, bool, *Policy) {
 			return NewValNull(), fmt.Errorf("%s unknown var", vname)
 		},
 		nil,
-		func(_ *Evaluator, fname string, args []Val) (Val, error) {
-			return NewValNull(), fmt.Errorf("%s unknown func", fname)
-		},
-
 		func(_ *Evaluator, aname string, aval Val) error {
 			if aname == "output" {
 				*ret = aval

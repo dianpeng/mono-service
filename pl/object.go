@@ -82,6 +82,9 @@ type Closure interface {
 	Id() string
 	Info() string
 	Dump() string
+
+	// Call the closure or functions
+	Call(*Evaluator, []Val) (Val, error)
 }
 
 // Iterator interface, matching against the bytecode semantic
@@ -472,10 +475,32 @@ func newValScriptFunction(
 	}
 }
 
-func newValSFunc(sfunc *scriptFunc) Val {
+func newValSFunc(
+	sfunc *scriptFunc) Val {
 	return Val{
 		Type:  ValClosure,
 		vData: sfunc,
+	}
+}
+
+func newValNFunc(
+	nfunc *nativeFunc) Val {
+	return Val{
+		Type:  ValClosure,
+		vData: nfunc,
+	}
+}
+
+func NewValNativeFunction(
+	id string,
+	entry func([]Val) (Val, error),
+) Val {
+	return Val{
+		Type: ValClosure,
+		vData: NewNativeFunction(
+			id,
+			entry,
+		),
 	}
 }
 

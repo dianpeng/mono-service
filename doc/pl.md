@@ -1,8 +1,6 @@
 
 # PL (Policy Language)
 
-
-
 ## Introduction
 
 
@@ -59,8 +57,6 @@ PL features a highly flexible type system with following category
   1. Iterator (used for iterator loop)
   2. Closure (any callable object, ie script defined function or user defined function)
   3. Usr (Go/Native extension)
-
-
 
 #### Constructs
 
@@ -162,9 +158,7 @@ error.
 ```
 
 const {
-
  const1 = http::do("GET", "http://www.example.com"); // will just be initialized once
-
 }
 
 fn foo() {
@@ -235,7 +229,6 @@ rule a {
 
 
 #### Expression
-
 
 * Basic Expression
 

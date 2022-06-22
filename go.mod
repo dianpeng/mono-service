@@ -8,6 +8,5 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/stretchr/testify v1.7.1
-	golang.org/x/crypto v0.0.0-20220518034528-6f7dac969898
-	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
+	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e
 )

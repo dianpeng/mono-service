@@ -1,25 +1,28 @@
-package hservice
+package server
 
 import (
-	"github.com/dianpeng/mono-service/config"
 	_ "github.com/dianpeng/mono-service/module"
 	"sync"
 )
 
 type HService struct {
-	VHostList []*VHost
+	VHostList []*vhost
 	wg        *sync.WaitGroup
 }
 
-func NewHService(config *config.Config) (*HService, error) {
-	var vlist []*VHost
-	for _, vhost := range config.VHostList {
-		v, err := newVHost(vhost)
+func NewHService(pathList []string) (*HService, error) {
+	var vlist []*vhost
+
+	for _, p := range pathList {
+		vhs, err := createVHost(
+			p,
+		)
 		if err != nil {
 			return nil, err
 		}
-		vlist = append(vlist, v)
+		vlist = append(vlist, vhs)
 	}
+
 	return &HService{
 		VHostList: vlist,
 		wg:        &sync.WaitGroup{},

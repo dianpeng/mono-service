@@ -1,3 +1,44 @@
+#!/bin/mono --listener "@http_clear" --app "first_service"
+const {
+  variable1 = 100;
+  variable2 = http::GET("https://www.baidu.com");
+  _ = my_init();
+}
+
+config service {
+  .name = "first_service"; // bcCmdAttr
+  .comment = "Very cool services and should be looked at";
+  .t,ag = "kewl";
+  .router = "[GET, POST]/a/b/c/d";
+
+  // bcCmdGroupPush
+  request {
+    .basic_auth(
+      100,
+      fn() : request.method == 'GET', /* evaluated when session is on */
+      my_username,
+      my_password
+    );
+
+    .emit("main");
+  }
+
+  application concate();
+
+  response {
+    .gzip(
+      100, /* ratios */
+      yyy  /* some other configs */
+    );
+  }
+}
+
+session {
+}
+
+rule main {
+}
+
 fn testBasicArithmetic() {
   assert::eq(1, 1, "done");
   assert::eq(1+1, 2);

@@ -25,20 +25,34 @@ func init() {
 		},
 	)
 
+	printFmt := func(args []Val) string {
+		var buf []string
+		for _, x := range args {
+			str, err := x.ToString()
+			if err != nil {
+				str = fmt.Sprintf("[%s:unknown]", x.Id())
+			}
+			buf = append(buf, str)
+		}
+		return strings.Join(buf, " ")
+	}
+
 	addF(
 		"print",
 		"",
 		"%a*",
 		func(info *IntrinsicInfo, _ *Evaluator, _ string, args []Val) (Val, error) {
-			var buf []string
-			for _, x := range args {
-				str, err := x.ToString()
-				if err != nil {
-					str = fmt.Sprintf("[%s:unknown]", x.Id())
-				}
-				buf = append(buf, str)
-			}
-			fmt.Println(strings.Join(buf, " "))
+			fmt.Print(printFmt(args))
+			return NewValNull(), nil
+		},
+	)
+
+	addF(
+		"println",
+		"",
+		"%a*",
+		func(info *IntrinsicInfo, _ *Evaluator, _ string, args []Val) (Val, error) {
+			fmt.Println(printFmt(args))
 			return NewValNull(), nil
 		},
 	)

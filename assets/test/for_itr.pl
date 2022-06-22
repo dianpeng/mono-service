@@ -23,7 +23,7 @@ fn map_iter() {
   assert::eq(vals[0], 1);
   assert::eq(vals[1], 2);
 
-  let v = if true {
+  let v = |{
     let i = 0;
     for let _, k = [] {
       i++;
@@ -35,7 +35,7 @@ fn map_iter() {
 }
 
 fn list_iter() {
-  assert::eq(if true {
+  assert::eq(|{
     let i = 0;
     for let _, _ = [] {
       i++;
@@ -43,7 +43,7 @@ fn list_iter() {
     i;
   }, 0);
 
-  assert::eq(if true {
+  assert::eq(|{
     let i = 0;
     for let _, _ = [1] {
       i++;
@@ -51,7 +51,7 @@ fn list_iter() {
     i;
   }, 1);
 
-  assert::eq(if true {
+  assert::eq(|{
     let i = 0;
     for let _, _ = [2] {
       i++;
@@ -61,7 +61,7 @@ fn list_iter() {
 }
 
 fn str_iter() {
-  assert::eq(if true {
+  assert::eq(|{
     let i = 0;
     for let _, _ = "" {
       i++;
@@ -69,7 +69,7 @@ fn str_iter() {
     i;
   }, 0);
 
-  assert::eq(if true {
+  assert::eq(|{
     let i = 0;
     for let _, _ = "a" {
       i++;
@@ -77,7 +77,7 @@ fn str_iter() {
     i;
   }, 1);
 
-  assert::eq(if true {
+  assert::eq(|{
     let i = 0;
     for let _, _ = "ab" {
       i++;

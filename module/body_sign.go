@@ -6,11 +6,10 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/dianpeng/mono-service/config"
+	"github.com/dianpeng/mono-service/framework"
 	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/hrouter"
 	"github.com/dianpeng/mono-service/pl"
-	"github.com/dianpeng/mono-service/service"
 
 	// crypto
 	"crypto/md5"
@@ -48,7 +47,7 @@ type signResult struct {
 	body          *os.File
 }
 
-type bodySignService struct {
+type bodySignConfig struct {
 	tempDir          string
 	signPrefix       string
 	verifyPrefix     string
@@ -65,52 +64,29 @@ type bodySignInput struct {
 	body   io.Reader
 }
 
-type bodySignSession struct {
-	service *bodySignService
-	r       *signResult
-	op      string
-	method  string
-	res     service.SessionResource
+type bodySignApplication struct {
+	r      *signResult
+	op     string
+	method string
+	args   []pl.Val
+	config bodySignConfig
 }
 
-type bodySignServiceFactory struct{}
+type bodySignFactory struct{}
 
-func (b *bodySignService) Name() string {
-	return "body_sign"
-}
-
-func (b *bodySignService) IDL() string {
-	return ""
-}
-
-func (b *bodySignService) NewSession() (service.Session, error) {
-	session := &bodySignSession{
-		service: b,
-	}
-	return session, nil
-}
-
-func (s *bodySignSession) OnLoadVar(_ int, _ *pl.Evaluator, name string) (pl.Val, error) {
+func (s *bodySignApplication) OnLoadVar(_ int, name string) (pl.Val, error) {
 	return pl.NewValNull(), fmt.Errorf("module(body_sign): unknown variable %s", name)
 }
 
-func (s *bodySignSession) OnStoreVar(_ int, _ *pl.Evaluator, name string, _ pl.Val) error {
+func (s *bodySignApplication) OnStoreVar(_ int, name string, _ pl.Val) error {
 	return fmt.Errorf("module(body_sign): unknown variable %s for storing", name)
 }
 
-func (s *bodySignSession) OnCall(_ int, _ *pl.Evaluator, name string, _ []pl.Val) (pl.Val, error) {
-	return pl.NewValNull(), fmt.Errorf("module(body_sign): unknown function %s", name)
-}
-
-func (s *bodySignSession) OnAction(_ int, _ *pl.Evaluator, name string, _ pl.Val) error {
+func (s *bodySignApplication) OnAction(_ int, name string, _ pl.Val) error {
 	return fmt.Errorf("module(body_sign): unknown action %s", name)
 }
 
-func (b *bodySignSession) Service() service.Service {
-	return b.service
-}
-
-func (b *bodySignSession) reset() {
+func (b *bodySignApplication) reset() {
 	if b.r.body != nil {
 		name := b.r.body.Name()
 		b.r.body.Close()
@@ -121,10 +97,10 @@ func (b *bodySignSession) reset() {
 	b.method = ""
 }
 
-func (b *bodySignSession) Prepare(req *http.Request, p hrouter.Params) (interface{}, error) {
+func (b *bodySignApplication) Prepare(req *http.Request, p hrouter.Params) (interface{}, error) {
 	op := p.ByName("op")
 	if op == "" {
-		xx := req.Header.Get(b.service.opHeaderName)
+		xx := req.Header.Get(b.config.opHeaderName)
 		if xx == "" {
 			return nil, fmt.Errorf("body_sign op parameter is not specified")
 		}
@@ -132,7 +108,7 @@ func (b *bodySignSession) Prepare(req *http.Request, p hrouter.Params) (interfac
 
 	method := p.ByName("method")
 	if method == "" {
-		xx := req.Header.Get(b.service.methodHeaderName)
+		xx := req.Header.Get(b.config.methodHeaderName)
 		if xx == "" {
 			return nil, fmt.Errorf("body_sign method parameter is not specified")
 		}
@@ -141,7 +117,7 @@ func (b *bodySignSession) Prepare(req *http.Request, p hrouter.Params) (interfac
 	expect := ""
 
 	if op == "verify" {
-		expect = req.Header.Get(b.service.verifyHeaderName)
+		expect = req.Header.Get(b.config.verifyHeaderName)
 		if expect == "" {
 			return nil, fmt.Errorf("verification result header is not set")
 		}
@@ -155,83 +131,99 @@ func (b *bodySignSession) Prepare(req *http.Request, p hrouter.Params) (interfac
 	}, nil
 }
 
-func (b *bodySignSession) Start(r service.SessionResource) error {
-	b.res = r
+func (b *bodySignApplication) Done(_ interface{}) {
+	b.reset()
+}
+
+func (b *bodySignApplication) prepareConfig(
+	context framework.ServiceContext,
+) error {
+	cfg := framework.NewPLConfig(
+		context,
+		b.args,
+	)
+
+	cfg.TryGetStr(0, &b.config.tempDir, defTempDir)
+	cfg.TryGetStr(1, &b.config.signPrefix, defSignPrefix)
+	cfg.TryGetStr(2, &b.config.verifyPrefix, defVerifyPrefix)
+	cfg.TryGetStr(3, &b.config.verifyHeaderName, defVerifyHeaderName)
+	cfg.TryGetStr(4, &b.config.opHeaderName, defOpHeaderName)
+	cfg.TryGetStr(5, &b.config.methodHeaderName, defMethodHeaderName)
 	return nil
 }
 
-func (b *bodySignSession) Done(_ interface{}) {
-	b.reset()
-	b.res = nil
-}
+func (b *bodySignApplication) Accept(
+	ctx interface{},
+	context framework.ServiceContext,
+) (framework.ApplicationResult, error) {
+	if err := b.prepareConfig(context); err != nil {
+		return framework.ApplicationResult{}, err
+	}
 
-func (b *bodySignSession) Accept(ctx interface{}, _ *hpl.Hpl, _ hpl.SessionWrapper) (service.SessionResult, error) {
 	param, ok := ctx.(*bodySignInput)
 	if !ok {
-		return service.SessionResult{},
+		return framework.ApplicationResult{},
 			fmt.Errorf("module(body_sign): input context parameter invalid")
 	}
 
 	switch param.op {
 	case "sign":
 		if err := b.sign(param.body, param.method); err != nil {
-			return service.SessionResult{}, err
+			return framework.ApplicationResult{}, err
 		}
 		break
 
 	case "verify":
 		if err := b.verify(param.body, param.expect, param.method); err != nil {
-			return service.SessionResult{}, err
+			return framework.ApplicationResult{}, err
 		}
 		break
 
 	default:
-		return service.SessionResult{}, fmt.Errorf("invalid operation %s", param.op)
+		return framework.ApplicationResult{}, fmt.Errorf("invalid operation %s", param.op)
 	}
 
 	var selector string
 
 	if param.op == "sign" {
-		selector = "sign"
+		selector = "body_sign.sign"
 	} else {
 		if b.r.sign == b.r.result {
-			selector = "pass"
+			selector = "body_sign.pass"
 		} else {
-			selector = "reject"
+			selector = "body_sign.reject"
 		}
 	}
 
-	output := []pl.DynamicVariable{
-		pl.DynamicVariable{
-			Key:   "signMethod",
-			Value: pl.NewValStr(param.method),
-		},
-		pl.DynamicVariable{
-			Key:   "signOp",
-			Value: pl.NewValStr(param.op),
-		},
-		pl.DynamicVariable{
-			Key:   "sign",
-			Value: pl.NewValStr(b.r.result),
-		},
-		pl.DynamicVariable{
-			Key:   "signExpect",
-			Value: pl.NewValStr(b.r.sign),
-		},
-		pl.DynamicVariable{
-			Key:   "signBody",
-			Value: hpl.NewBodyValFromStream(b.r.body),
-		},
-	}
+	output := framework.NewApplicationResult(selector)
 
-	return service.SessionResult{
-		Event: selector,
-		Vars:  output,
-	}, nil
+	output.AddContext(
+		"signMethod",
+		pl.NewValStr(param.method),
+	)
+
+	output.AddContext(
+		"signOp",
+		pl.NewValStr(param.op),
+	)
+	output.AddContext(
+		"sign",
+		pl.NewValStr(b.r.result),
+	)
+	output.AddContext(
+		"signExpect",
+		pl.NewValStr(b.r.sign),
+	)
+	output.AddContext(
+		"signBody",
+		hpl.NewBodyValFromStream(b.r.body),
+	)
+
+	return output, nil
 }
 
-func (b *bodySignSession) hashBody(data io.Reader, method string) (*signResult, error) {
-	file, err := os.CreateTemp(b.service.tempDir, b.service.signPrefix)
+func (b *bodySignApplication) hashBody(data io.Reader, method string) (*signResult, error) {
+	file, err := os.CreateTemp(b.config.tempDir, b.config.signPrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +250,7 @@ func (b *bodySignSession) hashBody(data io.Reader, method string) (*signResult, 
 	}, nil
 }
 
-func (b *bodySignSession) newHasher(method string) (hash.Hash, error) {
+func (b *bodySignApplication) newHasher(method string) (hash.Hash, error) {
 	switch method {
 	case "md4":
 		return md4.New(), nil
@@ -279,7 +271,7 @@ func (b *bodySignSession) newHasher(method string) (hash.Hash, error) {
 
 // sign the incomming http request, ie generate sign result from its body and
 // also create a stream by using the temporary file
-func (b *bodySignSession) sign(data io.Reader, method string) error {
+func (b *bodySignApplication) sign(data io.Reader, method string) error {
 	r, err := b.hashBody(data, method)
 	if err != nil {
 		return err
@@ -292,7 +284,7 @@ func (b *bodySignSession) sign(data io.Reader, method string) error {
 
 // verify the incomming http request, ie generate sign result from its body and
 // also create a stream by using the temporary file
-func (b *bodySignSession) verify(data io.Reader, expect string, method string) error {
+func (b *bodySignApplication) verify(data io.Reader, expect string, method string) error {
 	r, err := b.hashBody(data, method)
 	if err != nil {
 		return err
@@ -305,19 +297,11 @@ func (b *bodySignSession) verify(data io.Reader, expect string, method string) e
 	return nil
 }
 
-func (b *bodySignSession) SessionResource() service.SessionResource {
-	return b.res
-}
-
-func (b *bodySignServiceFactory) Name() string {
+func (b *bodySignFactory) Name() string {
 	return "body_sign"
 }
 
-func (b *bodySignServiceFactory) IDL() string {
-	return ""
-}
-
-func (b *bodySignServiceFactory) Comment() string {
+func (b *bodySignFactory) Comment() string {
 	return `
 A service does http body (via request's body) digest sign and verification job.
 This service allows efficient memory management of very large http body by using
@@ -351,18 +335,12 @@ having no problem at all
 `
 }
 
-func (b *bodySignServiceFactory) Create(config *config.Service) (service.Service, error) {
-	svc := &bodySignService{
-		tempDir:          config.GetConfigStringDefault("temp_dir", defTempDir),
-		signPrefix:       config.GetConfigStringDefault("sign_prefix", defSignPrefix),
-		verifyPrefix:     config.GetConfigStringDefault("verify_prefix", defVerifyPrefix),
-		verifyHeaderName: config.GetConfigStringDefault("verify_header_name", defVerifyHeaderName),
-		opHeaderName:     config.GetConfigStringDefault("op_header_name", defOpHeaderName),
-		methodHeaderName: config.GetConfigStringDefault("method_header_name", defMethodHeaderName),
-	}
-	return svc, nil
+func (b *bodySignFactory) Create(args []pl.Val) (framework.Application, error) {
+	return &bodySignApplication{
+		args: args,
+	}, nil
 }
 
 func init() {
-	service.RegisterServiceFactory(&bodySignServiceFactory{})
+	framework.AddApplicationFactory("body_sign", &bodySignFactory{})
 }

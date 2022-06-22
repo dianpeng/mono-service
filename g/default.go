@@ -8,9 +8,9 @@ const (
 	VHostErrorStatus = 500
 	VHostErrorBody   = "Service Error"
 
-	VHostHttpClientPoolMaxSize  = 256
-	VHostHttpClientTimeout      = 20
-	VHostHttpClientMaxDrainSize = 4096
+	VHostHttpClientPoolMaxSize      = 256
+	VHostHttpClientPoolTimeout      = 20
+	VHostHttpClientPoolMaxDrainSize = 4096
 
 	VHostLogFormat = "{{ServiceName}}" +
 		"{{ClientIp}}" +

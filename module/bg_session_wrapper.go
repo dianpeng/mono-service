@@ -1,52 +1,40 @@
 package module
 
 import (
+	"github.com/dianpeng/mono-service/framework"
 	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/phase"
 	"github.com/dianpeng/mono-service/pl"
-	"github.com/dianpeng/mono-service/service"
 )
 
-type bgSessionWrapper struct {
-	parent  hpl.SessionWrapper
-	session service.Session
+type bgApplicationWrapper struct {
+	parent      hpl.SessionWrapper
+	application framework.Application
 }
 
-func (b *bgSessionWrapper) OnLoadVar(x *pl.Evaluator, name string) (pl.Val, error) {
-	return b.session.OnLoadVar(phase.PhaseBackground, x, name)
+func (b *bgApplicationWrapper) OnLoadVar(name string) (pl.Val, error) {
+	return b.application.OnLoadVar(phase.PhaseBackground, name)
 }
 
-func (b *bgSessionWrapper) OnStoreVar(x *pl.Evaluator, name string, value pl.Val) error {
-	return b.session.OnStoreVar(phase.PhaseBackground, x, name, value)
+func (b *bgApplicationWrapper) OnStoreVar(name string, value pl.Val) error {
+	return b.application.OnStoreVar(phase.PhaseBackground, name, value)
 }
 
-func (b *bgSessionWrapper) OnCall(x *pl.Evaluator, name string, args []pl.Val) (pl.Val, error) {
-	return b.session.OnCall(phase.PhaseBackground, x, name, args)
+func (b *bgApplicationWrapper) OnAction(name string, val pl.Val) error {
+	return b.application.OnAction(phase.PhaseBackground, name, val)
 }
 
-func (b *bgSessionWrapper) OnAction(x *pl.Evaluator, name string, val pl.Val) error {
-	return b.session.OnAction(phase.PhaseBackground, x, name, val)
-}
-
-func (b *bgSessionWrapper) GetPhaseName() string {
-	return ".background"
-}
-
-func (b *bgSessionWrapper) GetErrorDescription() string {
-	return ""
-}
-
-func (b *bgSessionWrapper) GetHttpClient(url string) (hpl.HttpClient, error) {
+func (b *bgApplicationWrapper) GetHttpClient(url string) (hpl.HttpClient, error) {
 	// parent's GetHttpClient is always thread safe
 	return b.parent.GetHttpClient(url)
 }
 
-func newBgSessionWrapper(
+func newBgApplicationWrapper(
 	parent hpl.SessionWrapper,
-	session service.Session,
-) *bgSessionWrapper {
-	return &bgSessionWrapper{
-		parent:  parent,
-		session: session,
+	application framework.Application,
+) *bgApplicationWrapper {
+	return &bgApplicationWrapper{
+		parent:      parent,
+		application: application,
 	}
 }

@@ -47,6 +47,7 @@ const (
 	bcLoadLocal    = 21
 	bcStoreLocal   = 22
 	bcReserveLocal = 23
+	bcLoadRegexp   = 24
 
 	bcAction = 30
 
@@ -98,7 +99,6 @@ const (
 	bcLoadConst = 76
 
 	// call
-	bcCall  = 81
 	bcMCall = 82
 	bcICall = 83
 	bcSCall = 84
@@ -125,16 +125,23 @@ const (
 	// tos
 	bcLoadException = 103
 
-	// extensions
-	bcLoadRegexp = 150
+	// config extension part ---------------------------------------------------
+	bcConfigPush         = 151
+	bcConfigPushWithAttr = 152
+	bcConfigPop          = 153
 
-	// special functions
+	bcConfigPropertySet         = 155
+	bcConfigPropertySetWithAttr = 156
+
+	bcConfigCommand         = 157
+	bcConfigCommandWithAttr = 158
+
+	// intrinsic ---------------------------------------------------------------
 	// render template
 	bcTemplate = 200
 
 	// halt the machine
-	bcMatch = 254
-	bcHalt  = 255
+	bcHalt = 255
 )
 
 type bytecode struct {
@@ -174,6 +181,7 @@ const (
 	progFunc
 	progSession
 	progExpression
+	progConfig
 )
 
 type upvalue struct {
@@ -182,6 +190,7 @@ type upvalue struct {
 }
 
 type program struct {
+	policy    *Policy
 	name      string
 	localSize int
 	argSize   int // if this program is a function call, then this indicates
@@ -202,15 +211,16 @@ type program struct {
 	upvalue []upvalue
 }
 
-func newProgram(n string, t int) *program {
+func newProgram(p *Policy, n string, t int) *program {
 	return &program{
+		policy:   p,
 		name:     n,
 		progtype: t,
 	}
 }
 
-func newProgramEmpty(n string, t int) *program {
-	pp := newProgram(n, t)
+func newProgramEmpty(p *Policy, n string, t int) *program {
+	pp := newProgram(p, n, t)
 	pp.bcList = append(pp.bcList, bytecode{
 		opcode:   bcHalt,
 		argument: 0,
@@ -429,7 +439,6 @@ func (x *bytecode) dump(resolver func(int, int) string) string {
 
 	case bcAddList,
 		bcAddMap,
-		bcCall,
 		bcICall,
 		bcMCall,
 		bcSCall,
@@ -489,8 +498,6 @@ func getBytecodeName(bc int) string {
 		return "add-map"
 	case bcNewPair:
 		return "new-pair"
-	case bcCall:
-		return "call"
 	case bcICall:
 		return "icall"
 	case bcMCall:
@@ -595,7 +602,26 @@ func getBytecodeName(bc int) string {
 		return "push-exception"
 	case bcPopException:
 		return "pop-exception"
+	case bcLoadException:
+		return "load-exception"
 
+	// config
+	case bcConfigPush:
+		return "config-push"
+	case bcConfigPushWithAttr:
+		return "config-push-with-attr"
+	case bcConfigPop:
+		return "config-pop"
+	case bcConfigPropertySet:
+		return "config-property-set"
+	case bcConfigPropertySetWithAttr:
+		return "config-property-set-with-attr"
+	case bcConfigCommand:
+		return "config-command"
+	case bcConfigCommandWithAttr:
+		return "config-command-with-attr"
+
+		// closure
 	case bcNewClosure:
 		return "new-closure"
 	case bcStoreUpvalue:
@@ -607,8 +633,6 @@ func getBytecodeName(bc int) string {
 	case bcTemplate:
 		return "template"
 
-	case bcMatch:
-		return "match"
 	case bcHalt:
 		return "halt"
 	default:

@@ -45,6 +45,7 @@ const (
 	tkAt
 	tkSharp
 	tkPipe
+	tkLExprBra
 
 	// unary
 	tkNot
@@ -95,8 +96,9 @@ const (
 	tkConst
 	tkSession
 	tkLet
-	tkWhen
+	tkSwitch
 	tkCase
+	tkModule
 	tkImport
 	tkExport
 	tkExtern
@@ -108,9 +110,11 @@ const (
 	tkFor
 	tkContinue
 	tkBreak
-	tkNext
 	tkFunction
+	tkConfig
+
 	tkRule
+	tkEmit
 
 	// intrinsic keywords, used for special builtin functionalities
 	tkTemplate
@@ -214,6 +218,8 @@ func getTokenName(tk int) string {
 		return "#"
 	case tkPipe:
 		return "|"
+	case tkLExprBra:
+		return "|{"
 
 	case tkAdd:
 		return "+"
@@ -274,14 +280,17 @@ func getTokenName(tk int) string {
 		return "session"
 	case tkExtern:
 		return "extern"
-	case tkWhen:
-		return "when"
+	case tkSwitch:
+		return "switch"
 	case tkCase:
 		return "case"
+	case tkModule:
+		return "module"
 	case tkImport:
 		return "import"
 	case tkExport:
 		return "export"
+
 	case tkTry:
 		return "try"
 	case tkIf:
@@ -297,14 +306,17 @@ func getTokenName(tk int) string {
 		return "continue"
 	case tkBreak:
 		return "break"
-	case tkNext:
-		return "next"
 	case tkFunction:
 		return "fn"
 	case tkRule:
 		return "rule"
+	case tkEmit:
+		return "emit"
 	case tkReturn:
 		return "return"
+
+	case tkConfig:
+		return "config"
 
 	case tkTemplate:
 		return "template"
@@ -608,8 +620,8 @@ var lexerkeyword = map[string]int{
 	"let": tkLet,
 
 	/* when case */
-	"when": tkWhen,
-	"case": tkCase,
+	"switch": tkSwitch,
+	"case":   tkCase,
 
 	/* if else branch */
 	"if":   tkIf,
@@ -620,7 +632,6 @@ var lexerkeyword = map[string]int{
 	"for":      tkFor,
 	"continue": tkContinue,
 	"break":    tkBreak,
-	"next":     tkNext,
 
 	/* other control flow */
 	"try":    tkTry,
@@ -631,6 +642,9 @@ var lexerkeyword = map[string]int{
 	"function": tkFunction,
 
 	"rule": tkRule,
+	"emit": tkEmit,
+
+	"config": tkConfig,
 
 	/* intrinsic keywords */
 	"template": tkTemplate,
@@ -917,7 +931,7 @@ func (t *lexer) next() int {
 			return t.pp(tkAnd, '&')
 
 		case '|':
-			return t.p2(tkPipe, tkOr, '|')
+			return t.pp2(tkPipe, tkOr, tkLExprBra, '|', '{')
 
 		case '!':
 			return t.pp2(tkNot, tkNe, tkRegexpNMatch, '=', '~')
