@@ -9,8 +9,8 @@ import (
 // when a session finish its execution, it returns back a ApplicationResult object
 // for exposing back to the hpl environment
 type ApplicationResult struct {
-	Event string
-	Vars  []pl.DynamicVariable
+	Event   string
+	context pl.Val
 }
 
 // entry for handling a single http request/response
@@ -47,4 +47,21 @@ func GetApplicationFactory(name string) ApplicationFactory {
 	} else {
 		return nil
 	}
+}
+
+func NewApplicationResult(event string) ApplicationResult {
+	return ApplicationResult{
+		Event: event,
+	}
+}
+
+func (a *ApplicationResult) Context() pl.Val {
+	return a.context
+}
+
+func (a *ApplicaitonResult) AddContext(
+	key string,
+	value pl.Val,
+) {
+	a.context[key] = value
 }

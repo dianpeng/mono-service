@@ -2,11 +2,6 @@ package pl
 
 import "fmt"
 
-type DynamicVariable struct {
-	Key   string
-	Value Val
-}
-
 func must(cond bool, msg string, a ...interface{}) {
 	if !cond {
 		f := fmt.Sprintf("must: %s", msg)

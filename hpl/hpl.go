@@ -350,3 +350,19 @@ func (h *Hpl) Run(name string) error {
 
 	return h.Eval.Eval(name, h.Policy)
 }
+
+func (h *Hpl) RunWithContext(name string, context pl.Val) error {
+	if h.Policy == nil {
+		return fmt.Errorf("the Hpl engine does not have any policy binded")
+	}
+	if h.isRunning {
+		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
+	}
+
+	h.isRunning = true
+	defer func() {
+		h.isRunning = false
+	}()
+
+	return h.Eval.EvalWithContext(name, context, h.Policy)
+}

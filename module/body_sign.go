@@ -195,33 +195,31 @@ func (b *bodySignApplication) Accept(
 		}
 	}
 
-	output := []pl.DynamicVariable{
-		pl.DynamicVariable{
-			Key:   "signMethod",
-			Value: pl.NewValStr(param.method),
-		},
-		pl.DynamicVariable{
-			Key:   "signOp",
-			Value: pl.NewValStr(param.op),
-		},
-		pl.DynamicVariable{
-			Key:   "sign",
-			Value: pl.NewValStr(b.r.result),
-		},
-		pl.DynamicVariable{
-			Key:   "signExpect",
-			Value: pl.NewValStr(b.r.sign),
-		},
-		pl.DynamicVariable{
-			Key:   "signBody",
-			Value: hpl.NewBodyValFromStream(b.r.body),
-		},
-	}
+	output := framework.NewApplicationResult(selector)
 
-	return framework.ApplicationResult{
-		Event: selector,
-		Vars:  output,
-	}, nil
+	output.AddContext(
+		"signMethod",
+		pl.NewValStr(param.method),
+	)
+
+	output.AddContext(
+		"signOp",
+		pl.NewValStr(param.op),
+	)
+	output.AddContext(
+		"sign",
+		pl.NewValStr(b.r.result),
+	)
+	output.AddContext(
+		"signExpect",
+		pl.NewValStr(b.r.sign),
+	)
+	output.AddContext(
+		"signBody",
+		pl.NewValStr(b.r.body),
+	)
+
+	return output, nil
 }
 
 func (b *bodySignApplication) hashBody(data io.Reader, method string) (*signResult, error) {

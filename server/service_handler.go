@@ -211,7 +211,8 @@ func (s *serviceHandler) main(
 			// before enter into user's response middleware, run application generated
 			// event if applicable
 			if s.serviceResult.Event != "" {
-				if err := s.hpl.Run(s.serviceResult.Event); err != nil {
+				if err := s.hpl.RunWithContext(s.serviceResult.Event,
+					s.serviceResult.Context()); err != nil {
 					respWrapper.ReplyErrorHPL(err)
 					return
 				}
@@ -297,14 +298,6 @@ func (s *serviceHandler) GetHttpClient(url string) (hpl.HttpClient, error) {
 }
 
 func (s *serviceHandler) OnLoadVar(name string) (pl.Val, error) {
-	if s.phaseIndex == phase.PhaseHttpResponse {
-		for _, x := range s.serviceResult.Vars {
-			if x.Key == name {
-				return x.Value, nil
-			}
-		}
-	}
-
 	return s.service.App.OnLoadVar(s.phaseIndex, name)
 }
 

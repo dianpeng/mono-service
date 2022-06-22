@@ -465,15 +465,12 @@ func (c *concateApplication) Accept(
 		c.writer.Close()
 	}
 
-	return framework.ApplicationResult{
-		Event: "concate.response",
-		Vars: []pl.DynamicVariable{
-			pl.DynamicVariable{
-				Key:   "output",
-				Value: hpl.NewReadableStreamValFromStream(c.reader),
-			},
-		},
-	}, nil
+	output := framework.NewApplicationResult("concate.response")
+	output.AddContext(
+		"output",
+		hpl.NewReadableStreamValFromStream(c.reader),
+	)
+	return output, nil
 }
 
 func (c *concateApplicationFactory) Name() string {

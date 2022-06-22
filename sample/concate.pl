@@ -15,12 +15,11 @@ rule "concate.generate" => {
 }
 
 rule "concate.background.check" => {
-  println("background");
   pass => true;
 }
 
 // start generate output
 rule "concate.response" => {
-  response.body = output;
+  response.body = $.output;
   response.status = 201;
 }
