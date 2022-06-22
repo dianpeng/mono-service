@@ -554,8 +554,7 @@ func (p *parser) parseExpression() (*Policy, error) {
 	return p.policy, nil
 }
 
-func (p *parser) parse() (*Policy, error) {
-	p.l.next()
+func (p *parser) parseFwd() error {
 
 	// top of the program allow user to write 2 types of special scope
 	//
@@ -566,14 +565,34 @@ func (p *parser) parse() (*Policy, error) {
 	//    The definition of session is defined by user
 	if p.l.token == tkConst {
 		if err := p.parseConstScope(); err != nil {
-			return nil, err
+			return err
+		}
+	} else if p.l.token == tkConfig {
+		p.l.next()
+		if err := p.parseConfig(); err != nil {
+			return err
 		}
 	}
 
 	if p.l.token == tkSession {
 		if err := p.parseSessionScope(); err != nil {
-			return nil, err
+			return err
 		}
+	} else if p.l.token == tkConfig {
+		p.l.next()
+		if err := p.parseConfig(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (p *parser) parse() (*Policy, error) {
+	p.l.next()
+
+	if err := p.parseFwd(); err != nil {
+		return nil, err
 	}
 
 	// top most statement allowed ------------------------------------------------
@@ -626,6 +645,12 @@ LOOP:
 	}
 
 	p.patchAllCall()
+
+	// lastly check whether we have config scope, if so, we need to patch config
+	// to include a bcHalt otherwise will break our VM
+	if p.policy.config != nil {
+		p.policy.config.emit0(p.l, bcHalt)
+	}
 
 	return p.policy, nil
 }
@@ -1936,7 +1961,6 @@ func (p *parser) parseBodyStmt(prog *program) (bool, error) {
 
 	switch p.l.token {
 	case tkSemicolon:
-		hasSep = false
 		break
 
 	case tkLBra:
@@ -2189,32 +2213,31 @@ func (p *parser) parseTernary(prog *program) error {
 func (p *parser) parseTernaryRest(prog *program) error {
 	ntk := p.l.token
 	if ntk == tkIf {
-		patch_point := prog.patch(p.l)
 		p.l.next()
 
+		// this is the if condition
 		if err := p.parseBin(prog); err != nil {
 			return err
 		}
 
-		// notes we need to use comma instead of colon, since clone is already used
-		// as method call, otherwise the parser has ambigiuty which needs extra
-		// rules to resolve
+		// position to insert bcTernary instruction
+		patch_point := prog.patch(p.l)
+
 		if !p.l.expectCurrent(tkElse) {
 			return p.l.toError()
 		}
 		p.l.next()
 
-		jump_out := prog.patch(p.l)
-
-		// ternary operator, jump when false
-		prog.emit1At(p.l, patch_point, bcTernary, prog.label())
-
+		// else branch generated value, when bcTernary evaluates to false, it will
+		// jump here
 		if err := p.parseBin(prog); err != nil {
 			return err
 		}
 
-		// lastly, patch jump out to here
-		prog.emit1At(p.l, jump_out, bcJump, prog.label())
+		// if condition evaluation to be true, then jumpping here, otherwise it
+		// fallthrough to else branch experssion evaluation
+		prog.emit1At(p.l, patch_point, bcTernary, prog.label())
+
 		return nil
 	} else {
 		return nil
@@ -3459,7 +3482,7 @@ func (p *parser) parseConfigScopeCmd(prog *program) error {
 		}
 		prog.emit1(p.l, bcLoadStr, prog.addStr(p.l.valueText))
 		p.l.next()
-	} else {
+	} else if p.l.token == tkLSqr {
 		p.l.next()
 		if err := p.parseExpr(prog); err != nil {
 			return err
@@ -3470,6 +3493,11 @@ func (p *parser) parseConfigScopeCmd(prog *program) error {
 			return p.l.toError()
 		}
 		p.l.next()
+	} else if p.l.token == tkId {
+		prog.emit1(p.l, bcLoadStr, prog.addStr(p.l.valueText))
+		p.l.next()
+	} else {
+		return p.err("unknown token for config command instruction")
 	}
 
 	switch p.l.token {
@@ -3508,11 +3536,36 @@ func (p *parser) parseConfigScopeCmd(prog *program) error {
 	return nil
 }
 
-func (p *parser) parseConfigScopeBasicStmt(prog *program) error {
+func (p *parser) parseConfigScopeBasicStmt(prog *program) (bool, error) {
 	lexeme := p.lexeme()
 	p.l.next()
+
+	if lexeme.token == tkId {
+		if p.l.token == tkLBra {
+			// we specifically treat any UNKNOWN identifier suffixed with a { as a
+			// config scope statement, ie getting config scope statement
+			return false, p.parseConfigScopeInner(prog, lexeme.sval)
+		} else if p.l.token == tkId || p.l.token == tkLSqr || p.l.token == tkDot {
+			p.enterNormalScope()
+			prog.emit1(p.l, bcConfigPush, prog.addStr(lexeme.sval))
+
+			// 1. xxx name(...)
+			// 2. xxx .name(...)
+			// 3. xxx [name](...)
+			if err := p.parseConfigScopeCmd(prog); err != nil {
+				return false, err
+			}
+
+			prog.emit0(p.l, bcConfigPop)
+			p.leaveScope()
+
+			// notes this format of syntax require a semicolon afterwards
+			return true, nil
+		}
+	}
+
 	_, err := p.parseBasicStmt(prog, lexeme, true)
-	return err
+	return true, err
 }
 
 func (p *parser) parseConfigScopeBodyStmt(prog *program) (bool, error) {
@@ -3520,7 +3573,6 @@ func (p *parser) parseConfigScopeBodyStmt(prog *program) (bool, error) {
 
 	switch p.l.token {
 	case tkSemicolon:
-		hasSep = false
 		break
 
 	case tkLBra:
@@ -3590,8 +3642,10 @@ func (p *parser) parseConfigScopeBodyStmt(prog *program) (bool, error) {
 		break
 
 	default:
-		if err := p.parseConfigScopeBasicStmt(prog); err != nil {
+		if x, err := p.parseConfigScopeBasicStmt(prog); err != nil {
 			return false, err
+		} else {
+			hasSep = x
 		}
 		break
 	}
@@ -3606,6 +3660,17 @@ func (p *parser) parseConfigScopeBody(prog *program) error {
 	)
 }
 
+func (p *parser) parseConfigScopeInner(prog *program, name string) error {
+	p.enterNormalScope()
+	prog.emit1(p.l, bcConfigPush, prog.addStr(name))
+	if err := p.parseConfigScopeBody(prog); err != nil {
+		return err
+	}
+	prog.emit0(p.l, bcConfigPop)
+	p.leaveScope()
+	return nil
+}
+
 func (p *parser) parseConfigScope(prog *program) error {
 	p.enterScopeTop(entryConfig, prog)
 	defer func() {
@@ -3618,13 +3683,6 @@ func (p *parser) parseConfigScope(prog *program) error {
 
 	// push the current config scope into the stack for evaluation
 	svcName := p.l.valueText
-	prog.emit1(p.l, bcConfigPush, prog.addStr(svcName))
 	p.l.next()
-
-	if err := p.parseConfigScopeBody(prog); err != nil {
-		return err
-	}
-
-	prog.emit0(p.l, bcConfigPop)
-	return nil
+	return p.parseConfigScopeInner(prog, svcName)
 }

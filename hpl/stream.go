@@ -49,3 +49,11 @@ func (e *eofByteReadCloser) Close() error {
 	e.x = nil
 	return nil
 }
+
+func NewEofReadCloser() io.ReadCloser {
+	return &eofReadCloser{}
+}
+
+func NewReadCloserFromString(x string) io.ReadCloser {
+	return neweofByteReadCloserFromString(x)
+}

@@ -26,12 +26,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/dianpeng/mono-service/config"
+	"github.com/dianpeng/mono-service/framework"
 	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/hrouter"
 	"github.com/dianpeng/mono-service/phase"
 	"github.com/dianpeng/mono-service/pl"
-	"github.com/dianpeng/mono-service/service"
 )
 
 const (
@@ -49,9 +48,7 @@ const (
 	concateRequestResponse
 )
 
-type concateServiceFactory struct{}
-
-type concateService struct{}
+type concateApplicationFactory struct{}
 
 type concateRequest struct {
 	kind int
@@ -77,10 +74,7 @@ type concateRequest struct {
 	fetchResponse *http.Response
 }
 
-type concateSession struct {
-	service *concateService
-	r       service.SessionResource
-
+type concateApplication struct {
 	// background barrier for syncing the running goroutine that generates the write
 	wg sync.WaitGroup
 
@@ -97,25 +91,10 @@ type concateSession struct {
 	reader *io.PipeReader
 
 	bgWrapper hpl.SessionWrapper
+	args      []pl.Val
 }
 
-func (s *concateService) Name() string {
-	return "concate"
-}
-
-func (s *concateService) IDL() string {
-	return ""
-}
-
-func (c *concateService) NewSession() (service.Session, error) {
-	return &concateSession{
-		service: c,
-		r:       nil,
-		hpl:     hpl.NewHpl(),
-	}, nil
-}
-
-func (c *concateSession) resetForAccept() {
+func (c *concateApplication) resetForAccept() {
 	c.reqList = nil
 	c.idx = 0
 	c.bgError = nil
@@ -149,11 +128,11 @@ func (c *concateRequest) setResponse(resp *http.Response) {
 	c.kind = concateRequestResponse
 }
 
-func (s *concateSession) curreq() *concateRequest {
+func (s *concateApplication) curreq() *concateRequest {
 	return s.reqList[s.idx]
 }
 
-func (s *concateSession) feedOneUrl(req *concateRequest) (*http.Response, error) {
+func (s *concateApplication) feedOneUrl(req *concateRequest) (*http.Response, error) {
 	var hreq *http.Request
 
 	if req.kind == concateRequestUrl {
@@ -179,8 +158,8 @@ func (s *concateSession) feedOneUrl(req *concateRequest) (*http.Response, error)
 }
 
 // the background goroutine used for evaluating the request. Notes this goroutine
-// will be terminated once the whole session is done, ie inside of the Done call
-func (s *concateSession) feeder() {
+// will be terminated once the whole application is done, ie inside of the Done call
+func (s *concateApplication) feeder() {
 	closer := []io.Closer{}
 
 	defer func() {
@@ -255,7 +234,7 @@ LOOP:
 		// trigger only happened when original request comming from http request
 		if req.kind == concateRequestUrl || req.kind == concateRequestRequest {
 			req.fetchResponse = httpresp
-			if err := s.hpl.OnCustomize("check", s.bgWrapper); err != nil {
+			if err := s.hpl.OnCustomize("concate.background.check", s.bgWrapper); err != nil {
 				s.bgError = err
 				break LOOP
 			}
@@ -278,7 +257,7 @@ LOOP:
 	}
 }
 
-func (s *concateSession) OnLoadVar(p int, _ *pl.Evaluator, name string) (pl.Val, error) {
+func (s *concateApplication) OnLoadVar(p int, name string) (pl.Val, error) {
 	if p == phase.PhaseBackground {
 		switch name {
 		case "index":
@@ -294,11 +273,11 @@ func (s *concateSession) OnLoadVar(p int, _ *pl.Evaluator, name string) (pl.Val,
 	return pl.NewValNull(), fmt.Errorf("unknown variable %s", name)
 }
 
-func (s *concateSession) OnStoreVar(phase int, _ *pl.Evaluator, name string, _ pl.Val) error {
+func (s *concateApplication) OnStoreVar(phase int, name string, _ pl.Val) error {
 	return fmt.Errorf("unknown variable %s", name)
 }
 
-func (s *concateSession) onActionBackground(name string, val pl.Val) error {
+func (s *concateApplication) onActionBackground(name string, val pl.Val) error {
 	x := s.curreq()
 
 	switch name {
@@ -349,7 +328,7 @@ func (s *concateSession) onActionBackground(name string, val pl.Val) error {
 	return fmt.Errorf("action %s is unknown", name)
 }
 
-func (s *concateSession) oneBackend(val pl.Val) (*concateRequest, error) {
+func (s *concateApplication) oneBackend(val pl.Val) (*concateRequest, error) {
 	o := &concateRequest{}
 	switch val.Type {
 	case pl.ValStr:
@@ -381,7 +360,7 @@ func (s *concateSession) oneBackend(val pl.Val) (*concateRequest, error) {
 	return o, nil
 }
 
-func (s *concateSession) onActionBackend(name string, val pl.Val) error {
+func (s *concateApplication) onActionBackend(name string, val pl.Val) error {
 	o := []*concateRequest{}
 
 	switch name {
@@ -412,41 +391,27 @@ func (s *concateSession) onActionBackend(name string, val pl.Val) error {
 	return fmt.Errorf("unknown action name %s", name)
 }
 
-func (s *concateSession) SessionResource() service.SessionResource {
-	return s.r
-}
-
-func (s *concateSession) OnAction(p int, _ *pl.Evaluator, name string, val pl.Val) error {
+func (s *concateApplication) OnAction(p int, name string, val pl.Val) error {
 
 	if p == phase.PhaseBackground {
 		return s.onActionBackground(name, val)
-	} else if p == phase.PhaseSessionAccept {
+	} else if p == phase.PhaseApplicationAccept {
 		return s.onActionBackend(name, val)
 	}
 
 	return fmt.Errorf("unknown function %s", name)
 }
 
-// service.Session
-
-func (s *concateSession) Service() service.Service {
-	return s.service
-}
-
-func (s *concateSession) Prepare(_ *http.Request, _ hrouter.Params) (interface{}, error) {
+// framework.Application
+func (s *concateApplication) Prepare(_ *http.Request, _ hrouter.Params) (interface{}, error) {
 	return nil, nil
 }
 
-func (s *concateSession) Start(r service.SessionResource) error {
-	s.r = r
-	return nil
-}
-
-func (s *concateSession) hasPending() bool {
+func (s *concateApplication) hasPending() bool {
 	return len(s.reqList) != 0
 }
 
-func (s *concateSession) Done(_ interface{}) {
+func (s *concateApplication) Done(_ interface{}) {
 	// wait for the background job to be done
 	if s.hasPending() {
 		s.wg.Wait()
@@ -460,7 +425,11 @@ func (s *concateSession) Done(_ interface{}) {
 	}
 }
 
-func (c *concateSession) Accept(_ interface{}, h *hpl.Hpl, wrapper hpl.SessionWrapper) (service.SessionResult, error) {
+func (c *concateApplication) Accept(
+	_ interface{},
+	context framework.ServiceContext,
+) (framework.ApplicationResult, error) {
+
 	c.resetForAccept()
 
 	// create the pipe for background feeder to generate the output
@@ -470,23 +439,22 @@ func (c *concateSession) Accept(_ interface{}, h *hpl.Hpl, wrapper hpl.SessionWr
 		c.writer = w
 	}
 
-	// create a backgronud evaluator's session wrapper
-	c.bgWrapper = newBgSessionWrapper(
-		wrapper,
+	// create a backgronud evaluator's application wrapper
+	c.bgWrapper = newBgApplicationWrapper(
+		context.HplSessionWrapper(),
 		c,
 	)
 
 	// run hpl
-	err := h.OnCustomize(
-		"generate",
-		wrapper,
+	err := context.Hpl().Run(
+		"concate.generate",
 	)
 
 	if err != nil {
-		return service.SessionResult{}, err
+		return framework.ApplicationResult{}, err
 	}
 
-	c.hpl.SetPolicy(h.Policy)
+	c.hpl.SetPolicy(context.Hpl().Policy)
 
 	if c.hasPending() {
 		c.wg.Add(1)
@@ -497,8 +465,8 @@ func (c *concateSession) Accept(_ interface{}, h *hpl.Hpl, wrapper hpl.SessionWr
 		c.writer.Close()
 	}
 
-	return service.SessionResult{
-		Event: "response",
+	return framework.ApplicationResult{
+		Event: "concate.response",
 		Vars: []pl.DynamicVariable{
 			pl.DynamicVariable{
 				Key:   "output",
@@ -508,25 +476,24 @@ func (c *concateSession) Accept(_ interface{}, h *hpl.Hpl, wrapper hpl.SessionWr
 	}, nil
 }
 
-func (c *concateServiceFactory) Name() string {
+func (c *concateApplicationFactory) Name() string {
 	return "concate"
 }
 
-func (c *concateServiceFactory) IDL() string {
-	return ""
-}
-
-func (c *concateServiceFactory) Comment() string {
+func (c *concateApplicationFactory) Comment() string {
 	return `
-A service that can combine/concate multiple http upstream into a single response
+A application that can combine/concate multiple http upstream into a single response
 Typically used for combining assets load from upstream
 `
 }
 
-func (c *concateServiceFactory) Create(_ *config.Service) (service.Service, error) {
-	return &concateService{}, nil
+func (c *concateApplicationFactory) Create(args []pl.Val) (framework.Application, error) {
+	return &concateApplication{
+		hpl:  hpl.NewHpl(),
+		args: args,
+	}, nil
 }
 
 func init() {
-	service.RegisterServiceFactory(&concateServiceFactory{})
+	framework.AddApplicationFactory("concate", &concateApplicationFactory{})
 }

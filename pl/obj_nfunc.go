@@ -5,6 +5,10 @@ type nativeFunc struct {
 	entry func([]Val) (Val, error)
 }
 
+func (f *nativeFunc) Call(e *Evaluator, args []Val) (Val, error) {
+	return e.runNFunc(f, args)
+}
+
 func (f *nativeFunc) Type() int {
 	return ClosureNative
 }

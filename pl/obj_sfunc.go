@@ -9,6 +9,10 @@ type scriptFunc struct {
 	upvalue []Val
 }
 
+func (f *scriptFunc) Call(eval *Evaluator, args []Val) (Val, error) {
+	return eval.runSFunc(f, args)
+}
+
 func (f *scriptFunc) Type() int {
 	return ClosureScript
 }

@@ -1,7 +1,13 @@
 const {
-  taobao = http::do(
-    http::new_request("GET", "https://www.taobao.com")
-  ).body:string();
+  taobao = http::get("https://www.taobao.com").body:string();
+}
+
+config service {
+  .name = "proxy_taobao";
+  .router = "[GET]/taobao";
+
+  application noop();
+  response event("response");
 }
 
 rule response {
@@ -11,15 +17,6 @@ rule response {
   let sub_resp = http::get("https://www.toutiao.com");
   let payload_buffer = sub_resp.body.stream:string();
 
-  let i = 0;
-
-  for {
-    i = i + 1;
-    if i >= 201 {
-      break;
-    }
-  }
-
-  body => "done";
-  status => i;
+  response.status = 200 if sub_resp.status == 200 else 404;
+  response.body = resp;
 }

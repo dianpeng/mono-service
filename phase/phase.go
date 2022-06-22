@@ -1,25 +1,18 @@
 package phase
 
-import (
-	"github.com/dianpeng/mono-service/alog"
-	"github.com/dianpeng/mono-service/hrouter"
-	"net/http"
-)
-
 const (
-	PhaseCreateSessionHandler = iota
+	PhaseCreateService = iota
 	PhaseInit
 
-	PhaseHttpAccess
 	PhaseHttpRequest
 
-	// session related phases
-	PhaseSessionStart
-	PhaseSessionPrepare
-	PhaseSessionAccept
-	PhaseSessionDone
+	// application related phases
+	PhaseApplicationPrepare
+	PhaseApplicationAccept
+	PhaseApplicationDone
 
 	PhaseHttpResponse
+	PhaseHttpResponseFinalize
 
 	// lastly log generation
 	PhaseAccessLog
@@ -30,22 +23,20 @@ const (
 
 func GetPhaseName(p int) string {
 	switch p {
-	case PhaseCreateSessionHandler:
-		return ".create_session_handler"
+	case PhaseCreateService:
+		return ".create_service"
 	case PhaseInit:
 		return ".init"
-	case PhaseHttpAccess:
-		return "http.access"
-	case PhaseSessionStart:
-		return "session.start"
-	case PhaseSessionPrepare:
-		return "session.prepare"
-	case PhaseSessionAccept:
-		return "session.accept"
-	case PhaseSessionDone:
-		return "session.done"
+	case PhaseApplicationPrepare:
+		return "application.prepare"
+	case PhaseApplicationAccept:
+		return "application.accept"
+	case PhaseApplicationDone:
+		return "application.done"
 	case PhaseHttpResponse:
 		return "http.response"
+	case PhaseHttpResponseFinalize:
+		return "http.response_finalize"
 	case PhaseAccessLog:
 		return ".access_log"
 	case PhaseBackground:
@@ -53,20 +44,4 @@ func GetPhaseName(p int) string {
 	default:
 		return "<unknown>"
 	}
-}
-
-type PhaseAccess interface {
-	Access(*http.Request, hrouter.Params) error
-}
-
-type PhaseRequest interface {
-	Request(*http.Request, hrouter.Params) error
-}
-
-type PhaseResponse interface {
-	Response(http.ResponseWriter, *http.Request, hrouter.Params) error
-}
-
-type PhaseLog interface {
-	Log(*alog.SessionLog)
 }

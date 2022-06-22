@@ -1,5 +1,9 @@
 package pl
 
+// Here the testing of parser just verify its binary result, ie whether it passes
+// or failed. W.R.T the actual correctness, it is verified by the evaluation
+// part for simplicity.
+
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
@@ -10,9 +14,6 @@ func dumpProg(x *Policy) {
 	fmt.Printf("%s\n", x.Dump())
 }
 
-// Here the testing of parser just verify its binary result, ie whether it passes
-// or failed. W.R.T the actual correctness, it is verified by the evaluation
-// part for simplicity.
 func TestExpr(t *testing.T) {
 	assert := assert.New(t)
 	{

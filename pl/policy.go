@@ -109,6 +109,10 @@ func (p *Policy) HasSession() bool {
 	return p.session != nil
 }
 
+func (p *Policy) HasConfig() bool {
+	return p.config != nil
+}
+
 func (p *Policy) HasConst() bool {
 	return p.constProgram != nil
 }

@@ -49,3 +49,24 @@ func init() {
 		hostname = h
 	}
 }
+
+func NotZeroInt(v int, d int) int {
+	if v == 0 {
+		return d
+	}
+	return v
+}
+
+func NotZeroInt64(v int64, d int64) int64 {
+	if v == 0 {
+		return d
+	}
+	return v
+}
+
+func NotZeroStr(v string, d string) string {
+	if v == "" {
+		return d
+	}
+	return v
+}
