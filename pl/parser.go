@@ -669,7 +669,7 @@ func (p *parser) parseSessionLoad(prog *program) error {
 }
 
 func (p *parser) parseSessionScope() error {
-	x, list, err := p.parseVarScope("@session",
+	x, list, err := p.parseVarScope(ConfigRule,
 		func(_ string, prog *program, p *parser) {
 			prog.emit0(p.l, bcSetSession)
 		},
@@ -684,7 +684,7 @@ func (p *parser) parseSessionScope() error {
 }
 
 func (p *parser) parseConstScope() error {
-	x, list, err := p.parseVarScope("@const",
+	x, list, err := p.parseVarScope(ConstRule,
 		func(_ string, prog *program, p *parser) {
 			prog.emit0(p.l, bcSetConst)
 		},
@@ -2508,9 +2508,15 @@ func (p *parser) parsePrimary(prog *program, l lexeme) error {
 		prog.emit1(p.l, bcLoadReal, idx)
 		break
 
-	case tkStr, tkMStr:
+	case tkStr:
 		strV := l.sval
 		return p.parseStrInterpolation(prog, strV)
+
+	// long string does not support interpolation
+	case tkMStr:
+		strV := l.sval
+		prog.emit1(p.l, bcLoadStr, prog.addStr(strV))
+		break
 
 	case tkTrue:
 		prog.emit0(p.l, bcLoadTrue)
@@ -3417,7 +3423,7 @@ func (p *parser) parseConfig() error {
 	// try to find an existed config scope
 	prog := p.policy.config
 	if prog == nil {
-		prog = newProgram(p.policy, "@config", progConfig)
+		prog = newProgram(p.policy, ConfigRule, progConfig)
 		p.policy.config = prog
 	}
 	return p.parseConfigScope(prog)

@@ -99,7 +99,6 @@ type Evaluator struct {
 	// current frame, ie the one that is been executing
 	curframe funcframe
 	curexcep Val
-	event    Val
 }
 
 type exception struct {
@@ -118,6 +117,7 @@ type funcframe struct {
 	excep  []exception
 	sfunc  *scriptFunc
 	nfunc  *nativeFunc
+	event  Val
 }
 
 func dupFuncFrameForErr(fr *funcframe) *funcframe {
@@ -632,7 +632,7 @@ func (rr *runresult) isDone() bool {
 	return rr.e == nil
 }
 
-func (e *Evaluator) runP(event Val,
+func (e *Evaluator) runP(
 	prog *program,
 	pc int,
 	policy *Policy,
@@ -1061,7 +1061,7 @@ FUNC:
 			break
 
 		case bcLoadDollar:
-			e.push(event)
+			e.push(e.curframe.event)
 			break
 
 		case bcIndex:
@@ -1401,13 +1401,12 @@ func (e *Evaluator) enterEval(event Val, prog *program, policy *Policy) error {
 		e.Stack = e.Stack[:0]
 	}
 
-	e.event = event
-
 	// mark exception to be null, ie no exception
 	e.curexcep = NewValNull()
 
 	// assign a null scriptFunc
 	e.curframe.sfunc = &scriptFunc{}
+	e.curframe.event = event
 
 	// Enter into the VM with a native function call marker. This serves as a
 	// frame marker to indicate the end of the script frame which will help us
@@ -1438,7 +1437,7 @@ func (e *Evaluator) enterEval(event Val, prog *program, policy *Policy) error {
 		e.curframe.sfunc.prog = prog
 
 	RECOVER:
-		rr := e.runP(event, prog, pc, policy)
+		rr := e.runP(prog, pc, policy)
 
 		// finish execution
 		if rr.isDone() {
@@ -1521,7 +1520,7 @@ func (e *Evaluator) runSFunc(
 
 	{
 	RECOVER:
-		rr := e.runP(e.event, prog, pc, prog.policy)
+		rr := e.runP(prog, pc, prog.policy)
 
 		// finish execution
 		if rr.isDone() {
@@ -1592,7 +1591,7 @@ func (e *Evaluator) EvalConfig(p *Policy) error {
 	if e.Config == nil {
 		return fmt.Errorf("evaluator's Config is not set")
 	}
-	return e.enterEval(NewValStr(ConfigRule), p.config, p)
+	return e.enterEval(NewValNull(), p.config, p)
 }
 
 func (e *Evaluator) EvalConst(p *Policy) error {
@@ -1600,7 +1599,7 @@ func (e *Evaluator) EvalConst(p *Policy) error {
 		return nil
 	}
 	p.constVar = nil
-	return e.enterEval(NewValStr(ConstRule), p.constProgram, p)
+	return e.enterEval(NewValNull(), p.constProgram, p)
 }
 
 func (e *Evaluator) EvalSession(p *Policy) error {
@@ -1613,7 +1612,7 @@ func (e *Evaluator) EvalSession(p *Policy) error {
 
 func (e *Evaluator) Eval(event string, p *Policy) error {
 	if prog := p.findEvent(event); prog != nil {
-		return e.enterEval(NewValStr(event), prog, p)
+		return e.enterEval(NewValNull(), prog, p)
 	} else {
 		return nil
 	}
@@ -1636,7 +1635,7 @@ func (e *Evaluator) EvalExpr(p *Policy) (Val, error) {
 	if len(p.p) != 1 {
 		return NewValNull(), fmt.Errorf("not an expression policy")
 	}
-	if err := e.enterEval(NewValStr("$expression"), p.p[0], p); err != nil {
+	if err := e.enterEval(NewValNull(), p.p[0], p); err != nil {
 		return NewValNull(), err
 	}
 	return e.top0(), nil

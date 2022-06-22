@@ -51,7 +51,8 @@ func GetApplicationFactory(name string) ApplicationFactory {
 
 func NewApplicationResult(event string) ApplicationResult {
 	return ApplicationResult{
-		Event: event,
+		Event:   event,
+		context: pl.NewValNull(),
 	}
 }
 
@@ -59,9 +60,12 @@ func (a *ApplicationResult) Context() pl.Val {
 	return a.context
 }
 
-func (a *ApplicaitonResult) AddContext(
+func (a *ApplicationResult) AddContext(
 	key string,
 	value pl.Val,
 ) {
-	a.context[key] = value
+	if !a.context.IsMap() {
+		a.context = pl.NewValMap()
+	}
+	a.context.AddMap(key, value)
 }

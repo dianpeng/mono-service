@@ -216,7 +216,7 @@ func (b *bodySignApplication) Accept(
 	)
 	output.AddContext(
 		"signBody",
-		pl.NewValStr(b.r.body),
+		hpl.NewBodyValFromStream(b.r.body),
 	)
 
 	return output, nil
