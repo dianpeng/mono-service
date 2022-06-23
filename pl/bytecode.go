@@ -104,7 +104,10 @@ const (
 	bcSCall = 84
 	bcVCall = 85 // variable call, ie calling a function that is loaded into
 	// a dynamic variable which cannot be resolved
-	bcReturn = 89
+	bcReturn = 87
+
+	// emit an event to trigger a rule
+	bcEmit = 89
 
 	// iterator
 	bcNewIterator   = 90

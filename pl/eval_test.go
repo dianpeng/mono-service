@@ -1548,21 +1548,21 @@ func TestTernary1(t *testing.T) {
 	assert.True(testInt(
 		`
 test{
-  output => true if 1 else 2;
+  output => 1 if true else 2;
 }
 `, 1))
 
 	assert.True(testInt(
 		`
 test{
-  output => false if 1 else 2;
+  output => 1 if false else 2;
 }
 `, 2))
 
 	assert.True(testInt(
 		`
 test{
-  output => false if 1 else (false if 3 else (false if 4 else 2));
+  output => 1 if false else (3 if false else (4 if false else 2));
 }
 `, 2))
 

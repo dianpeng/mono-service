@@ -9,9 +9,10 @@ import (
 )
 
 const (
-	ConfigRule  = "@config"
-	SessionRule = "@session"
-	ConstRule   = "@const"
+	ConfigRule       = "@config"
+	SessionRule      = "@session"
+	ConstRule        = "@const"
+	defaultStackSize = 2048
 )
 
 // Config Population
@@ -32,6 +33,26 @@ type cbEvalContext struct {
 	loadVarFn  func(*Evaluator, string) (Val, error)
 	storeVarFn func(*Evaluator, string, Val) error
 	actionFn   func(*Evaluator, string, Val) error
+}
+
+const (
+	// continue draining event until we are exhausted
+	EventContextContinue = 0
+
+	// stop draining event and leave the queue as is
+	EventContextPuase = 1
+
+	// stop draining event and clear all the pending queue
+	EventContextStopAndClear = 2
+)
+
+type EventContext interface {
+	// called when an async event is invoked, and it has an error. If this
+	// function returns false, then event queue execution will be halt
+	OnEventError(
+		string,
+		error,
+	) int
 }
 
 func NewCbEvalContext(
@@ -93,12 +114,14 @@ type Evaluator struct {
 	Session []Val
 	Context EvalContext
 	Config  EvalConfig
+	Event   EventContext
 
-	// internal states
-
+	// internal states -----------------------------------------------------------
 	// current frame, ie the one that is been executing
-	curframe funcframe
-	curexcep Val
+	curframe     funcframe
+	curexcep     Val
+	eventQ       EventQueue
+	inEventQueue bool
 }
 
 type exception struct {
@@ -171,6 +194,11 @@ func (ff *funcframe) frameInfo() string {
 	}
 }
 
+func (e *Evaluator) curevent() Val {
+	must(e.curframe.prog.progtype == progRule, "must be rule")
+	return e.Stack[e.curframe.framep+1]
+}
+
 func (e *Evaluator) curfuncframeVal() Val {
 	return newValFrame(&e.curframe)
 }
@@ -185,6 +213,63 @@ func (e *Evaluator) curExcep() *exception {
 		return &e.curframe.excep[sz-1]
 	} else {
 		return nil
+	}
+}
+
+func (e *Evaluator) SetEventQueue(eq EventQueue) {
+	e.eventQ = eq
+}
+
+func (e *Evaluator) EventQueue() EventQueue {
+	return e.eventQ
+}
+
+func (e *Evaluator) emitEvent(
+	name string,
+	context Val,
+) {
+	must(e.eventQ != nil, "event queue must be setup")
+	e.eventQ.OnEvent(name, context)
+}
+
+func (e *Evaluator) drainEventQueue(p *Policy) {
+	if e.inEventQueue {
+		return
+	}
+	e.inEventQueue = true
+	defer func() {
+		e.inEventQueue = false
+	}()
+
+	var status int
+	statusp := &status
+
+	callback := func(
+		name string,
+		err error,
+	) bool {
+		if e.Event != nil {
+			*statusp = e.Event.OnEventError(
+				name,
+				err,
+			)
+		}
+
+		if *statusp != EventContextContinue {
+			return false
+		} else {
+			return true
+		}
+	}
+
+	e.eventQ.Drain(
+		e,
+		p,
+		callback,
+	)
+
+	if *statusp == EventContextStopAndClear {
+		e.eventQ.Clear()
 	}
 }
 
@@ -253,9 +338,10 @@ func NewEvaluatorSimple() *Evaluator {
 
 func NewEvaluatorWithContext(context EvalContext) *Evaluator {
 	return &Evaluator{
-		Stack:   nil,
+		Stack:   make([]Val, 0, defaultStackSize),
 		Session: nil,
 		Context: context,
+		eventQ:  &defEventQueue{},
 	}
 }
 
@@ -268,12 +354,12 @@ func NewEvaluatorWithContextCallback(
 }
 
 func NewEvaluator(context EvalContext, config EvalConfig) *Evaluator {
-
 	return &Evaluator{
-		Stack:   nil,
+		Stack:   make([]Val, 0, defaultStackSize),
 		Session: nil,
 		Context: context,
 		Config:  config,
+		eventQ:  &defEventQueue{},
 	}
 }
 
@@ -291,6 +377,12 @@ func (e *Evaluator) popN(cnt int) {
 func (e *Evaluator) popTo(size int) {
 	must(len(e.Stack) >= size, "invalid popTo size")
 	e.Stack = e.Stack[:size]
+}
+
+func (e *Evaluator) clearStack() {
+	if len(e.Stack) != 0 {
+		e.Stack = e.Stack[:0]
+	}
 }
 
 func (e *Evaluator) stackSize() int {
@@ -932,8 +1024,8 @@ FUNC:
 						break
 
 					default:
-						return rrErrf(prog, pc, "object must be function, but got type: %s",
-							funcIndexOrEntry.Id())
+						return rrErrf(prog, pc, "object must be callable function, "+
+							"but got type: %s", funcIndexOrEntry.Id())
 					}
 				} else {
 					return rrErrf(prog, pc, "object must be function, but got type: %s",
@@ -1061,7 +1153,7 @@ FUNC:
 			break
 
 		case bcLoadDollar:
-			e.push(e.curframe.event)
+			e.push(e.curevent())
 			break
 
 		case bcIndex:
@@ -1322,6 +1414,18 @@ FUNC:
 		case bcHalt:
 			return rrDone()
 
+		case bcEmit:
+			context := e.top0()
+			name := e.top1()
+			e.popN(2)
+			must(name.IsString(), "event name must be string")
+
+			e.emitEvent(
+				name.String(),
+				context,
+			)
+			break
+
 		default:
 			log.Fatalf("invalid unknown bytecode %d", bc.opcode)
 		}
@@ -1392,21 +1496,18 @@ func (e *Evaluator) unwindForExcep(toTop bool, err error) (int, *program, btlist
 	return -1, nil, bt, false
 }
 
-func (e *Evaluator) enterEval(event Val, prog *program, policy *Policy) error {
+func (e *Evaluator) runRule(event Val, prog *program, policy *Policy) error {
 	must(e.Context != nil, "Evaluator's context is nil!")
 
 	// just clear the stack size if needed before every run, since we need to reuse
 	// this evaluator
-	if cap(e.Stack) > 0 {
-		e.Stack = e.Stack[:0]
-	}
+	e.clearStack()
 
 	// mark exception to be null, ie no exception
 	e.curexcep = NewValNull()
 
 	// assign a null scriptFunc
 	e.curframe.sfunc = &scriptFunc{}
-	e.curframe.event = event
 
 	// Enter into the VM with a native function call marker. This serves as a
 	// frame marker to indicate the end of the script frame which will help us
@@ -1414,6 +1515,10 @@ func (e *Evaluator) enterEval(event Val, prog *program, policy *Policy) error {
 
 	// -1 means this is a rule inside of the policy instead of a function call
 	e.push(NewValInt(-1))
+
+	// push the event onto the stack to simulate the argument
+	e.push(event)
+
 	_, entryV := newfuncframe(
 		0,
 		nil,
@@ -1424,6 +1529,7 @@ func (e *Evaluator) enterEval(event Val, prog *program, policy *Policy) error {
 		nil,
 	)
 	e.push(entryV)
+
 	pc := 0
 
 	// Now let's enter into the bytecode VM
@@ -1433,7 +1539,7 @@ func (e *Evaluator) enterEval(event Val, prog *program, policy *Policy) error {
 		e.curframe.prog = prog
 		e.curframe.pc = pc
 		e.curframe.framep = 0
-		e.curframe.farg = 0
+		e.curframe.farg = 1
 		e.curframe.sfunc.prog = prog
 
 	RECOVER:
@@ -1591,36 +1697,67 @@ func (e *Evaluator) EvalConfig(p *Policy) error {
 	if e.Config == nil {
 		return fmt.Errorf("evaluator's Config is not set")
 	}
-	return e.enterEval(NewValNull(), p.config, p)
+	return e.runRule(NewValNull(), p.config, p)
 }
 
 func (e *Evaluator) EvalConst(p *Policy) error {
+	defer func() {
+		e.drainEventQueue(p)
+	}()
+
 	if !p.HasConst() {
 		return nil
 	}
 	p.constVar = nil
-	return e.enterEval(NewValNull(), p.constProgram, p)
+	return e.runRule(NewValNull(), p.constProgram, p)
 }
 
 func (e *Evaluator) EvalSession(p *Policy) error {
+	defer func() {
+		e.drainEventQueue(p)
+	}()
+
 	if !p.HasSession() {
 		return nil
 	}
 	e.Session = nil
-	return e.enterEval(NewValStr(SessionRule), p.session, p)
+	return e.runRule(NewValStr(SessionRule), p.session, p)
 }
 
 func (e *Evaluator) Eval(event string, p *Policy) error {
+	defer func() {
+		e.drainEventQueue(p)
+	}()
+
 	if prog := p.findEvent(event); prog != nil {
-		return e.enterEval(NewValNull(), prog, p)
+		return e.runRule(NewValNull(), prog, p)
 	} else {
 		return nil
 	}
 }
 
 func (e *Evaluator) EvalWithContext(event string, context Val, p *Policy) error {
+	defer func() {
+		e.drainEventQueue(p)
+	}()
+
 	if prog := p.findEvent(event); prog != nil {
-		return e.enterEval(context, prog, p)
+		return e.runRule(context, prog, p)
+	} else {
+		return nil
+	}
+}
+
+// Notes, this must be used for evaluation of event queue event since inside of
+// this function, it will NOT issue event queue call again which prevent from
+// been called recursively
+func (e *Evaluator) EvalDeferred(
+	name string,
+	context Val,
+	p *Policy,
+) error {
+	if prog := p.findEvent(name); prog != nil {
+		return e.runRule(context, prog, p)
 	} else {
 		return nil
 	}
@@ -1635,7 +1772,7 @@ func (e *Evaluator) EvalExpr(p *Policy) (Val, error) {
 	if len(p.p) != 1 {
 		return NewValNull(), fmt.Errorf("not an expression policy")
 	}
-	if err := e.enterEval(NewValNull(), p.p[0], p); err != nil {
+	if err := e.runRule(NewValNull(), p.p[0], p); err != nil {
 		return NewValNull(), err
 	}
 	return e.top0(), nil

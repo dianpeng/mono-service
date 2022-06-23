@@ -896,6 +896,8 @@ func (p *parser) parseRule() error {
 
 	prog := newProgram(p.policy, name, progRule)
 	p.enterScopeTop(entryRule, prog)
+
+	p.mustAddLocalVar("#event")
 	p.mustAddLocalVar("#frame")
 	defer func() {
 		p.leaveScope()
@@ -1956,6 +1958,41 @@ func (p *parser) parseContinue(prog *program) error {
 	return nil
 }
 
+// parsing emit statement.
+func (p *parser) parseEmit(prog *program) error {
+	p.l.next()
+
+	eventName := ""
+
+	switch p.l.token {
+	case tkId, tkStr:
+		eventName = p.l.valueText
+		break
+
+	default:
+		break
+	}
+	p.l.next()
+
+	// emit a local variable contain an eventName string
+	prog.emit1(p.l, bcLoadStr, prog.addStr(eventName))
+
+	// optionally we may have a ',' to indicate there's an arugment
+	if p.l.token == tkComma {
+		p.l.next()
+		if err := p.parseExpr(prog); err != nil {
+			return err
+		}
+	} else {
+		prog.emit0(p.l, bcLoadNull)
+	}
+
+	// this is just for convinience, emit should not carry argument, but put a 1
+	// there to indicate one argument is easy for us to do simulation
+	prog.emit1(p.l, bcEmit, 1)
+	return nil
+}
+
 func (p *parser) parseBodyStmt(prog *program) (bool, error) {
 	hasSep := true
 
@@ -2019,6 +2056,12 @@ func (p *parser) parseBodyStmt(prog *program) (bool, error) {
 
 	case tkReturn:
 		if err := p.parseReturn(prog); err != nil {
+			return false, err
+		}
+		break
+
+	case tkEmit:
+		if err := p.parseEmit(prog); err != nil {
 			return false, err
 		}
 		break

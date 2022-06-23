@@ -14,6 +14,7 @@ session {
   a = 10;
   b = 20;
   c = 200 - 1 + 1;
+  ALOHA=0;
 }
 
 fn HelloWorld() {
@@ -48,4 +49,15 @@ rule "response.interceptor.status" {
 
 rule "response.interceptor.body" {
   println("===================");
+  emit aloha;
+  println("after aloha");
+  println("===================");
+}
+
+rule "aloha" {
+  if ALOHA < 10 {
+    println("ALOHA");
+    ALOHA++;
+    emit aloha;
+  }
 }
