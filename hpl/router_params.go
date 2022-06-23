@@ -62,6 +62,10 @@ func (h *RouterParams) Id() string {
 	return HttpRouterParamsTypeId
 }
 
+func (h *RouterParams) IsImmutable() bool {
+	return false
+}
+
 func (h *RouterParams) NewIterator() (pl.Iter, error) {
 	return nil, fmt.Errorf("http.router.params does not support iterator")
 }

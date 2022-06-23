@@ -95,8 +95,9 @@ const (
 	bcLoadSession  = 72
 	bcStoreSession = 73
 
-	bcSetConst  = 75
-	bcLoadConst = 76
+	bcSetGlobal   = 75
+	bcLoadGlobal  = 76
+	bcStoreGlobal = 77
 
 	// call
 	bcMCall = 82
@@ -595,10 +596,14 @@ func getBytecodeName(bc int) string {
 		return "load-session"
 	case bcStoreSession:
 		return "store-session"
-	case bcSetConst:
-		return "set-const"
-	case bcLoadConst:
-		return "load-const"
+
+	case bcSetGlobal:
+		return "set-global"
+	case bcLoadGlobal:
+		return "load-global"
+	case bcStoreGlobal:
+		return "store-global"
+
 	case bcLoadRegexp:
 		return "load-regexp"
 	case bcPushException:

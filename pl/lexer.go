@@ -15,7 +15,7 @@ const (
 
 	// qualify id
 	tkSId
-	tkCId
+	tkGId
 	tkDId
 	tkRId
 	tkEId
@@ -93,7 +93,7 @@ const (
 	tkFalse
 	tkNull
 	tkDynamic
-	tkConst
+	tkGlobal
 	tkSession
 	tkLet
 	tkSwitch
@@ -169,8 +169,8 @@ func getTokenName(tk int) string {
 		return "resource_id"
 	case tkEId:
 		return "extern_id"
-	case tkCId:
-		return "const_id"
+	case tkGId:
+		return "global_id"
 
 	case tkInt:
 		return "int"
@@ -272,8 +272,8 @@ func getTokenName(tk int) string {
 		return "null"
 	case tkLet:
 		return "let"
-	case tkConst:
-		return "const"
+	case tkGlobal:
+		return "global"
 	case tkDynamic:
 		return "dynamic"
 	case tkSession:
@@ -610,7 +610,7 @@ var lexerkeyword = map[string]int{
 	"null":  tkNull,
 
 	"dynamic": tkDynamic,
-	"const":   tkConst,
+	"global":  tkGlobal,
 	"session": tkSession,
 	"extern":  tkExtern,
 
@@ -653,7 +653,7 @@ var lexerkeyword = map[string]int{
 func (t *lexer) tryQualifyId(keyword int) int {
 	switch keyword {
 	case tkSession,
-		tkConst,
+		tkGlobal,
 		tkDynamic,
 		tkExtern:
 		break
@@ -683,8 +683,8 @@ func (t *lexer) tryQualifyId(keyword int) int {
 	switch keyword {
 	case tkSession:
 		return tkSId
-	case tkConst:
-		return tkCId
+	case tkGlobal:
+		return tkGId
 	case tkDynamic:
 		return tkDId
 	default:

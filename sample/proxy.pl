@@ -1,4 +1,4 @@
-const {
+global {
   taobao = http::get("https://www.taobao.com").body:string();
 }
 

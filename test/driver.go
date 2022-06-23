@@ -45,8 +45,8 @@ func runAllTestFile(path string) (testResult, error) {
 			t.compileFail++
 		} else {
 			ev := pl.NewEvaluatorSimple()
-			if err := ev.EvalConst(p); err != nil {
-				fmt.Printf(">> EvalConst: %s\n", err.Error())
+			if err := ev.EvalGlobal(p); err != nil {
+				fmt.Printf(">> EvalGlobal: %s\n", err.Error())
 				t.constFail++
 			}
 			if err := ev.EvalSession(p); err != nil {

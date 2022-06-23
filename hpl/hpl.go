@@ -88,6 +88,17 @@ func (h *Hpl) SetPolicy(p *pl.Policy) {
 	h.Policy = p
 }
 
+// Derive a HPL state from another existed HPL, suitable for using in background
+func (h *Hpl) Derive(that *Hpl) {
+	h.Policy = that.Policy
+
+	// notes, we currently do not have a way to duplicate session state from that
+	// HPL to our HPL and due to the thread issue, we cannot safely just do shallow
+	// copy of the session object. Therefore, we do not support session variable
+	// for now and user will get an error in background rule/function if they
+	// manage to use session variable
+}
+
 func (p *Hpl) loadVarBasic(x *pl.Evaluator, n string) (pl.Val, error) {
 	if v, ok := p.loadFnVar(x, n); ok {
 		return v, nil
@@ -201,23 +212,23 @@ func (h *Hpl) OnCustomize(selector string, session SessionWrapper) error {
 }
 
 // -----------------------------------------------------------------------------
-// const phase
-func (h *Hpl) constLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
+// global phase
+func (h *Hpl) globalLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
 	if v, ok := h.loadFnVar(x, n); ok {
 		return v, nil
 	}
-	return pl.NewValNull(), fmt.Errorf("const initialization: unknown variable %s", n)
+	return pl.NewValNull(), fmt.Errorf("global initialization: unknown variable %s", n)
 }
 
-func (p *Hpl) constStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
-	return fmt.Errorf("const initialization: unknown variable set %s", n)
+func (p *Hpl) globalStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
+	return fmt.Errorf("global initialization: unknown variable set %s", n)
 }
 
-func (h *Hpl) constAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
-	return fmt.Errorf("const initialization: unknown action %s", actionName)
+func (h *Hpl) globalAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
+	return fmt.Errorf("global initialization: unknown action %s", actionName)
 }
 
-func (h *Hpl) OnConst(session ConstSessionWrapper) error {
+func (h *Hpl) OnGlobal(session ConstSessionWrapper) error {
 	if h.Policy == nil {
 		return fmt.Errorf("the Hpl engine does not have any policy binded")
 	}
@@ -229,9 +240,9 @@ func (h *Hpl) OnConst(session ConstSessionWrapper) error {
 	h.constSession = session
 
 	h.Eval.Context = pl.NewCbEvalContext(
-		h.constLoadVar,
-		h.constStoreVar,
-		h.constAction,
+		h.globalLoadVar,
+		h.globalStoreVar,
+		h.globalAction,
 	)
 
 	defer func() {
@@ -239,7 +250,7 @@ func (h *Hpl) OnConst(session ConstSessionWrapper) error {
 		h.constSession = nil
 	}()
 
-	return h.Eval.EvalConst(h.Policy)
+	return h.Eval.EvalGlobal(h.Policy)
 }
 
 // -----------------------------------------------------------------------------
@@ -271,9 +282,9 @@ func (h *Hpl) OnConfig(context pl.EvalConfig, session ConstSessionWrapper) error
 	h.constSession = session
 
 	h.Eval.Context = pl.NewCbEvalContext(
-		h.constLoadVar,
-		h.constStoreVar,
-		h.constAction,
+		h.configLoadVar,
+		h.configStoreVar,
+		h.configAction,
 	)
 	h.Eval.Config = context
 

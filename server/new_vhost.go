@@ -31,7 +31,7 @@ func initpolicy(x string, config pl.EvalConfig) (*pl.Policy, error) {
 
 	hpl.SetPolicy(p)
 
-	if err := hpl.OnConst(session); err != nil {
+	if err := hpl.OnGlobal(session); err != nil {
 		return nil, err
 	}
 

@@ -116,6 +116,9 @@ type Usr interface {
 	Info() string
 	ToNative() interface{}
 
+	// Used to detect whether it is suitable for storing inside of global variable
+	IsImmutable() bool
+
 	// return a iterator
 	NewIterator() (Iter, error)
 
@@ -518,6 +521,7 @@ func NewValUVal(
 	f8 UValInfo,
 	f9 UValToNative,
 	f10 UValIter,
+	f11 UValIsImmutable,
 ) Val {
 	return Val{
 		Type: ValUsr,
@@ -534,6 +538,7 @@ func NewValUVal(
 			f8,
 			f9,
 			f10,
+			f11,
 		),
 	}
 }
@@ -549,6 +554,7 @@ func NewValUValImmutable(
 	f8 UValInfo,
 	f9 UValToNative,
 	f10 UValIter,
+	f11 UValIsImmutable,
 ) Val {
 	return Val{
 		Type: ValUsr,
@@ -565,6 +571,7 @@ func NewValUValImmutable(
 			f8,
 			f9,
 			f10,
+			f11,
 		),
 	}
 }

@@ -76,6 +76,10 @@ func (h *Url) SetUserInfo(userInfo string) {
 	}
 }
 
+func (h *Url) IsImmutable() bool {
+	return false
+}
+
 func (h *Url) DotSet(key string, val pl.Val) error {
 	str, err := val.ToString()
 	if err != nil {

@@ -15,20 +15,22 @@ type UValId func(interface{}) string
 type UValInfo func(interface{}) string
 type UValToNative func(interface{}) interface{}
 type UValIter func(interface{}) (Iter, error)
+type UValIsImmutable func(interface{}) bool
 
 type UVal struct {
-	context    interface{}
-	indexFn    UValIndex
-	indexSetFn UValIndexSet
-	dotFn      UValDot
-	dotSetFn   UValDotSet
-	methodFn   UValMethod
-	toStringFn UValToString
-	toJSONFn   UValToJSON
-	idFn       UValId
-	infoFn     UValInfo
-	toNativeFn UValToNative
-	iterFn     UValIter
+	context     interface{}
+	indexFn     UValIndex
+	indexSetFn  UValIndexSet
+	dotFn       UValDot
+	dotSetFn    UValDotSet
+	methodFn    UValMethod
+	toStringFn  UValToString
+	toJSONFn    UValToJSON
+	idFn        UValId
+	infoFn      UValInfo
+	toNativeFn  UValToNative
+	iterFn      UValIter
+	immutableFn UValIsImmutable
 }
 
 func (u *UVal) Context() interface{} {
@@ -123,6 +125,14 @@ func (u *UVal) NewIterator() (Iter, error) {
 	}
 }
 
+func (u *UVal) IsImmutable() bool {
+	if u.immutableFn != nil {
+		return false
+	} else {
+		return u.immutableFn(u.context)
+	}
+}
+
 func NewUVal(
 	c interface{},
 	f0 UValIndex,
@@ -137,20 +147,22 @@ func NewUVal(
 	f8 UValInfo,
 	f9 UValToNative,
 	f10 UValIter,
+	f11 UValIsImmutable,
 ) *UVal {
 	return &UVal{
-		context:    c,
-		indexFn:    f0,
-		indexSetFn: f1,
-		dotFn:      f2,
-		dotSetFn:   f3,
-		methodFn:   f4,
-		toStringFn: f5,
-		toJSONFn:   f6,
-		idFn:       f7,
-		infoFn:     f8,
-		toNativeFn: f9,
-		iterFn:     f10,
+		context:     c,
+		indexFn:     f0,
+		indexSetFn:  f1,
+		dotFn:       f2,
+		dotSetFn:    f3,
+		methodFn:    f4,
+		toStringFn:  f5,
+		toJSONFn:    f6,
+		idFn:        f7,
+		infoFn:      f8,
+		toNativeFn:  f9,
+		iterFn:      f10,
+		immutableFn: f11,
 	}
 }
 

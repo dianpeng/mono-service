@@ -215,7 +215,7 @@ type parser struct {
 	l         *lexer
 	policy    *Policy
 	stbl      *lexicalScope
-	constVar  []string
+	globalVar []string
 	sessVar   []string
 	callPatch []callentry
 	counter   uint64 // random counter used to generate unique id etc ...
@@ -232,7 +232,7 @@ const (
 	symSession = iota
 	symLocal
 	symUpval
-	symConst
+	symGlobal
 	symDynamic
 )
 
@@ -468,8 +468,8 @@ func (p *parser) findSessionIdx(x string) int {
 	return symError
 }
 
-func (p *parser) findConstIdx(x string) int {
-	for idx, n := range p.constVar {
+func (p *parser) findGlobalIdx(x string) int {
+	for idx, n := range p.globalVar {
 		if n == x {
 			return idx
 		}
@@ -478,7 +478,7 @@ func (p *parser) findConstIdx(x string) int {
 }
 
 // symbol resolution, ie binding
-func (p *parser) resolveSymbol(xx string, ignoreConst bool, forWrite bool) (int, int) {
+func (p *parser) resolveSymbol(xx string, forWrite bool) (int, int) {
 	// local symbol table, based on for-read/for-write to handle local cases, since
 	// local symbol can be const value
 	if forWrite {
@@ -506,12 +506,10 @@ func (p *parser) resolveSymbol(xx string, ignoreConst bool, forWrite bool) (int,
 		return symSession, sessVar
 	}
 
-	if !ignoreConst {
-		// const symbol table
-		constVar := p.findConstIdx(xx)
-		if constVar != symError {
-			return symConst, constVar
-		}
+	// global symbol table
+	globalVar := p.findGlobalIdx(xx)
+	if globalVar != symError {
+		return symGlobal, globalVar
 	}
 
 	// lastly, it must be dynamic variable. Notes, we don't have closure for now
@@ -558,13 +556,13 @@ func (p *parser) parseFwd() error {
 
 	// top of the program allow user to write 2 types of special scope
 	//
-	// 1) Const scope, ie definition of const variable which is initialized once
+	// 1) Global scope, ie definition of global variable which is initialized once
 	//    the program is been parsed, ie right inside of the parser
 	//
 	// 2) Session Scope, which should be reinitialized once the session is done.
 	//    The definition of session is defined by user
-	if p.l.token == tkConst {
-		if err := p.parseConstScope(); err != nil {
+	if p.l.token == tkGlobal {
+		if err := p.parseGlobalScope(); err != nil {
 			return err
 		}
 	} else if p.l.token == tkConfig {
@@ -632,9 +630,9 @@ LOOP:
 				// we should invest more to error reporting
 				switch tk {
 				case tkSession:
-					return nil, p.errf("session section should be put at the top, after const scope")
-				case tkConst:
-					return nil, p.errf("const section should be put at the top")
+					return nil, p.errf("session section should be put at the top, after global scope")
+				case tkGlobal:
+					return nil, p.errf("global section should be put at the top")
 				default:
 					return nil, p.errf("unknown token: %s, unrecognized statement", p.l.tokenName())
 				}
@@ -683,18 +681,21 @@ func (p *parser) parseSessionScope() error {
 	return nil
 }
 
-func (p *parser) parseConstScope() error {
-	x, list, err := p.parseVarScope(ConstRule,
+func (p *parser) parseGlobalScope() error {
+	x, list, err := p.parseVarScope(GlobalRule,
 		func(_ string, prog *program, p *parser) {
-			prog.emit0(p.l, bcSetConst)
+			prog.emit0(p.l, bcSetGlobal)
 		},
 	)
 
 	if err != nil {
 		return err
 	}
-	p.constVar = list
-	p.policy.constProgram = x
+
+	p.globalVar = list
+
+	p.policy.global.globalProgram = x
+	p.policy.sinfo.globalName = list
 	return nil
 }
 
@@ -976,6 +977,11 @@ func (p *parser) parseSymbolAssign(prog *program,
 			prog.emit1(p.l, bcLoadUpvalue, symIdx)
 			break
 
+		case symGlobal:
+			must(symIdx >= 0, "must be valid index")
+			prog.emit1(p.l, bcLoadGlobal, symIdx)
+			break
+
 		default:
 			prog.emit1(p.l, bcLoadVar, prog.addStr(symName))
 			break
@@ -1079,6 +1085,10 @@ func (p *parser) parseSymbolAssign(prog *program,
 		prog.emit1(p.l, bcStoreUpvalue, symIdx)
 		break
 
+	case symGlobal:
+		prog.emit1(p.l, bcStoreGlobal, symIdx)
+		break
+
 	default:
 		prog.emit1(p.l, bcStoreVar, prog.addStr(symName))
 		break
@@ -1103,8 +1113,7 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme, popExpr bool) (boo
 		switch lexeme.token {
 		// unbounded token/symbol, require resolution
 		case tkId:
-			sym, idx := p.resolveSymbol(lexeme.sval, true, true)
-			must(sym != symConst, "must not be const")
+			sym, idx := p.resolveSymbol(lexeme.sval, true)
 
 			if sym == symLocal && idx == symInvalidConst {
 				return true, p.errf("local variable %s is const, cannot be assigned to", lexeme.sval)
@@ -1130,8 +1139,8 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme, popExpr bool) (boo
 			)
 
 			// const store
-		case tkCId:
-			return true, p.errf("const scope variable cannot be used for storing")
+		case tkGId:
+			return true, p.errf("global scope variable cannot be used for storing")
 
 			// dynamic variable store
 		case tkDId:
@@ -1389,7 +1398,7 @@ func (p *parser) parseTry(prog *program,
 			idx = p.findLocalVar(p.l.valueText)
 			if idx == symError {
 				return p.errf("local variable not found: %s", p.l.valueText)
-			} else if idx == symConst {
+			} else if idx == symInvalidConst {
 				return p.errf("local variable is const: %s", p.l.valueText)
 			}
 			p.l.next()
@@ -2015,7 +2024,7 @@ func (p *parser) parseBodyStmt(prog *program) (bool, error) {
 		}
 		break
 
-	case tkConst:
+	case tkGlobal:
 		if err := p.parseVarDecl(prog, symtConst); err != nil {
 			return false, err
 		}
@@ -2154,7 +2163,7 @@ func (p *parser) parseExprStmt(prog *program) (bool, bool, error) {
 	switch p.l.token {
 	case tkLet:
 		return true, false, p.parseVarDecl(prog, symtVar)
-	case tkConst:
+	case tkGlobal:
 		return true, false, p.parseVarDecl(prog, symtConst)
 	case tkFor:
 		return false, false, p.parseFor(prog)
@@ -2609,7 +2618,7 @@ func (p *parser) parsePrimary(prog *program, l lexeme) error {
 		}
 		break
 
-	case tkDollar, tkId, tkCId, tkSId, tkDId:
+	case tkDollar, tkId, tkGId, tkSId, tkDId:
 		if err := p.parsePExpr(prog, tk, l.sval); err != nil {
 			return err
 		}
@@ -2797,7 +2806,6 @@ func (p *parser) parseUnboundCall(prog *program,
 	symtype, symindex := p.resolveSymbol(
 		name,
 		false,
-		false,
 	)
 
 	switch symtype {
@@ -2813,8 +2821,8 @@ func (p *parser) parseUnboundCall(prog *program,
 		prog.emit1At(p.l, entryIndex, bcLoadUpvalue, symindex)
 		break
 
-	case symConst:
-		prog.emit1At(p.l, entryIndex, bcLoadConst, symindex)
+	case symGlobal:
+		prog.emit1At(p.l, entryIndex, bcLoadGlobal, symindex)
 		break
 
 	default:
@@ -3014,7 +3022,7 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 			// 1. session variable
 			// 2. local variable
 			// 3. dynmaic variable
-			symT, symIdx := p.resolveSymbol(name, false, false)
+			symT, symIdx := p.resolveSymbol(name, false)
 			must(symIdx != symInvalidConst, "should never return invalid constant")
 
 			switch symT {
@@ -3030,8 +3038,8 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 				prog.emit1(p.l, bcLoadUpvalue, symIdx)
 				break
 
-			case symConst:
-				prog.emit1(p.l, bcLoadConst, symIdx)
+			case symGlobal:
+				prog.emit1(p.l, bcLoadGlobal, symIdx)
 
 			default:
 				prog.emit1(p.l, bcLoadVar, prog.addStr(name))
@@ -3067,12 +3075,12 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 		prog.emit1(p.l, bcLoadSession, idx)
 		break
 
-	case tkCId:
-		idx := p.findConstIdx(name)
+	case tkGId:
+		idx := p.findGlobalIdx(name)
 		if idx == -1 {
-			return p.errf("const variable %s is unknown", name)
+			return p.errf("global variable %s is unknown", name)
 		}
-		prog.emit1(p.l, bcLoadConst, idx)
+		prog.emit1(p.l, bcLoadGlobal, idx)
 		break
 
 	default:
@@ -3318,7 +3326,7 @@ func (p *parser) parseStrInterpolationExpr(strV string, offset int, prog *progra
 	// duplicate parent parser's states, FIXME(dpeng): make the following function
 	// into a separate function to allow derived parser from parent parser
 	pp.stbl = p.stbl
-	pp.constVar = p.constVar
+	pp.globalVar = p.globalVar
 	pp.sessVar = p.sessVar
 	pp.policy = p.policy
 
@@ -3639,7 +3647,7 @@ func (p *parser) parseConfigScopeBodyStmt(prog *program) (bool, error) {
 		}
 		break
 
-	case tkConst:
+	case tkGlobal:
 		if err := p.parseVarDecl(prog, symtConst); err != nil {
 			return false, err
 		}

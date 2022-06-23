@@ -205,6 +205,10 @@ func (h *Header) Id() string {
 	return HttpHeaderTypeId
 }
 
+func (h *Header) IsImmutable() bool {
+	return false
+}
+
 func (h *Header) NewIterator() (pl.Iter, error) {
 	return nil, fmt.Errorf("http.header does not support iterator")
 }

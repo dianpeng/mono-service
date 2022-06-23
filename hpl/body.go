@@ -138,6 +138,10 @@ func (h *Body) Id() string {
 	return HttpBodyTypeId
 }
 
+func (h *Body) IsImmutable() bool {
+	return false
+}
+
 func (h *Body) NewIterator() (pl.Iter, error) {
 	return nil, fmt.Errorf("http.body does not support iterator")
 }

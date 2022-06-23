@@ -239,6 +239,10 @@ func (h *Request) Id() string {
 	return HttpRequestTypeId
 }
 
+func (h *Request) IsImmutable() bool {
+	return false
+}
+
 func (h *Request) NewIterator() (pl.Iter, error) {
 	return nil, fmt.Errorf("http.request does not support iterator")
 }

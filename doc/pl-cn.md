@@ -134,13 +134,13 @@ rule xx {
 
 
 
-3. 全局静态块
+3. 全局块
 
-全局静态块是一个全局唯一的静态变量定义。该块在服务器启动的时候进行求值，然后变量的值固定不变。注意，用户任然可以改变某个值的内部情况，比如Map的元素等。但是，全局静态区域的变量绑定的对应值不会发生变化。注意，const区域必须定义在整个代码的最前面。
+全局静态块是一个全局唯一的静态变量定义。该块在服务器启动的时候进行求值，然后变量的值固定不变。注意，用户任然可以改变某个值的内部情况，比如Map的元素等。但是，全局静态区域的变量绑定的对应值不会发生变化。注意，全局区域必须定义在整个代码的最前面。
 
 
 ```
-const {
+global {
 	const1 = http::get("https://www.tmall.com").body:string(); // 存储tmall首页HTML到string
     const2 = 100;
     const3 = [];
@@ -159,7 +159,7 @@ func myGlobalInit() {
 
 4. Session 变量块
 
-Session变量块定义的变量是关联每次HTTP请求session，每次HTTP请求进入，Session内部的变量会重新求值，Session的变量被某次HTTP请求独占。注意，session必须定义在所有的rule之前，const区域之后，否则语法错误。
+Session变量块定义的变量是关联每次HTTP请求session，每次HTTP请求进入，Session内部的变量会重新求值，Session的变量被某次HTTP请求独占。注意，session必须定义在所有的rule之前，global区域之后，否则语法错误。
 
 ```
 
@@ -205,15 +205,15 @@ PL支持4种变量
 
 ```
 
-const {
+global {
  const1 = http::do("GET", "http://www.example.com"); // will just be initialized once
 }
 
 fn foo() {
 }
 
-// the following const scope is not allowed and will not compile
-const {
+// 这种global区域是无法通过编译的，因为前面已经有个session区域了
+global {
 ...
 }
 
@@ -232,7 +232,7 @@ session {
 fn foo() {
 }
 
-// the following const scope is not allowed and will not compile
+// 这种session区域是无法通过编译的，因为前面已经有个session区域了
 session {
   ...
 }
@@ -277,7 +277,7 @@ PL中，任何一个符号，编译器会使用如下的查找优先级
 
 1. 局部变量
 2. session变量
-3. 全局const
+3. 全局global
 4. 动态变量
 
 用户可以通过限定的方式，强制要求某个符号按照某种类型的变量解释
@@ -288,8 +288,8 @@ rule test {
   // 强制要求a按照session变量查询
   let x = session::a;
   
-  // 强制要求a按照const变量查询
-  let y = const::a;
+  // 强制要求a按照全局变量查询
+  let y = global::a;
   
   // 强制要求a按照动态变量查询
   let z = dynamic::a;
@@ -459,7 +459,7 @@ EOF```;
 
 ```
 
-const {
+global {
   a = 10;
 }
 
@@ -471,17 +471,17 @@ rule xx {
 
   let a = 10;
 
-  let v1 = session::a; // force lookup symbol a as session variable
-  let v2 = const::a;   // force lookup symbol a as const variable
-  let v3 = dyanmic::a; // force lookup symbol a as dynamic variable
-  let v4 = a;          // no qualifier, default to basic lookup rule, and local variable takes precedence
+  let v1 = session::a;
+  let v2 = global::a;
+  let v3 = dyanmic::a;
+  let v4 = a;
 }
 
 ```
 
 * 匿名函数和闭包
 
-PL 支持高阶函数，即函数是值。同时支持上值捕获。PL的捕获允许任意嵌套函数的捕获。基本类型按照复制捕获；其他类型则共享内存，只是浅拷贝。上值的binding和局部变量类似，优先级高于session/const/dynamic类型变量。
+PL 支持高阶函数，即函数是值。同时支持上值捕获。PL的捕获允许任意嵌套函数的捕获。基本类型按照复制捕获；其他类型则共享内存，只是浅拷贝。上值的binding和局部变量类似，优先级高于session/global/dynamic类型变量。
 
 
 ```

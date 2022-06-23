@@ -132,6 +132,10 @@ func (h *Response) ToJSON() (pl.Val, error) {
 	)
 }
 
+func (h *Response) IsImmutable() bool {
+	return false
+}
+
 func (h *Response) Method(name string, _ []pl.Val) (pl.Val, error) {
 	return pl.NewValNull(), fmt.Errorf("http.response method %s is unknown", name)
 }

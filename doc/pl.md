@@ -19,7 +19,7 @@ server implementation or related industry experience.
   3. Exception Handling
   4. Json interpobility
   5. Lots of builtin modules, easy to extend
-  6. String interpolation, const variable, closure upvalue captured etc ...
+  6. String interpolation, const, immutablility, closure upvalue captured etc ...
 
 * Designed For Web/Http Server
   1. Event driven
@@ -148,16 +148,16 @@ Dynamic Variable is unknown variable exposed into the PL environment by embeddin
 requires dynamic lookup during code execution and my result in error if environment does not expose
 it back to environment
 
-* Const
+* Global
 
-Const variable is variable defined inside of the const scope, which is immutable and setup initially.
-Const scope must be top level scope of the source and MUST be the first scope otherwise it is a syntax
+Global variable is variable defined inside of the global scope, which is immutable and setup initially.
+Global scope must be top level scope of the source and MUST be the first scope otherwise it is a syntax
 error.
 
 
 ```
 
-const {
+global {
  const1 = http::do("GET", "http://www.example.com"); // will just be initialized once
 }
 
@@ -165,7 +165,7 @@ fn foo() {
 }
 
 // the following const scope is not allowed and will not compile
-const {
+global {
 ...
 }
 
@@ -392,7 +392,7 @@ scope qualifier to force compiler to lookup certain types of value.
 
 ```
 
-const {
+global {
   a = 10;
 }
 
@@ -405,7 +405,7 @@ rule xx {
   let a = 10;
 
   let v1 = session::a; // force lookup symbol a as session variable
-  let v2 = const::a;   // force lookup symbol a as const variable
+  let v2 = global::a;   // force lookup symbol a as const variable
   let v3 = dyanmic::a; // force lookup symbol a as dynamic variable
   let v4 = a;          // no qualifier, default to basic lookup rule, and local variable takes precedence
 }
@@ -638,7 +638,7 @@ fn foo() {
   assert::eq(v, 100);
 }
 
-// notes session, const, local variable symbol resolution is during parsing/compilation phase which is
+// notes session, global, local variable symbol resolution is during parsing/compilation phase which is
 // a syntax error but not runtime error. The following code will not compile
 
 fn not_valid() {

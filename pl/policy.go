@@ -4,17 +4,29 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"sync"
 )
 
-type Policy struct {
-	// const initialization part of the policy, ie used througout the lifecycle
-	// of the whole policy
-	constProgram *program
+type globalState struct {
+	// global program snippet, ie used for initialization of the policy
+	globalProgram *program
 
-	// initialization status of the const variable vector. notes this field will
-	// be fed up by parser. the array contains all the initialized status of the
-	// policy code
-	constVar []Val
+	// global variable, should not be used directly, but should be using
+	// function to manipulate since it needs to be guarded with lock
+	globalVar []Val
+
+	// internally used
+	lock sync.RWMutex
+}
+
+type symbolInfo struct {
+	globalName  []string
+	sessionName []string
+}
+
+type Policy struct {
+	// Policy wise global state object
+	global *globalState
 
 	// initialization part of the policy, if policy does not have initialization
 	// code then this part is empty
@@ -37,12 +49,100 @@ type Policy struct {
 	// name must be unique across all the policy. Notes each program's name becomes
 	// function name
 	fn []*program
+
+	// symbol info, used for instrumentation/debugging purpose
+	sinfo symbolInfo
+}
+
+// Currently, due to the synchronization issue of underlying object/value. The
+// global variable only supports storing immutable data structure, for now it
+// is just primitive type.
+func IsAllowedGlobalValueType(v Val) bool {
+	switch v.Type {
+	// currently only immutable data type, ie primitive type is allowed
+	case ValInt, ValReal, ValNull, ValStr, ValBool:
+		return true
+	case ValUsr:
+		return v.Usr().IsImmutable()
+	default:
+		return false
+	}
+}
+
+func (g *globalState) size() int {
+	g.lock.RLock()
+	defer func() {
+		g.lock.RUnlock()
+	}()
+	return len(g.globalVar)
+}
+
+func (g *globalState) set(
+	i int,
+	v Val,
+) bool {
+	if !IsAllowedGlobalValueType(v) {
+		return false
+	}
+
+	g.lock.Lock()
+	defer func() {
+		g.lock.Unlock()
+	}()
+	if len(g.globalVar) <= i {
+		return false
+	}
+	g.globalVar[i] = v
+	return true
+}
+
+func (g *globalState) get(
+	i int,
+) (Val, bool) {
+	g.lock.RLock()
+	defer func() {
+		g.lock.RUnlock()
+	}()
+
+	if len(g.globalVar) <= i {
+		return NewValNull(), false
+	}
+	return g.globalVar[i], true
+}
+
+func (g *globalState) add(
+	v Val,
+) bool {
+	if !IsAllowedGlobalValueType(v) {
+		return false
+	}
+
+	// may not need lock since it is only called during setup
+	g.lock.Lock()
+	defer func() {
+		g.lock.Unlock()
+	}()
+	g.globalVar = append(g.globalVar, v)
+	return true
 }
 
 func newPolicy() *Policy {
 	return &Policy{
+		global:   &globalState{},
 		eventMap: make(map[string]*program),
 	}
+}
+
+func (p *Policy) GetGlobal(i int) (Val, bool) {
+	return p.global.get(i)
+}
+
+func (p *Policy) StoreGlobal(i int, v Val) bool {
+	return p.global.set(i, v)
+}
+
+func (p *Policy) GlobalSize() int {
+	return p.global.size()
 }
 
 func (p *Policy) nextAnonymousFuncName() string {
@@ -113,8 +213,8 @@ func (p *Policy) HasConfig() bool {
 	return p.config != nil
 }
 
-func (p *Policy) HasConst() bool {
-	return p.constProgram != nil
+func (p *Policy) HasGlobal() bool {
+	return p.global.globalProgram != nil
 }
 
 func (p *Policy) HaveEvent(name string) bool {

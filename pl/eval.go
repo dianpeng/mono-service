@@ -11,7 +11,7 @@ import (
 const (
 	ConfigRule       = "@config"
 	SessionRule      = "@session"
-	ConstRule        = "@const"
+	GlobalRule       = "@global"
 	defaultStackSize = 2048
 )
 
@@ -1239,7 +1239,7 @@ FUNC:
 
 		case bcLoadSession:
 			if len(e.Session) <= bc.argument {
-				return rrErrf(prog, pc, "@session is not executed")
+				return rrErrf(prog, pc, "session variable is not existed")
 			} else {
 				e.push(e.Session[bc.argument])
 			}
@@ -1247,7 +1247,7 @@ FUNC:
 
 		case bcStoreSession:
 			if len(e.Session) <= bc.argument {
-				return rrErrf(prog, pc, "@session is not executed")
+				return rrErrf(prog, pc, "session variable is not existed")
 			} else {
 				e.Session[bc.argument] = e.top0()
 				e.pop()
@@ -1360,17 +1360,33 @@ FUNC:
 			break
 
 		// global
-		case bcSetConst:
+		case bcSetGlobal:
 			ctx := e.top0()
 			e.pop()
-			policy.constVar = append(policy.constVar, ctx)
+			if !policy.global.add(
+				ctx,
+			) {
+				return rrErrf(prog, pc, "global varaible must store immutable type, "+
+					"ie int, real, bool, string, null")
+			}
 			break
 
-		case bcLoadConst:
-			if len(policy.constVar) <= bc.argument {
-				return rrErrf(prog, pc, "@global is not executed")
+		case bcLoadGlobal:
+			val, ok := policy.GetGlobal(bc.argument)
+			if !ok {
+				return rrErrf(prog, pc, "global variable loading error, "+
+					"global variable is not existed")
 			} else {
-				e.push(policy.constVar[bc.argument])
+				e.push(val)
+			}
+			break
+
+		case bcStoreGlobal:
+			ctx := e.top0()
+			e.pop()
+			if !policy.StoreGlobal(bc.argument, ctx) {
+				return rrErrf(prog, pc, "global variable storing error, "+
+					"value is not immutable or global variable is not existed")
 			}
 			break
 
@@ -1700,16 +1716,16 @@ func (e *Evaluator) EvalConfig(p *Policy) error {
 	return e.runRule(NewValNull(), p.config, p)
 }
 
-func (e *Evaluator) EvalConst(p *Policy) error {
+func (e *Evaluator) EvalGlobal(p *Policy) error {
 	defer func() {
 		e.drainEventQueue(p)
 	}()
 
-	if !p.HasConst() {
+	if !p.HasGlobal() {
 		return nil
 	}
-	p.constVar = nil
-	return e.runRule(NewValNull(), p.constProgram, p)
+	p.global.globalVar = nil
+	return e.runRule(NewValNull(), p.global.globalProgram, p)
 }
 
 func (e *Evaluator) EvalSession(p *Policy) error {

@@ -454,7 +454,8 @@ func (c *concateApplication) Accept(
 		return framework.ApplicationResult{}, err
 	}
 
-	c.hpl.SetPolicy(context.Hpl().Policy)
+	// derive from foreground hpl engine if we can
+	c.hpl.Derive(context.Hpl())
 
 	if c.hasPending() {
 		c.wg.Add(1)
