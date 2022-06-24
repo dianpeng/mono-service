@@ -74,18 +74,6 @@ type bodySignApplication struct {
 
 type bodySignFactory struct{}
 
-func (s *bodySignApplication) OnLoadVar(_ int, name string) (pl.Val, error) {
-	return pl.NewValNull(), fmt.Errorf("module(body_sign): unknown variable %s", name)
-}
-
-func (s *bodySignApplication) OnStoreVar(_ int, name string, _ pl.Val) error {
-	return fmt.Errorf("module(body_sign): unknown variable %s for storing", name)
-}
-
-func (s *bodySignApplication) OnAction(_ int, name string, _ pl.Val) error {
-	return fmt.Errorf("module(body_sign): unknown action %s", name)
-}
-
 func (b *bodySignApplication) reset() {
 	if b.r.body != nil {
 		name := b.r.body.Name()
@@ -314,7 +302,6 @@ as following :
 4. SHA256
 5. SHA512
 6. SHA384
-
 
 Additionally, it exposes following policy variable for user to use
 

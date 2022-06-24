@@ -106,6 +106,10 @@ func (cfg *vHSConfig) Compose() (*framework.ServiceFactory, error) {
 		o.Response = facList
 	}
 
+	if cfg.AppName == "" {
+		return nil, fmt.Errorf("service's application is not set")
+	}
+
 	if app := framework.GetApplicationFactory(cfg.AppName); app == nil {
 		return nil, fmt.Errorf("application %s is not found", cfg.AppName)
 	} else {

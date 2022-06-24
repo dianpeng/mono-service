@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/hrouter"
 	"github.com/dianpeng/mono-service/pl"
@@ -42,6 +43,22 @@ func initpolicy(x string, config pl.EvalConfig) (*pl.Policy, error) {
 	return p, nil
 }
 
+func wrapE(
+	context string,
+	phase string,
+	path string,
+	err error,
+) error {
+
+	return fmt.Errorf(
+		"Under context %s, policy file %s, has error in phase %s:\n\n%s",
+		context,
+		path,
+		phase,
+		err.Error(),
+	)
+}
+
 func initVHost(
 	path string,
 ) (*vhost, error) {
@@ -58,7 +75,12 @@ func initVHost(
 
 	p, err := initpolicy(string(vhostSource), vhostConfigBuilder)
 	if err != nil {
-		return nil, err
+		return nil, wrapE(
+			"virtual_host",
+			"initialization",
+			path,
+			err,
+		)
 	}
 
 	return vhostConfig.Compose(p)
@@ -83,12 +105,22 @@ func initVHostSVC(
 		builder,
 	)
 	if err != nil {
-		return nil, err
+		return nil, wrapE(
+			"service",
+			"initialization",
+			path,
+			err,
+		)
 	}
 
 	fac, err := cfg.Compose()
 	if err != nil {
-		return nil, err
+		return nil, wrapE(
+			"service",
+			"middleware composition",
+			path,
+			err,
+		)
 	}
 
 	return newvHS(

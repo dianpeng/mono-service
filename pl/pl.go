@@ -18,6 +18,10 @@ func musterr(ctx string, err error) {
 func unreachable(msg string) { panic(fmt.Sprintf("unreachable: %s", msg)) }
 
 // module function name
+const (
+	modSep = "::"
+)
+
 func modFuncName(m string, f string) string {
 	return fmt.Sprintf("%s::%s", m, f)
 }

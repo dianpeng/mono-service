@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // all the builtin basic functions
@@ -54,6 +55,25 @@ func init() {
 		func(info *IntrinsicInfo, _ *Evaluator, _ string, args []Val) (Val, error) {
 			fmt.Println(printFmt(args))
 			return NewValNull(), nil
+		},
+	)
+
+	addF(
+		"benchmark",
+		"",
+		"%a",
+		func(info *IntrinsicInfo, e *Evaluator, _ string, args []Val) (Val, error) {
+			if _, err := info.Check(args); err != nil {
+				return NewValNull(), err
+			}
+			closure := args[0].Closure()
+
+			start := time.Now().UnixNano()
+			if _, err := closure.Call(e, args[1:]); err != nil {
+				return NewValNull(), err
+			}
+			end := time.Now().UnixNano()
+			return NewValInt64(end - start), nil
 		},
 	)
 

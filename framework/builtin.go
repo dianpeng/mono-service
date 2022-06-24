@@ -7,7 +7,6 @@ import (
 )
 
 // builtin middleware
-
 type event struct {
 	args []pl.Val
 }
@@ -24,13 +23,16 @@ func (e *event) Accept(
 ) bool {
 	cfg := NewPLConfig(ctx, e.args)
 	eventName := ""
+	context := pl.NewValNull()
+
 	if err := cfg.GetStr(0, &eventName); err != nil {
 		w.ReplyErrorHPL(err)
 		return false
 	}
+	cfg.TryGet(1, &context, pl.NewValNull())
 
 	// run the event
-	if err := ctx.Hpl().Run(eventName); err != nil {
+	if err := ctx.Hpl().RunWithContext(eventName, context); err != nil {
 		w.ReplyErrorHPL(err)
 		return false
 	}
@@ -52,9 +54,56 @@ func (_ *eventfactory) Comment() string {
 	return "event a specific event and run corresponding PL entry synchronously"
 }
 
+// builtin application
+type eventApp struct {
+	args []pl.Val
+}
+
+func (e *eventApp) Prepare(*http.Request, hrouter.Params) (interface{}, error) {
+	return nil, nil
+}
+
+func (e *eventApp) Accept(_ interface{}, ctx ServiceContext) (ApplicationResult, error) {
+	cfg := NewPLConfig(ctx, e.args)
+	eventName := ""
+	if err := cfg.GetStr(0, &eventName); err != nil {
+		return ApplicationResult{}, err
+	}
+	o := ApplicationResult{
+		Event: eventName,
+	}
+	cfg.TryGet(1, &o.Context, pl.NewValNull())
+	return o, nil
+}
+
+func (e *eventApp) Done(interface{}) {
+}
+
+type eventappfactory struct{}
+
+func (f *eventappfactory) Create(a []pl.Val) (Application, error) {
+	return &eventApp{args: a}, nil
+}
+
+func (_ *eventappfactory) Name() string {
+	return "event"
+}
+
+func (_ *eventappfactory) Comment() string {
+	return "emit event when application is triggered"
+}
+
 func init() {
 	AddResponseFactory(
 		"event",
 		&eventfactory{},
+	)
+	AddRequestFactory(
+		"event",
+		&eventfactory{},
+	)
+	AddApplicationFactory(
+		"event",
+		&eventappfactory{},
 	)
 }

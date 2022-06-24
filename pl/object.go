@@ -1,7 +1,6 @@
 package pl
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 	"regexp"
@@ -37,7 +36,15 @@ func IsPrimitiveType(t int) bool {
 
 func IsValueType(t int) bool {
 	switch t {
-	case ValInt, ValNull, ValReal, ValStr, ValBool, ValPair, ValList, ValMap, ValRegexp:
+	case ValInt,
+		ValNull,
+		ValReal,
+		ValStr,
+		ValBool,
+		ValPair,
+		ValList,
+		ValMap,
+		ValRegexp:
 		return true
 	default:
 		return false
@@ -598,15 +605,17 @@ func (v *Val) ToBoolean() bool {
 	case ValBool:
 		return v.Bool()
 	case ValNull:
-		return true
+		return false
 	case ValList:
 		return v.List().Length() != 0
 	case ValMap:
 		return v.Map().Length() != 0
 	case ValIter:
 		return v.Iter().Has()
-	case ValClosure:
+
+	case ValClosure, ValPair, ValRegexp, ValUsr:
 		return true
+
 	default:
 		return false
 	}
@@ -740,30 +749,11 @@ func (v *Val) Index(idx Val) (Val, error) {
 
 func (v *Val) IndexSet(idx, val Val) error {
 	switch v.Type {
-	case ValInt, ValReal, ValBool, ValNull, ValIter, ValClosure:
+	case ValStr, ValInt, ValReal, ValBool, ValNull, ValIter, ValClosure:
 		return fmt.Errorf("cannot do index set on type: %s", v.Id())
 
 	case ValRegexp:
 		return fmt.Errorf("cannot do subfield set by indexing on regexp")
-
-	case ValStr:
-		i, err := idx.ToIndex()
-		if err != nil {
-			return err
-		}
-		if i >= len(v.String()) {
-			return fmt.Errorf("index out of range")
-		}
-		if val.Type != ValStr {
-			return fmt.Errorf("string subfield setting must be type string")
-		}
-
-		b := new(bytes.Buffer)
-		b.WriteString(v.String()[:i])
-		b.WriteString(val.String())
-		b.WriteString(v.String()[i:])
-		v.SetString(b.String())
-		return nil
 
 	case ValPair:
 		return v.Pair().IndexSet(idx, val)
@@ -851,7 +841,7 @@ var (
 	mpStrToUpper  = MustNewFuncProto("str.to_upper", "%0")
 	mpStrToLower  = MustNewFuncProto("str.to_lower", "%0")
 	mpStrSubStr   = MustNewFuncProto("str.substr", "{%d}{%d%d}")
-	mpStrIndex    = MustNewFuncProto("str.index", "{%d}{%d%d}")
+	mpStrIndex    = MustNewFuncProto("str.index", "{%s}{%s%d}")
 )
 
 func (v *Val) methodInt(name string, args []Val) (Val, error) {
@@ -986,7 +976,12 @@ func (v *Val) methodStr(name string, args []Val) (Val, error) {
 		}
 		var ret string
 		if alog == 2 {
-			ret = v.String()[args[0].Int():args[1].Int()]
+			end := args[1].Int()
+			sz := int64(len(v.String()))
+			if end >= sz {
+				end = sz
+			}
+			ret = v.String()[args[0].Int():end]
 		} else {
 			ret = v.String()[args[0].Int():]
 		}

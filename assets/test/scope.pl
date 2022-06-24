@@ -2,7 +2,7 @@
  ** testing the scoping rules of each variable, ie symbol resolution,
  ** symbol binding etc ...
  **/
-const {
+global {
   const_1 = 10;
   const_2 = 20;
   const_3 = 30;
@@ -21,9 +21,9 @@ fn qualify_session() {
 }
 
 fn qualify_const() {
-  assert::eq(const::const_1, 10);
-  assert::eq(const::const_2, 20);
-  assert::eq(const::const_3, 30);
+  assert::eq(global::const_1, 10);
+  assert::eq(global::const_2, 20);
+  assert::eq(global::const_3, 30);
 }
 
 test {

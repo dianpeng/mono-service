@@ -26,6 +26,31 @@ func (p *PLConfig) tryeval(v pl.Val) (pl.Val, error) {
 	return v, nil
 }
 
+func (p *PLConfig) Get(
+	index int,
+	ptr *pl.Val,
+) error {
+	if len(p.args) <= index {
+		return fmt.Errorf("out of range!")
+	}
+	arg, err := p.tryeval(p.args[index])
+	if err != nil {
+		return fmt.Errorf("%d'th elements evaluation error: %s", err.Error())
+	}
+	*ptr = arg
+	return nil
+}
+
+func (p *PLConfig) TryGet(
+	index int,
+	ptr *pl.Val,
+	def pl.Val,
+) {
+	if err := p.Get(index, ptr); err != nil {
+		*ptr = def
+	}
+}
+
 func (p *PLConfig) GetStr(
 	index int,
 	ptr *string,

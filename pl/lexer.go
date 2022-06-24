@@ -96,6 +96,7 @@ const (
 	tkGlobal
 	tkSession
 	tkLet
+	tkConst
 	tkSwitch
 	tkCase
 	tkModule
@@ -272,6 +273,8 @@ func getTokenName(tk int) string {
 		return "null"
 	case tkLet:
 		return "let"
+	case tkConst:
+		return "const"
 	case tkGlobal:
 		return "global"
 	case tkDynamic:
@@ -617,7 +620,8 @@ var lexerkeyword = map[string]int{
 	"import": tkImport,
 	"export": tkExport,
 
-	"let": tkLet,
+	"let":   tkLet,
+	"const": tkConst,
 
 	/* when case */
 	"switch": tkSwitch,

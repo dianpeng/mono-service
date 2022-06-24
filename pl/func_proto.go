@@ -29,6 +29,9 @@ import (
 // %r -> regex
 // %U -> user
 //   user can optionally have a type id enclude with '[' and ']'
+// %c -> closure
+// %C -> Script closure
+// %R -> native closure
 // %a -> any type
 // %0 -> no arguments
 // %- -> always pass, do nothing
@@ -86,6 +89,9 @@ const (
 	PPair
 	PRegexp
 	PUsr
+	PClosure
+	PNFunc
+	PSFunc
 	PAny
 	PNone
 )
@@ -110,6 +116,8 @@ func mapToObjType(ptype int) int {
 		return ValPair
 	case PRegexp:
 		return ValRegexp
+	case PClosure, PNFunc, PSFunc:
+		return ValClosure
 	case PUsr:
 		return ValUsr
 	default:
@@ -261,6 +269,12 @@ func (p *protoelem) str() string {
 		return "pair"
 	case PRegexp:
 		return "regexp"
+	case PClosure:
+		return "closure"
+	case PNFunc:
+		return "native_function"
+	case PSFunc:
+		return "script_function"
 	case PUsr:
 		return fmt.Sprintf("user[%s]", p.tname)
 	case PAny:
@@ -416,6 +430,15 @@ func (f *FuncProto) compT(rList []rune, cursor int, vlen *bool) (int, protoelem,
 		break
 	case 'U':
 		opcode = PUsr
+		break
+	case 'c':
+		opcode = PClosure
+		break
+	case 'C':
+		opcode = PSFunc
+		break
+	case 'R':
+		opcode = PNFunc
 		break
 	case 'a':
 		opcode = PAny
@@ -735,7 +758,19 @@ func (f *FuncProto) check0(exp protoelem, got Val, c convoneval) (the_return boo
 		}
 		break
 
-	case ValClosure, ValIter:
+	case ValClosure:
+		if exp.opcode == PClosure {
+			return true
+		}
+		if exp.opcode == PNFunc {
+			return got.Closure().Type() == ClosureNative
+		}
+		if exp.opcode == PSFunc {
+			return got.Closure().Type() == ClosureScript
+		}
+		return false
+
+	case ValIter:
 		return false
 
 	default:
@@ -974,6 +1009,9 @@ func (f *FuncProto) pack(v Val, t opc) *reflect.Value {
 		break
 
 	case PMap, PPair, PList:
+		return nil
+
+	case PClosure, PSFunc, PNFunc:
 		return nil
 
 	case PUsr:

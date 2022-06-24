@@ -10,7 +10,7 @@ import (
 // for exposing back to the hpl environment
 type ApplicationResult struct {
 	Event   string
-	context pl.Val
+	Context pl.Val
 }
 
 // entry for handling a single http request/response
@@ -23,9 +23,6 @@ type Application interface {
 
 	// The service session is terminated
 	Done(interface{})
-
-	// Context for HPL interpolation
-	HplContext
 }
 
 type ApplicationFactory interface {
@@ -52,20 +49,16 @@ func GetApplicationFactory(name string) ApplicationFactory {
 func NewApplicationResult(event string) ApplicationResult {
 	return ApplicationResult{
 		Event:   event,
-		context: pl.NewValNull(),
+		Context: pl.NewValNull(),
 	}
-}
-
-func (a *ApplicationResult) Context() pl.Val {
-	return a.context
 }
 
 func (a *ApplicationResult) AddContext(
 	key string,
 	value pl.Val,
 ) {
-	if !a.context.IsMap() {
-		a.context = pl.NewValMap()
+	if !a.Context.IsMap() {
+		a.Context = pl.NewValMap()
 	}
-	a.context.AddMap(key, value)
+	a.Context.AddMap(key, value)
 }

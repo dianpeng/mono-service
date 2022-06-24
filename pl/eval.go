@@ -130,13 +130,45 @@ type exception struct {
 	stackSize int
 }
 
+const (
+	ftypeTop = iota
+	ftypeSFunc
+	ftypeNFunc
+	ftypeScript
+	ftypeIntrinsic
+	ftypeRule
+	ftypeMethod
+)
+
+func ftypename(x int) string {
+	switch x {
+	case ftypeTop:
+		return "#top"
+	case ftypeSFunc:
+		return "script_func"
+	case ftypeNFunc:
+		return "native_func"
+	case ftypeScript:
+		return "script"
+	case ftypeIntrinsic:
+		return "intrinsic"
+	case ftypeRule:
+		return "rule"
+	case ftypeMethod:
+		return "method"
+	default:
+		return ""
+	}
+}
+
 // internal structure which we used to record the current frame and information
 // will be setup inside of the function's caller reserve slot
 type funcframe struct {
-	pc     int
-	prog   *program
-	framep int
+	ftype  int
 	farg   int
+	pc     int
+	framep int
+	prog   *program
 	excep  []exception
 	sfunc  *scriptFunc
 	nfunc  *nativeFunc
@@ -152,16 +184,30 @@ func dupFuncFrameForErr(fr *funcframe) *funcframe {
 	}
 }
 
-func (ff *funcframe) isTop() bool {
-	return ff.prog == nil
+func (ff *funcframe) markTop() {
+	ff.ftype = ftypeTop
+	ff.farg = 0
+	ff.pc = 0
+	ff.framep = 0
+	ff.prog = nil
+	ff.excep = nil
+	ff.sfunc = nil
+	ff.nfunc = nil
+	ff.event = NewValNull()
 }
 
-func (ff *funcframe) isNative() bool {
-	return ff.nfunc != nil
+func (ff *funcframe) isTop() bool {
+	return ff.ftype == ftypeTop
+}
+
+func (ff *funcframe) isScript() bool {
+	return ff.prog != nil
 }
 
 func (ff *funcframe) frameInfo() string {
-	if ff.prog != nil {
+	switch ff.ftype {
+	case ftypeScript, ftypeSFunc, ftypeRule:
+		must(ff.prog != nil, "must have prog")
 		return fmt.Sprintf("[pc=%d]"+
 			"[framep=%d]"+
 			"[argcount=%d]"+
@@ -174,13 +220,14 @@ func (ff *funcframe) frameInfo() string {
 			ff.framep,
 			ff.farg,
 			ff.prog.bcList[ff.pc].dumpWithProgram(ff.prog),
-			ff.prog.typeName(),
+			ftypename(ff.ftype),
 			ff.prog.name,
 			ff.prog.localSize,
 			ff.prog.dbgList[ff.pc].where(),
 		)
-	} else {
-		must(ff.nfunc != nil, "must have native function")
+
+	case ftypeNFunc:
+		must(ff.nfunc != nil, "must have nfunc")
 		return fmt.Sprintf("[pc=%d]"+
 			"[framep=%d]"+
 			"[argcount=%d]"+
@@ -190,6 +237,17 @@ func (ff *funcframe) frameInfo() string {
 			ff.framep,
 			ff.farg,
 			ff.nfunc.Id(),
+		)
+
+	default:
+		return fmt.Sprintf("[pc=%d]"+
+			"[framep=%d]"+
+			"[argcount=%d]"+
+			"[%s]",
+			ff.pc,
+			ff.framep,
+			ff.farg,
+			ftypename(ff.ftype),
 		)
 	}
 }
@@ -310,6 +368,7 @@ func (e *Evaluator) popfuncframe(prev *funcframe) (int, *program) {
 }
 
 func newfuncframe(
+	ftype int,
 	pc int,
 	prog *program,
 	framep int,
@@ -319,6 +378,7 @@ func newfuncframe(
 	nfunc *nativeFunc,
 ) (*funcframe, Val) {
 	ff := &funcframe{
+		ftype:  ftype,
 		pc:     pc,
 		prog:   prog,
 		framep: framep,
@@ -949,18 +1009,28 @@ FUNC:
 			must(funcIndex.Int() >= 0,
 				fmt.Sprintf("function index must be none negative"))
 
+			e.curframe.pc = pc
+			e.prologue(
+				ftypeIntrinsic,
+				paramSize,
+				nil,
+				nil,
+				nil,
+			)
+
 			fentry := intrinsicFunc[funcIndex.Int()]
 			r, err := fentry.entry(e, "$intrinsic$", arg)
 			if err != nil {
 				return rrErr(prog, pc, err)
 			}
-			e.popN(paramSize + 1)
-			e.push(r)
+
+			pc, prog = e.epilogue(r, false)
 			break
 
 		case bcMCall:
 			paramSize := bc.argument
 			methodName := e.topN(paramSize)
+			recv := e.topN(paramSize + 1)
 			must(methodName.Type == ValStr,
 				fmt.Sprintf("method name must be string but %s", methodName.Id()))
 
@@ -969,14 +1039,21 @@ FUNC:
 			argEnd := len(e.Stack)
 			arg := e.Stack[argStart:argEnd]
 
-			recv := e.topN(paramSize + 1)
+			e.curframe.pc = pc
+			e.prologue(
+				ftypeMethod,
+				paramSize,
+				nil,
+				nil,
+				nil,
+			)
+
 			ret, err := recv.Method(methodName.String(), arg)
 			if err != nil {
 				return rrErr(prog, pc, err)
 			}
 
-			e.popN(paramSize + 2)
-			e.push(ret)
+			pc, prog = e.epilogue(ret, true)
 			break
 
 			// script function call and return
@@ -984,28 +1061,19 @@ FUNC:
 			paramSize := bc.argument
 			funcIndexOrEntry := e.topN(paramSize)
 
-			// create the frame marker for the scriptting call
-			_, newFV := newfuncframe(
-				pc+1, // next pc
-				prog,
-				e.curframe.framep,
-				e.curframe.farg,
-				e.curframe.excep,
-				e.curframe.sfunc,
-				e.curframe.nfunc,
-			)
-
-			// setup new calling frame
-			e.push(newFV)
-
 			var sfunc *scriptFunc
 			var nfunc *nativeFunc
+			ftype := 0
 
 			// enter into the new call
 			if bc.opcode == bcSCall {
 				idx := funcIndexOrEntry.Int()
 				prog = prog.policy.fn[int(idx)]
 				must(prog.freeCall(), "must be freecall")
+				ftype = ftypeScript
+				if paramSize != prog.argSize {
+					return rrErrf(prog, pc, "script function call, argument number mismatch")
+				}
 			} else {
 				if funcIndexOrEntry.IsClosure() {
 					closure := funcIndexOrEntry.Closure()
@@ -1014,6 +1082,7 @@ FUNC:
 						fn, _ := closure.(*scriptFunc)
 						prog = fn.prog
 						sfunc = fn
+						ftype = ftypeSFunc
 						break
 
 					case ClosureNative:
@@ -1021,6 +1090,7 @@ FUNC:
 						fn, _ := closure.(*nativeFunc)
 						prog = nil
 						nfunc = fn
+						ftype = ftypeNFunc
 						break
 
 					default:
@@ -1033,24 +1103,25 @@ FUNC:
 				}
 			}
 
-			e.curframe.prog = prog
-			e.curframe.pc = 0
-			e.curframe.framep = len(e.Stack) - paramSize - 2
-			e.curframe.farg = paramSize
-			e.curframe.excep = nil
+			e.curframe.pc = pc
+			e.prologue(
+				ftype,
+				paramSize,
+				prog,
+				sfunc,
+				nfunc,
+			)
 
 			if prog != nil {
-				e.curframe.sfunc = sfunc
 				// make sure to reset the PC when entering into the new function
 				pc = 0
+
 				goto FUNC
 			} else {
 				must(nfunc != nil, "nfunc cannot be nil")
-				e.curframe.nfunc = nfunc
 
 				// call the native function as if we are in a new frame, this is thee
 				// native call trampoline, but written inline here as go code
-
 				stackSize := len(e.Stack)
 				argStart := stackSize - paramSize - 1 // NOTES, we just push a frame
 				argEnd := stackSize - 1
@@ -1064,13 +1135,7 @@ FUNC:
 					return rrErr(prog, pc, err)
 				}
 
-				// simulate the inline return and resume from where we stop
-				prevcf := e.prevfuncframe()
-
-				// return to where just stopped
-				pc, prog = e.popfuncframe(prevcf)
-
-				e.push(val)
+				pc, prog = e.epilogue(val, false)
 				break
 			}
 
@@ -1078,14 +1143,12 @@ FUNC:
 
 		case bcReturn:
 			rv := e.top0()
+			pc, prog = e.epilogue(rv, false)
 
-			prevcf := e.prevfuncframe()
+			if prog == nil {
+				return rrDone()
+			}
 
-			// return back to the caller
-			pc, prog = e.popfuncframe(prevcf)
-
-			// return value push back to the stack
-			e.push(rv)
 			break
 
 		case bcNewClosure:
@@ -1135,11 +1198,18 @@ FUNC:
 
 		case bcLoadVar:
 			vname := prog.idxStr(bc.argument)
-			val, err := e.Context.LoadVar(e, vname)
-			if err != nil {
-				return rrErr(prog, pc, err)
+
+			// loading intrinsic function always at first. Intrinsic function cannot
+			// be overwrite for now
+			if ii := getIntrinsicByName(vname); ii != nil {
+				e.push(ii.toVal(e))
+			} else {
+				if val, err := e.Context.LoadVar(e, vname); err != nil {
+					return rrErr(prog, pc, err)
+				} else {
+					e.push(val)
+				}
 			}
-			e.push(val)
 			break
 
 		case bcStoreVar:
@@ -1450,7 +1520,8 @@ FUNC:
 
 // unwind the stack until we hit an exception handler or we are done with all
 // the function frames on the stack
-func (e *Evaluator) unwindForExcep(toTop bool, err error) (int, *program, btlist, bool) {
+func (e *Evaluator) unwindForExcep(
+	breaker func() bool, err error) (int, *program, btlist, bool) {
 	// -------------------------------------------------------------------------
 	// ******************* Stack Unwind and Exception Handling *****************
 	// -------------------------------------------------------------------------
@@ -1461,16 +1532,8 @@ func (e *Evaluator) unwindForExcep(toTop bool, err error) (int, *program, btlist
 	bt := btlist{dupFuncFrameForErr(&e.curframe)}
 
 	for !e.curframe.isTop() {
-		// condition for breaking up, if we hit native then we just break now
-		if toTop {
-			if e.curframe.isTop() {
-				break
-			}
-		} else {
-			// as long as it is a native frame or top frame, we just break
-			if e.curframe.isNative() || e.curframe.isTop() {
-				break
-			}
+		if breaker() {
+			break
 		}
 
 		// start to check the handler
@@ -1480,7 +1543,7 @@ func (e *Evaluator) unwindForExcep(toTop bool, err error) (int, *program, btlist
 		if xp := e.curExcep(); xp != nil {
 			// notes native frame on the stack cannot be used to handle exception,
 			// then just jump forward
-			if !cf.isNative() {
+			if cf.isScript() {
 				// try to handle it, we haven't used a table based exception handler
 				// but rely on bytecode so the current exception must be the exception
 				// that is matched
@@ -1512,6 +1575,94 @@ func (e *Evaluator) unwindForExcep(toTop bool, err error) (int, *program, btlist
 	return -1, nil, bt, false
 }
 
+func (e *Evaluator) prologue(
+	ftype int,
+	alen int,
+	prog *program,
+	sfunc *scriptFunc,
+	nfunc *nativeFunc,
+) {
+
+	// push current frame onto stack and once we are done we will return from it
+	_, newFV := newfuncframe(
+		e.curframe.ftype,
+		e.curframe.pc+1, /* next pc */
+		e.curframe.prog,
+		e.curframe.framep,
+		e.curframe.farg,
+		e.curframe.excep,
+		e.curframe.sfunc,
+		e.curframe.nfunc,
+	)
+	e.push(newFV)
+
+	fp := len(e.Stack) - 2 - alen
+
+	e.curframe.framep = fp
+	e.curframe.farg = alen
+	e.curframe.prog = prog
+	e.curframe.sfunc = sfunc
+	e.curframe.nfunc = nfunc
+	e.curframe.ftype = ftype
+	e.curframe.excep = nil
+}
+
+// really just simluate function return
+func (e *Evaluator) epilogue(v Val, isMethod bool) (int, *program) {
+	// simulate the inline return and resume from where we stop
+	prevcf := e.prevfuncframe()
+
+	// return to where just stopped
+	pc, prog := e.popfuncframe(prevcf)
+
+	// if it is a method, then we should pop one extra receiver slot
+	if isMethod {
+		e.pop()
+	}
+
+	e.push(v)
+
+	return pc, prog
+}
+
+func (e *Evaluator) closureProlog(fn Val, args []Val) {
+	var ftype int
+	var prog *program
+	var sfunc *scriptFunc
+	var nfunc *nativeFunc
+
+	closure := fn.Closure()
+
+	switch closure.Type() {
+	case ClosureScript:
+		f, _ := closure.(*scriptFunc)
+		ftype = ftypeSFunc
+		sfunc = f
+		prog = sfunc.prog
+		break
+
+	case ClosureNative:
+		f, _ := closure.(*nativeFunc)
+		ftype = ftypeNFunc
+		nfunc = f
+		break
+
+	default:
+		unreachable("invalid function type")
+	}
+
+	// performing arguments shuffling here, ie move user provided function
+	// arguments into our own stack and create a valid frame for script function
+	e.push(fn)
+
+	// push all the arguments onto the stack
+	for _, a := range args {
+		e.push(a)
+	}
+
+	e.prologue(ftype, len(args), prog, sfunc, nfunc)
+}
+
 func (e *Evaluator) runRule(event Val, prog *program, policy *Policy) error {
 	must(e.Context != nil, "Evaluator's context is nil!")
 
@@ -1522,42 +1673,29 @@ func (e *Evaluator) runRule(event Val, prog *program, policy *Policy) error {
 	// mark exception to be null, ie no exception
 	e.curexcep = NewValNull()
 
-	// assign a null scriptFunc
-	e.curframe.sfunc = &scriptFunc{}
+	// mark the frame as top
+	e.curframe.markTop()
 
 	// Enter into the VM with a native function call marker. This serves as a
 	// frame marker to indicate the end of the script frame which will help us
 	// to terminate the frame walk
-
-	// -1 means this is a rule inside of the policy instead of a function call
-	e.push(NewValInt(-1))
+	e.push(NewValNull())
 
 	// push the event onto the stack to simulate the argument
 	e.push(event)
 
-	_, entryV := newfuncframe(
-		0,
-		nil,
-		0,
-		0,
-		nil,
+	e.prologue(
+		ftypeRule,
+		1,
+		prog,
 		&scriptFunc{},
 		nil,
 	)
-	e.push(entryV)
 
 	pc := 0
 
 	// Now let's enter into the bytecode VM
 	{
-		// point to currently executing program, notes the PC field is not updated
-		// until the VM breaks
-		e.curframe.prog = prog
-		e.curframe.pc = pc
-		e.curframe.framep = 0
-		e.curframe.farg = 1
-		e.curframe.sfunc.prog = prog
-
 	RECOVER:
 		rr := e.runP(prog, pc, policy)
 
@@ -1569,7 +1707,13 @@ func (e *Evaluator) runRule(event Val, prog *program, policy *Policy) error {
 		var bt btlist
 
 		{
-			a, b, c, d := e.unwindForExcep(true, rr.e)
+			a, b, c, d := e.unwindForExcep(
+				func() bool {
+					return e.curframe.isTop()
+				},
+				rr.e,
+			)
+
 			if d {
 				pc = a
 				prog = b
@@ -1585,35 +1729,6 @@ func (e *Evaluator) runRule(event Val, prog *program, policy *Policy) error {
 	return nil
 }
 
-func (e *Evaluator) funcProlog(fn Val, args []Val) int {
-	fp := len(e.Stack)
-	// performing arguments shuffling here, ie move user provided function
-	// arguments into our own stack and create a valid frame for script function
-	e.push(fn)
-
-	// push all the arguments onto the stack
-	for _, a := range args {
-		e.push(a)
-	}
-
-	// push argument count onto the stack
-	e.push(NewValInt(len(args)))
-
-	// push current frame onto stack and once we are done we will return from it
-	_, newFV := newfuncframe(
-		e.curframe.pc,
-		e.curframe.prog,
-		e.curframe.framep,
-		e.curframe.farg,
-		e.curframe.excep,
-		e.curframe.sfunc,
-		e.curframe.nfunc,
-	)
-	e.push(newFV)
-
-	return fp
-}
-
 // used by callback function, ie re-enter into the VM while a native call calls
 // back into the VM.
 // Due to the interleaved frame limitation, we cannot propagate the exception
@@ -1626,19 +1741,16 @@ func (e *Evaluator) runSFunc(
 	sfunc *scriptFunc,
 	args []Val,
 ) (Val, error) {
+	if len(args) != sfunc.prog.argSize {
+		return NewValNull(), fmt.Errorf("function call, argument mismatch")
+	}
 
 	// performing arguments shuffling here, ie move user provided function
 	// arguments into our own stack and create a valid frame for script function
-	fp := e.funcProlog(newValSFunc(sfunc), args)
+	e.closureProlog(newValSFunc(sfunc), args)
 
-	// now set the current frame point to the script code been executing
 	pc := 0
-	prog := sfunc.prog
-	e.curframe.sfunc = sfunc
-	e.curframe.prog = prog
-	e.curframe.pc = 0
-	e.curframe.framep = fp
-	e.curframe.farg = len(args)
+	prog := e.curframe.prog
 
 	{
 	RECOVER:
@@ -1650,11 +1762,6 @@ func (e *Evaluator) runSFunc(
 			// The value should be just placed on the stack and we should simulate a
 			// return instruction here
 			ret := e.top0()
-
-			// pop the frame out, ie our frame
-			prevcf := e.prevfuncframe()
-			e.popfuncframe(prevcf)
-
 			return ret, nil
 		}
 
@@ -1662,7 +1769,12 @@ func (e *Evaluator) runSFunc(
 
 		{
 			// unwind until we hit a native frame and then just report the error
-			a, b, c, d := e.unwindForExcep(false, rr.e)
+			a, b, c, d := e.unwindForExcep(
+				func() bool {
+					return e.curframe.sfunc == sfunc
+				},
+				rr.e,
+			)
 			if d {
 				prog = b
 				pc = a
@@ -1671,6 +1783,11 @@ func (e *Evaluator) runSFunc(
 				bt = c
 			}
 		}
+
+		// notes the current frame is still our script frame and we should pop
+		// it up
+		must(e.curframe.sfunc == sfunc, "must be sfunc")
+		e.popfuncframe(e.prevfuncframe())
 
 		return NewValNull(), e.doErr(bt, rr.prog, rr.pc, rr.e)
 	}
@@ -1681,29 +1798,22 @@ func (e *Evaluator) runNFunc(
 	args []Val,
 ) (Val, error) {
 
-	fp := e.funcProlog(
+	e.closureProlog(
 		newValNFunc(nfunc),
 		args,
 	)
 
-	// now set the current frame point to the script code been executing
-	e.curframe.nfunc = nfunc
-	e.curframe.prog = nil
-	e.curframe.pc = 0
-	e.curframe.framep = fp
-	e.curframe.farg = len(args)
-
 	// now let's just run the native function
-	v, err := nfunc.entry(args)
+	ret, err := nfunc.entry(args)
 
 	// since native function does not support recover from exception for now,
 	// just pops the frame and return from where we are
 
-	prevcf := e.prevfuncframe()
-	e.popfuncframe(prevcf)
+	e.epilogue(ret, false)
+	e.pop()
 
 	// TODO(dpeng): Decorate native function frame error ?
-	return v, err
+	return ret, err
 }
 
 func (e *Evaluator) EvalConfig(p *Policy) error {
@@ -1777,6 +1887,13 @@ func (e *Evaluator) EvalDeferred(
 	} else {
 		return nil
 	}
+}
+
+func (e *Evaluator) EmitEvent(
+	name string,
+	context Val,
+) {
+	e.emitEvent(name, context)
 }
 
 // Used by the config module for !eval directive. Notes the policy should just

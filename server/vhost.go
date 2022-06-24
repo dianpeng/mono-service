@@ -64,7 +64,9 @@ func (config *vhostConfig) Compose(p *pl.Policy) (*vhost, error) {
 	}
 
 	router := mux.NewRouter()
-	router.Host(config.ServerName)
+	if config.ServerName != "" {
+		router.Host(config.ServerName)
+	}
 
 	// finish the creation of VHost object
 	vhost.Config = config

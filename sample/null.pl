@@ -2,11 +2,12 @@ config service {
   .name = "null";
   .router = "[GET,POST]/xxx";
 
-  application noop();
+  application event(
+    "application",
+    "this is the value"
+  );
 
   response {
-    .event("xxx");
-    .event("yyy");
   }
 }
 
@@ -19,6 +20,17 @@ session {
 
 fn HelloWorld() {
   return "hello world";
+}
+
+rule application {
+  println("This is application: ", $);
+  let time = benchmark(
+    fn() {
+      for let k = 0; k < 100000; k++ {
+      }
+    }
+  );
+  println("time: ", time);
 }
 
 rule xxx => {
@@ -41,17 +53,6 @@ rule response => {
 
 rule error => {
   dprint(phase, error);
-}
-
-rule "response.interceptor.status" {
-  println("===================");
-}
-
-rule "response.interceptor.body" {
-  println("===================");
-  emit aloha;
-  println("after aloha");
-  println("===================");
 }
 
 rule "aloha" {

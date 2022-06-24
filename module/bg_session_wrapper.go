@@ -3,7 +3,6 @@ package module
 import (
 	"github.com/dianpeng/mono-service/framework"
 	"github.com/dianpeng/mono-service/hpl"
-	"github.com/dianpeng/mono-service/phase"
 	"github.com/dianpeng/mono-service/pl"
 )
 
@@ -13,15 +12,15 @@ type bgApplicationWrapper struct {
 }
 
 func (b *bgApplicationWrapper) OnLoadVar(name string) (pl.Val, error) {
-	return b.application.OnLoadVar(phase.PhaseBackground, name)
+	return b.parent.OnLoadVar(name)
 }
 
 func (b *bgApplicationWrapper) OnStoreVar(name string, value pl.Val) error {
-	return b.application.OnStoreVar(phase.PhaseBackground, name, value)
+	return b.parent.OnStoreVar(name, value)
 }
 
 func (b *bgApplicationWrapper) OnAction(name string, val pl.Val) error {
-	return b.application.OnAction(phase.PhaseBackground, name, val)
+	return b.parent.OnAction(name, val)
 }
 
 func (b *bgApplicationWrapper) GetHttpClient(url string) (hpl.HttpClient, error) {

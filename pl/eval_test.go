@@ -1529,7 +1529,7 @@ test{
 	assert.True(testCond(
 		`
 test{
-  output => true && 1 && "H" && null;
+  output => true && 1 && "H" && "null";
 }
 `, true))
 

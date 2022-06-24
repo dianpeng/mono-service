@@ -25,7 +25,7 @@ func main() {
 
 	hsvc, err := server.NewHService([]string{*path})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "service creation error: %s", err.Error())
+		fmt.Fprintf(os.Stderr, err.Error())
 		return
 	}
 

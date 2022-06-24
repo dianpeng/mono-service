@@ -1,10 +1,8 @@
 /**
  * testing basic function, anoymous function and upvalue closure
  **/
-const {
-  a_const = fn() {
-    return "from const";
-  };
+global {
+  a_const = "from const";
 }
 
 session {
@@ -32,8 +30,8 @@ fn testBasic() {
   assert::eq(foo3(1, 2), 3);
   assert::eq(a_func(1, 2, 3), 6);
   assert::eq(session::a_func(1, 2, 3), 6);
-  assert::eq(const::a_const(), "from const");
-  assert::eq(a_const(), "from const");
+  assert::eq(global::a_const, "from const");
+  assert::eq(a_const, "from const");
 
   const local_f0 = fn() {
     return "local_f0";

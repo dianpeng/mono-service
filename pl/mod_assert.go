@@ -195,4 +195,60 @@ func init() {
 			}
 		},
 	)
+
+	throwFunc := func(
+		info *IntrinsicInfo,
+		e *Evaluator,
+		args []Val,
+	) (string, error) {
+		alog, err := info.Check(args)
+		if err != nil {
+			return "", err
+		}
+		msg := "<none>"
+		if alog == 2 {
+			msg = args[1].String()
+		}
+
+		_, err = args[0].Closure().Call(
+			e,
+			nil,
+		)
+		return msg, err
+	}
+
+	addMF(
+		"assert",
+		"pass",
+		"",
+		"{%c}{%c%s}",
+		func(info *IntrinsicInfo, e *Evaluator, _ string, args []Val) (Val, error) {
+			msg, err := throwFunc(info, e, args)
+			if err != nil {
+				return NewValNull(), fmt.Errorf("assert.pass failed]: %s; message: %s",
+					msg,
+					err.Error(),
+				)
+			} else {
+				return NewValNull(), nil
+			}
+		},
+	)
+
+	addMF(
+		"assert",
+		"throw",
+		"",
+		"{%c}{%c%s}",
+		func(info *IntrinsicInfo, e *Evaluator, _ string, args []Val) (Val, error) {
+			msg, err := throwFunc(info, e, args)
+			if err == nil {
+				return NewValNull(), fmt.Errorf("assert.throw failed]: message: %s",
+					msg,
+				)
+			} else {
+				return NewValNull(), nil
+			}
+		},
+	)
 }

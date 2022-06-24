@@ -21,11 +21,25 @@ type IntrinsicInfo struct {
 	funcvalue *reflect.Value
 }
 
+func (i *IntrinsicInfo) toVal(e *Evaluator) Val {
+	return NewValNativeFunction(
+		i.cname,
+		func(a []Val) (Val, error) {
+			return i.entry(e, i.cname, a)
+		},
+	)
+}
+
 func (i *IntrinsicInfo) Check(a []Val) (int, error) {
 	return i.argproto.Check(a)
 }
 
+var intrinsicIndex = make(map[string]*IntrinsicInfo)
 var intrinsicFunc []*IntrinsicInfo
+
+func addiindex(i *IntrinsicInfo) {
+	intrinsicIndex[i.cname] = i
+}
 
 // special helper function to unpack reflection call's return argument into
 // acceptable format (Val, error). Notes, we paniced when the return value
@@ -232,6 +246,7 @@ func addF(cn string, pn string, p string, entry IntrinsicCall) {
 	)
 
 	musterr(cn, err)
+	addiindex(x)
 	intrinsicFunc = append(intrinsicFunc, x)
 }
 
@@ -245,6 +260,7 @@ func addMF(m string, f string, pn string, p string, entry IntrinsicCall) {
 	)
 
 	musterr(mname, err)
+	addiindex(x)
 	intrinsicFunc = append(intrinsicFunc, x)
 }
 
@@ -261,6 +277,7 @@ func addrefF(
 		f,
 	)
 	musterr(cn, err)
+	addiindex(x)
 	intrinsicFunc = append(intrinsicFunc, x)
 }
 
@@ -280,7 +297,19 @@ func addrefMF(
 	)
 
 	musterr(mname, err)
+	addiindex(x)
 	intrinsicFunc = append(intrinsicFunc, x)
+}
+
+func getIntrinsicByName(
+	name string,
+) *IntrinsicInfo {
+	v, ok := intrinsicIndex[name]
+	if ok {
+		return v
+	} else {
+		return nil
+	}
 }
 
 func AddFunction(a0, a1, a2 string, entry IntrinsicCall) {

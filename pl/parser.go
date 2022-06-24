@@ -3,6 +3,7 @@ package pl
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/dianpeng/mono-service/util"
 )
@@ -2024,7 +2025,7 @@ func (p *parser) parseBodyStmt(prog *program) (bool, error) {
 		}
 		break
 
-	case tkGlobal:
+	case tkConst:
 		if err := p.parseVarDecl(prog, symtConst); err != nil {
 			return false, err
 		}
@@ -2163,7 +2164,7 @@ func (p *parser) parseExprStmt(prog *program) (bool, bool, error) {
 	switch p.l.token {
 	case tkLet:
 		return true, false, p.parseVarDecl(prog, symtVar)
-	case tkGlobal:
+	case tkConst:
 		return true, false, p.parseVarDecl(prog, symtConst)
 	case tkFor:
 		return false, false, p.parseFor(prog)
@@ -2888,6 +2889,42 @@ func (p *parser) patchAllCall() {
 	}
 }
 
+type modname struct {
+	prefix string
+	rest   []string
+}
+
+func (m *modname) fullname() string {
+	x := []string{m.prefix}
+	x = append(x, m.rest...)
+	return strings.Join(x, modSep)
+}
+
+func (p *parser) parseModName(
+	prefix string,
+) (modname, error) {
+	must(p.l.token == tkScope, "must be ::")
+	p.l.next()
+
+	m := modname{
+		prefix: prefix,
+	}
+
+	for {
+		if !p.l.expectCurrent(tkId) {
+			return m, p.l.toError()
+		}
+		m.rest = append(m.rest, p.l.valueText)
+
+		if p.l.next() != tkScope {
+			break
+		}
+		p.l.next()
+	}
+
+	return m, nil
+}
+
 const (
 	suffixDot = iota
 	suffixIndex
@@ -2961,11 +2998,11 @@ SUFFIX:
 
 			// optionally module name
 			if p.l.token == tkScope {
-				if !p.l.expect(tkId) {
-					return p.l.toError()
+				if mname, err := p.parseModName(name); err != nil {
+					return err
+				} else {
+					name = mname.fullname()
 				}
-				name = modFuncName(name, p.l.valueText)
-				p.l.next()
 			}
 
 			if err := p.parseUnboundCall(prog, name, 1, true); err != nil {
@@ -2991,6 +3028,13 @@ func (p *parser) parseSuffix(prog *program) error {
 // foo["bar"]
 // foo:bar()
 func (p *parser) parsePExpr(prog *program, tk int, name string) error {
+	if p.l.token == tkScope {
+		if mname, err := p.parseModName(name); err != nil {
+			return err
+		} else {
+			name = mname.fullname()
+		}
+	}
 
 	switch tk {
 	case tkId:
@@ -2998,21 +3042,6 @@ func (p *parser) parsePExpr(prog *program, tk int, name string) error {
 		switch p.l.token {
 		case tkLPar:
 			if err := p.parseUnboundCall(prog, name, 0, false); err != nil {
-				return err
-			}
-			break
-
-		case tkScope:
-			// module call, mod::function_name(....)
-			modName := name
-			if !p.l.expect(tkId) {
-				return p.l.toError()
-			}
-			funcName := p.l.valueText
-			if !p.l.expect(tkLPar) {
-				return p.l.toError()
-			}
-			if err := p.parseUnboundCall(prog, modFuncName(modName, funcName), 0, false); err != nil {
 				return err
 			}
 			break
@@ -3647,7 +3676,7 @@ func (p *parser) parseConfigScopeBodyStmt(prog *program) (bool, error) {
 		}
 		break
 
-	case tkGlobal:
+	case tkConst:
 		if err := p.parseVarDecl(prog, symtConst); err != nil {
 			return false, err
 		}

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 
@@ -212,7 +213,7 @@ func (s *serviceHandler) main(
 			// event if applicable
 			if s.serviceResult.Event != "" {
 				if err := s.hpl.RunWithContext(s.serviceResult.Event,
-					s.serviceResult.Context()); err != nil {
+					s.serviceResult.Context); err != nil {
 					respWrapper.ReplyErrorHPL(err)
 					return
 				}
@@ -298,15 +299,24 @@ func (s *serviceHandler) GetHttpClient(url string) (hpl.HttpClient, error) {
 }
 
 func (s *serviceHandler) OnLoadVar(name string) (pl.Val, error) {
-	return s.service.App.OnLoadVar(s.phaseIndex, name)
+	return pl.NewValNull(), fmt.Errorf(
+		"unknown variable name: %s",
+		name,
+	)
 }
 
-func (s *serviceHandler) OnStoreVar(name string, v pl.Val) error {
-	return s.service.App.OnStoreVar(s.phaseIndex, name, v)
+func (s *serviceHandler) OnStoreVar(name string, _ pl.Val) error {
+	return fmt.Errorf(
+		"unknown variable name: %s",
+		name,
+	)
 }
 
-func (s *serviceHandler) OnAction(name string, v pl.Val) error {
-	return s.service.App.OnAction(s.phaseIndex, name, v)
+func (s *serviceHandler) OnAction(name string, _ pl.Val) error {
+	return fmt.Errorf(
+		"unknown action name: %s",
+		name,
+	)
 }
 
 func (s *serviceHandler) GetPhaseName() string {
