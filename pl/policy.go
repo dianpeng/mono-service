@@ -54,21 +54,6 @@ type Policy struct {
 	sinfo symbolInfo
 }
 
-// Currently, due to the synchronization issue of underlying object/value. The
-// global variable only supports storing immutable data structure, for now it
-// is just primitive type.
-func IsAllowedGlobalValueType(v Val) bool {
-	switch v.Type {
-	// currently only immutable data type, ie primitive type is allowed
-	case ValInt, ValReal, ValNull, ValStr, ValBool:
-		return true
-	case ValUsr:
-		return v.Usr().IsImmutable()
-	default:
-		return false
-	}
-}
-
 func (g *globalState) size() int {
 	g.lock.RLock()
 	defer func() {
@@ -81,7 +66,7 @@ func (g *globalState) set(
 	i int,
 	v Val,
 ) bool {
-	if !IsAllowedGlobalValueType(v) {
+	if !v.IsImmutable() {
 		return false
 	}
 
@@ -113,7 +98,7 @@ func (g *globalState) get(
 func (g *globalState) add(
 	v Val,
 ) bool {
-	if !IsAllowedGlobalValueType(v) {
+	if !v.IsImmutable() {
 		return false
 	}
 

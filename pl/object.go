@@ -1141,6 +1141,17 @@ func (v *Val) Info() string {
 	}
 }
 
+func (v *Val) IsImmutable() bool {
+	switch v.Type {
+	case ValInt, ValReal, ValNull, ValStr, ValBool:
+		return true
+	case ValUsr:
+		return v.Usr().IsImmutable()
+	default:
+		return false
+	}
+}
+
 func checkstatic() {
 	// testing whether UVal is convertable to Usr
 	uval := &UVal{}
