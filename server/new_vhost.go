@@ -21,8 +21,8 @@ func (c *constHttpClientFactory) GetHttpClient(url string) (hpl.HttpClient, erro
 	}, nil
 }
 
-func initpolicy(x string, config pl.EvalConfig) (*pl.Policy, error) {
-	p, err := pl.CompilePolicy(x)
+func initmodule(x string, config pl.EvalConfig) (*pl.Module, error) {
+	p, err := pl.CompileModule(x)
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +30,7 @@ func initpolicy(x string, config pl.EvalConfig) (*pl.Policy, error) {
 	session := &constHttpClientFactory{}
 	hpl := hpl.NewHpl()
 
-	hpl.SetPolicy(p)
+	hpl.SetModule(p)
 
 	if err := hpl.OnGlobal(session); err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func wrapE(
 ) error {
 
 	return fmt.Errorf(
-		"Under context %s, policy file %s, has error in phase %s:\n\n%s",
+		"Under context %s, module file %s, has error in phase %s:\n\n%s",
 		context,
 		path,
 		phase,
@@ -73,7 +73,7 @@ func initVHost(
 		config: vhostConfig,
 	}
 
-	p, err := initpolicy(string(vhostSource), vhostConfigBuilder)
+	p, err := initmodule(string(vhostSource), vhostConfigBuilder)
 	if err != nil {
 		return nil, wrapE(
 			"virtual_host",
@@ -100,7 +100,7 @@ func initVHostSVC(
 		config: cfg,
 	}
 
-	p, err := initpolicy(
+	p, err := initmodule(
 		string(src),
 		builder,
 	)

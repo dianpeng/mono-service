@@ -42,7 +42,7 @@ func EvalExpression(
 	expression string,
 	context EvalContext,
 ) (Val, error) {
-	p, err := CompilePolicyAsExpression(expression)
+	p, err := CompileModuleAsExpression(expression)
 	if err != nil {
 		return NewValNull(), err
 	}

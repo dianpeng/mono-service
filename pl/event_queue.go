@@ -8,7 +8,7 @@ type EventQueue interface {
 	OnEvent(string, Val) error
 
 	// Drain the event queue
-	Drain(*Evaluator, *Policy, func(string, error) bool) int
+	Drain(*Evaluator, *Module, func(string, error) bool) int
 
 	// Size of the queue that is pending
 	PendingSize() int
@@ -35,7 +35,7 @@ func (d *defEventQueue) OnEvent(n string, v Val) error {
 }
 
 func (d *defEventQueue) Drain(ev *Evaluator,
-	p *Policy,
+	p *Module,
 	onError func(string, error) bool,
 ) int {
 	count := 0

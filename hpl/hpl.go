@@ -47,7 +47,7 @@ type SessionWrapper interface {
 // ----------------------------------------------------------------------------
 type Hpl struct {
 	Eval   *pl.Evaluator
-	Policy *pl.Policy
+	Module *pl.Module
 
 	isRunning bool
 
@@ -68,29 +68,29 @@ func NewHpl() *Hpl {
 	return p
 }
 
-func NewHplWithPolicy(policy *pl.Policy) *Hpl {
+func NewHplWithModule(module *pl.Module) *Hpl {
 	p := &Hpl{}
 	p.Eval = pl.NewEvaluatorSimple()
-	p.SetPolicy(policy)
+	p.SetModule(module)
 	return p
 }
 
-func (h *Hpl) CompilePolicy(input string) error {
-	p, err := pl.CompilePolicy(input)
+func (h *Hpl) CompileModule(input string) error {
+	p, err := pl.CompileModule(input)
 	if err != nil {
 		return err
 	}
-	h.Policy = p
+	h.Module = p
 	return nil
 }
 
-func (h *Hpl) SetPolicy(p *pl.Policy) {
-	h.Policy = p
+func (h *Hpl) SetModule(p *pl.Module) {
+	h.Module = p
 }
 
 // Derive a HPL state from another existed HPL, suitable for using in background
 func (h *Hpl) Derive(that *Hpl) {
-	h.Policy = that.Policy
+	h.Module = that.Module
 
 	// notes, we currently do not have a way to duplicate session state from that
 	// HPL to our HPL and due to the thread issue, we cannot safely just do shallow
@@ -186,8 +186,8 @@ func (h *Hpl) customizeAction(_ *pl.Evaluator, actionName string, arg pl.Val) er
 }
 
 func (h *Hpl) OnCustomize(selector string, session SessionWrapper) error {
-	if h.Policy == nil {
-		return fmt.Errorf("the Hpl engine does not have any policy binded")
+	if h.Module == nil {
+		return fmt.Errorf("the Hpl engine does not have any module binded")
 	}
 	if h.isRunning {
 		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
@@ -208,7 +208,7 @@ func (h *Hpl) OnCustomize(selector string, session SessionWrapper) error {
 		h.session = nil
 	}()
 
-	return h.Eval.Eval(selector, h.Policy)
+	return h.Eval.Eval(selector, h.Module)
 }
 
 // -----------------------------------------------------------------------------
@@ -229,8 +229,8 @@ func (h *Hpl) globalAction(x *pl.Evaluator, actionName string, arg pl.Val) error
 }
 
 func (h *Hpl) OnGlobal(session ConstSessionWrapper) error {
-	if h.Policy == nil {
-		return fmt.Errorf("the Hpl engine does not have any policy binded")
+	if h.Module == nil {
+		return fmt.Errorf("the Hpl engine does not have any module binded")
 	}
 	if h.isRunning {
 		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
@@ -250,7 +250,7 @@ func (h *Hpl) OnGlobal(session ConstSessionWrapper) error {
 		h.constSession = nil
 	}()
 
-	return h.Eval.EvalGlobal(h.Policy)
+	return h.Eval.EvalGlobal(h.Module)
 }
 
 // -----------------------------------------------------------------------------
@@ -271,8 +271,8 @@ func (h *Hpl) configAction(x *pl.Evaluator, actionName string, arg pl.Val) error
 }
 
 func (h *Hpl) OnConfig(context pl.EvalConfig, session ConstSessionWrapper) error {
-	if h.Policy == nil {
-		return fmt.Errorf("the Hpl engine does not have any policy binded")
+	if h.Module == nil {
+		return fmt.Errorf("the Hpl engine does not have any module binded")
 	}
 	if h.isRunning {
 		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
@@ -293,7 +293,7 @@ func (h *Hpl) OnConfig(context pl.EvalConfig, session ConstSessionWrapper) error
 		h.constSession = nil
 	}()
 
-	return h.Eval.EvalConfig(h.Policy)
+	return h.Eval.EvalConfig(h.Module)
 }
 
 // -----------------------------------------------------------------------------
@@ -318,8 +318,8 @@ func (h *Hpl) OnInit(
 	session SessionWrapper,
 	log *alog.SessionLog,
 ) error {
-	if h.Policy == nil {
-		return fmt.Errorf("the Hpl engine does not have any policy binded")
+	if h.Module == nil {
+		return fmt.Errorf("the Hpl engine does not have any module binded")
 	}
 	if h.isRunning {
 		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
@@ -342,13 +342,13 @@ func (h *Hpl) OnInit(
 		h.isRunning = false
 	}()
 
-	return h.Eval.EvalSession(h.Policy)
+	return h.Eval.EvalSession(h.Module)
 }
 
 // -----------------------------------------------------------------------------
 func (h *Hpl) Run(name string) error {
-	if h.Policy == nil {
-		return fmt.Errorf("the Hpl engine does not have any policy binded")
+	if h.Module == nil {
+		return fmt.Errorf("the Hpl engine does not have any module binded")
 	}
 	if h.isRunning {
 		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
@@ -359,12 +359,12 @@ func (h *Hpl) Run(name string) error {
 		h.isRunning = false
 	}()
 
-	return h.Eval.Eval(name, h.Policy)
+	return h.Eval.Eval(name, h.Module)
 }
 
 func (h *Hpl) RunWithContext(name string, context pl.Val) error {
-	if h.Policy == nil {
-		return fmt.Errorf("the Hpl engine does not have any policy binded")
+	if h.Module == nil {
+		return fmt.Errorf("the Hpl engine does not have any module binded")
 	}
 	if h.isRunning {
 		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
@@ -375,5 +375,5 @@ func (h *Hpl) RunWithContext(name string, context pl.Val) error {
 		h.isRunning = false
 	}()
 
-	return h.Eval.EvalWithContext(name, context, h.Policy)
+	return h.Eval.EvalWithContext(name, context, h.Module)
 }

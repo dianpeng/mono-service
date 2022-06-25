@@ -75,7 +75,7 @@ func (s *servicePool) put(h *serviceHandler) bool {
 func newServiceHandler(s *framework.Service, vhs *vHS) *serviceHandler {
 	h := &serviceHandler{
 		service: s,
-		hpl:     hpl.NewHplWithPolicy(vhs.policy),
+		hpl:     hpl.NewHplWithModule(vhs.module),
 		vhs:     vhs,
 	}
 	return h

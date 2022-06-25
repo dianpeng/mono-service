@@ -9,7 +9,7 @@ import (
 )
 
 // a simple testing frameworking which is designed for testing the basic
-// expression of the policy. It assumes user will write output => as return
+// expression of the module. It assumes user will write output => as return
 // action
 func test(code string) (Val, bool) {
 	rr := NewValNull()
@@ -35,22 +35,22 @@ func test(code string) (Val, bool) {
 			return nil
 		})
 
-	policy, err := CompilePolicy(code)
+	module, err := CompileModule(code)
 
-	// fmt.Printf(":code\n%s", policy.Dump())
+	// fmt.Printf(":code\n%s", module.Dump())
 
 	if err != nil {
-		fmt.Printf(":policy \n%s", err.Error())
+		fmt.Printf(":module \n%s", err.Error())
 		return NewValNull(), false
 	}
 
-	err = eval.EvalSession(policy)
+	err = eval.EvalSession(module)
 	if err != nil {
 		fmt.Printf(":evalSession \n%s", err.Error())
 		return NewValNull(), false
 	}
 
-	err = eval.Eval("test", policy)
+	err = eval.Eval("test", module)
 	if err != nil {
 		fmt.Printf(":eval\n%s", err.Error())
 		return NewValNull(), false
@@ -675,9 +675,9 @@ func TestEval1(t *testing.T) {
 				return nil
 			})
 
-		policy, err := CompilePolicy(
+		module, err := CompileModule(
 			`
-policy => {
+module => {
   act_int => 10;
   act_real => 10.0;
   act_true => true;
@@ -693,11 +693,11 @@ policy => {
 }`)
 
 		if err != nil {
-			fmt.Printf(":policy %s", err.Error())
+			fmt.Printf(":module %s", err.Error())
 		}
 		assert.True(err == nil)
 
-		err = eval.Eval("policy", policy)
+		err = eval.Eval("module", module)
 		if err != nil {
 			fmt.Printf(":eval %s", err.Error())
 		}
@@ -795,9 +795,9 @@ policy => {
 				return nil
 			})
 
-		policy, err := CompilePolicy(
+		module, err := CompileModule(
 			`
-policy{
+module{
   empty_list => [];
   list1 => [1];
   list2 => [1, true];
@@ -821,11 +821,11 @@ policy{
 }`)
 
 		if err != nil {
-			fmt.Printf(":policy %s", err.Error())
+			fmt.Printf(":module %s", err.Error())
 		}
 		assert.True(err == nil)
 
-		err = eval.Eval("policy", policy)
+		err = eval.Eval("module", module)
 		if err != nil {
 			fmt.Printf(":eval %s", err.Error())
 		}
@@ -943,10 +943,10 @@ func TestStrInterpo(t *testing.T) {
 				return nil
 			})
 
-		policy, err := CompilePolicy(
+		module, err := CompileModule(
 			`
-// whatever policy
-"policy" => {
+// whatever module
+"module" => {
   let var1 = 10;
   let var2 = 'xxxx';
 
@@ -954,11 +954,11 @@ func TestStrInterpo(t *testing.T) {
   v2 => "aa{{var2}},{{a}},{{abs(-100)}}";
 }`)
 		if err != nil {
-			fmt.Printf(":policy %s", err.Error())
+			fmt.Printf(":module %s", err.Error())
 		}
 		assert.True(err == nil)
 
-		err = eval.Eval("policy", policy)
+		err = eval.Eval("module", module)
 		if err != nil {
 			fmt.Printf(":eval %s", err.Error())
 		}
@@ -995,10 +995,10 @@ func TestLocal(t *testing.T) {
 				return nil
 			})
 
-		policy, err := CompilePolicy(
+		module, err := CompileModule(
 			`
-// whatever policy
-"policy" => {
+// whatever module
+"module" => {
   let var1 = 10;
   let var2 = true;
   let var3 = false;
@@ -1014,11 +1014,11 @@ func TestLocal(t *testing.T) {
 }`)
 
 		if err != nil {
-			fmt.Printf(":policy %s", err.Error())
+			fmt.Printf(":module %s", err.Error())
 		}
 		assert.True(err == nil)
 
-		err = eval.Eval("policy", policy)
+		err = eval.Eval("module", module)
 		if err != nil {
 			fmt.Printf(":eval %s", err.Error())
 		}
@@ -1833,16 +1833,16 @@ test {
 }
 `
 
-	policy, err := CompilePolicy(code)
+	module, err := CompileModule(code)
 
-	// fmt.Printf(":code\n%s", policy.Dump())
+	// fmt.Printf(":code\n%s", module.Dump())
 
 	assert.True(err == nil)
 
-	err = eval.EvalSession(policy)
+	err = eval.EvalSession(module)
 	assert.True(err == nil)
 
-	err = eval.Eval("test", policy)
+	err = eval.Eval("test", module)
 	assert.True(err == nil)
 
 	assert.True(ret.Type == ValStr)

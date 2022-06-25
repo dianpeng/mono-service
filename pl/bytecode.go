@@ -91,7 +91,7 @@ const (
 
 	// this instruction can only be generated during the global scope
 	bcSetSession = 71
-	// this 2 instructions are used during normal policy execution
+	// this 2 instructions are used during normal module execution
 	bcLoadSession  = 72
 	bcStoreSession = 73
 
@@ -174,7 +174,7 @@ func (s *sourceloc) where() string {
 		end = len(s.source)
 	}
 
-	return fmt.Sprintf("around (%d, %d)@(---\n%s\n---)", s.line, s.column, s.source[start:end])
+	return fmt.Sprintf("around (%d, %d)@(---\n\n%s\n\n---)", s.line, s.column, s.source[start:end])
 }
 
 type bytecodeList []bytecode
@@ -194,7 +194,7 @@ type upvalue struct {
 }
 
 type program struct {
-	policy    *Policy
+	module    *Module
 	name      string
 	localSize int
 	argSize   int // if this program is a function call, then this indicates
@@ -215,15 +215,15 @@ type program struct {
 	upvalue []upvalue
 }
 
-func newProgram(p *Policy, n string, t int) *program {
+func newProgram(p *Module, n string, t int) *program {
 	return &program{
-		policy:   p,
+		module:   p,
 		name:     n,
 		progtype: t,
 	}
 }
 
-func newProgramEmpty(p *Policy, n string, t int) *program {
+func newProgramEmpty(p *Module, n string, t int) *program {
 	pp := newProgram(p, n, t)
 	pp.bcList = append(pp.bcList, bytecode{
 		opcode:   bcHalt,

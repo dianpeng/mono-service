@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func runWithResult(code string) (Val, bool, *Policy) {
+func runWithResult(code string) (Val, bool, *Module) {
 	rr := NewValNull()
 	ret := &rr
 	eval := NewEvaluatorWithContextCallback(
@@ -30,34 +30,34 @@ func runWithResult(code string) (Val, bool, *Policy) {
 			return nil
 		})
 
-	policy, err := CompilePolicy(code)
+	module, err := CompileModule(code)
 
-	// fmt.Printf(":code\n%s", policy.Dump())
+	// fmt.Printf(":code\n%s", module.Dump())
 
 	if err != nil {
-		fmt.Printf(":policy %s", err.Error())
+		fmt.Printf(":module %s", err.Error())
 		return NewValNull(), false, nil
 	}
 
-	err = eval.EvalSession(policy)
+	err = eval.EvalSession(module)
 	if err != nil {
 		fmt.Printf(":evalSession %s", err.Error())
-		return NewValNull(), false, policy
+		return NewValNull(), false, module
 	}
 
-	err = eval.Eval("test", policy)
+	err = eval.Eval("test", module)
 	if err != nil {
 		fmt.Printf(":eval %s", err.Error())
-		return NewValNull(), false, policy
+		return NewValNull(), false, module
 	}
-	return *ret, true, policy
+	return *ret, true, module
 }
 
 func Test1(t *testing.T) {
 	assert := assert.New(t)
 
 	{
-		r, ok, policy := runWithResult(`
+		r, ok, module := runWithResult(`
 
   fn foo(d) {
     let a = "hello world";
@@ -79,14 +79,14 @@ func Test1(t *testing.T) {
 		assert.True(r.IsString())
 		assert.True(r.String() == "40hello world")
 
-		// now checking the policy
-		assert.Equal(2, policy.GetAnonymousFunctionSize(), "anonymous function size")
-		assert.Equal(3, len(policy.fn), "function size")
+		// now checking the module
+		assert.Equal(2, module.GetAnonymousFunctionSize(), "anonymous function size")
+		assert.Equal(3, len(module.fn), "function size")
 
 		// finding out the first anonymous function which should have 4 upvalues,
 		// though it never uses them
 		{
-			p := policy.getFunction("[anonymous_function_1]")
+			p := module.getFunction("[anonymous_function_1]")
 			assert.True(p != nil)
 			assert.True(len(p.upvalue) == 4)
 			for _, x := range p.upvalue {
@@ -95,7 +95,7 @@ func Test1(t *testing.T) {
 		}
 
 		{
-			p := policy.getFunction("[anonymous_function_2]")
+			p := module.getFunction("[anonymous_function_2]")
 			assert.True(p != nil)
 			assert.True(len(p.upvalue) == 4)
 			for _, x := range p.upvalue {

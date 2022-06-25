@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func dumpProg(x *Policy) {
+func dumpProg(x *Module) {
 	fmt.Printf("%s\n", x.Dump())
 }
 
@@ -98,7 +98,7 @@ func TestParser1(t *testing.T) {
 		p := newParser(`
 
 
-policy1 {
+module1 {
   act_int => 10;
   act_real => 20.0;
   act_null => null;
@@ -112,7 +112,7 @@ policy1 {
   act_var = $.a.b[2].c;
 }
 
-policy2 {}
+module2 {}
 
 `)
 
@@ -126,7 +126,7 @@ policy2 {}
 
 	{
 		p := newParser(`
-policy_call{
+module_call{
   s1 = $;
   s2 = $.a;
   s3 = $.a[1];
@@ -145,7 +145,7 @@ policy_call{
 
 	{
 		p := newParser(`
-policy_call{
+module_call{
   s1 = a5;
   s2 = a5[1];
   s3 = a5.a[1];
@@ -165,7 +165,7 @@ policy_call{
 	// call expression nesting
 	{
 		p := newParser(`
-policy_call{
+module_call{
   call0 = c();
   call1 = c1(10);
   call2 = c2(10, [], {}, 'aaaa', "Asdasdsa");
@@ -187,7 +187,7 @@ func TestParserStringInterpolation(t *testing.T) {
 	assert := assert.New(t)
 	{
 		p := newParser(`
-policy1 {
+module1 {
   str1 = '';
   str2 = 'abcd';
   str3 = 'aabc{{$}}accc';
@@ -208,7 +208,7 @@ policy1 {
 
 	{
 		p := newParser(`
-policy1{
+module1{
   str1 = '{';
   str2 = '{{{';
   str3 = '{{{{';

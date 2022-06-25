@@ -303,7 +303,7 @@ as following :
 5. SHA512
 6. SHA384
 
-Additionally, it exposes following policy variable for user to use
+Additionally, it exposes following module variable for user to use
 
 1. signMethod, a string indicate the signing digest method
 2. signOp, a string of 2 values, "sign" or "verify"

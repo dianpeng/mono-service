@@ -8,7 +8,7 @@ import (
 
 type vHS struct {
 	factory     *framework.ServiceFactory
-	policy      *pl.Policy
+	module      *pl.Module
 	config      *vHSConfig
 	vhost       *vhost
 	servicePool servicePool
@@ -31,11 +31,11 @@ func (s *vHS) getServiceHandler() (*serviceHandler, error) {
 func newvHS(vhost *vhost,
 	factory *framework.ServiceFactory,
 	config *vHSConfig,
-	p *pl.Policy,
+	p *pl.Module,
 ) (*vHS, error) {
 	return &vHS{
 		factory:     factory,
-		policy:      p,
+		module:      p,
 		config:      config,
 		vhost:       vhost,
 		servicePool: newServicePool(config.MaxSessionCacheSize),

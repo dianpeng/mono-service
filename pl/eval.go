@@ -290,7 +290,7 @@ func (e *Evaluator) emitEvent(
 	e.eventQ.OnEvent(name, context)
 }
 
-func (e *Evaluator) drainEventQueue(p *Policy) {
+func (e *Evaluator) drainEventQueue(p *Module) {
 	if e.inEventQueue {
 		return
 	}
@@ -787,8 +787,9 @@ func (rr *runresult) isDone() bool {
 func (e *Evaluator) runP(
 	prog *program,
 	pc int,
-	policy *Policy,
 ) runresult {
+	module := prog.module
+
 	// script function entry label, the bcSCall will setup stack layout and
 	// jump(goto) this label for rexecution. prog will be swapped with the
 	// function program
@@ -1068,7 +1069,7 @@ FUNC:
 			// enter into the new call
 			if bc.opcode == bcSCall {
 				idx := funcIndexOrEntry.Int()
-				prog = prog.policy.fn[int(idx)]
+				prog = prog.module.fn[int(idx)]
 				must(prog.freeCall(), "must be freecall")
 				ftype = ftypeScript
 				if paramSize != prog.argSize {
@@ -1152,7 +1153,7 @@ FUNC:
 			break
 
 		case bcNewClosure:
-			fn := prog.policy.fn[bc.argument]
+			fn := prog.module.fn[bc.argument]
 			sfunc := newScriptFunc(fn)
 			for _, uv := range fn.upvalue {
 				if uv.onStack {
@@ -1433,7 +1434,7 @@ FUNC:
 		case bcSetGlobal:
 			ctx := e.top0()
 			e.pop()
-			if !policy.global.add(
+			if !module.global.add(
 				ctx,
 			) {
 				return rrErrf(prog, pc, "global varaible must store immutable type, "+
@@ -1442,7 +1443,7 @@ FUNC:
 			break
 
 		case bcLoadGlobal:
-			val, ok := policy.GetGlobal(bc.argument)
+			val, ok := module.GetGlobal(bc.argument)
 			if !ok {
 				return rrErrf(prog, pc, "global variable loading error, "+
 					"global variable is not existed")
@@ -1454,7 +1455,7 @@ FUNC:
 		case bcStoreGlobal:
 			ctx := e.top0()
 			e.pop()
-			if !policy.StoreGlobal(bc.argument, ctx) {
+			if !module.StoreGlobal(bc.argument, ctx) {
 				return rrErrf(prog, pc, "global variable storing error, "+
 					"value is not immutable or global variable is not existed")
 			}
@@ -1663,7 +1664,7 @@ func (e *Evaluator) closureProlog(fn Val, args []Val) {
 	e.prologue(ftype, len(args), prog, sfunc, nfunc)
 }
 
-func (e *Evaluator) runRule(event Val, prog *program, policy *Policy) error {
+func (e *Evaluator) runRule(event Val, prog *program) error {
 	must(e.Context != nil, "Evaluator's context is nil!")
 
 	// just clear the stack size if needed before every run, since we need to reuse
@@ -1697,7 +1698,7 @@ func (e *Evaluator) runRule(event Val, prog *program, policy *Policy) error {
 	// Now let's enter into the bytecode VM
 	{
 	RECOVER:
-		rr := e.runP(prog, pc, policy)
+		rr := e.runP(prog, pc)
 
 		// finish execution
 		if rr.isDone() {
@@ -1754,7 +1755,7 @@ func (e *Evaluator) runSFunc(
 
 	{
 	RECOVER:
-		rr := e.runP(prog, pc, prog.policy)
+		rr := e.runP(prog, pc)
 
 		// finish execution
 		if rr.isDone() {
@@ -1816,17 +1817,17 @@ func (e *Evaluator) runNFunc(
 	return ret, err
 }
 
-func (e *Evaluator) EvalConfig(p *Policy) error {
+func (e *Evaluator) EvalConfig(p *Module) error {
 	if !p.HasConfig() {
 		return nil
 	}
 	if e.Config == nil {
 		return fmt.Errorf("evaluator's Config is not set")
 	}
-	return e.runRule(NewValNull(), p.config, p)
+	return e.runRule(NewValNull(), p.config)
 }
 
-func (e *Evaluator) EvalGlobal(p *Policy) error {
+func (e *Evaluator) EvalGlobal(p *Module) error {
 	defer func() {
 		e.drainEventQueue(p)
 	}()
@@ -1835,10 +1836,10 @@ func (e *Evaluator) EvalGlobal(p *Policy) error {
 		return nil
 	}
 	p.global.globalVar = nil
-	return e.runRule(NewValNull(), p.global.globalProgram, p)
+	return e.runRule(NewValNull(), p.global.globalProgram)
 }
 
-func (e *Evaluator) EvalSession(p *Policy) error {
+func (e *Evaluator) EvalSession(p *Module) error {
 	defer func() {
 		e.drainEventQueue(p)
 	}()
@@ -1847,28 +1848,28 @@ func (e *Evaluator) EvalSession(p *Policy) error {
 		return nil
 	}
 	e.Session = nil
-	return e.runRule(NewValStr(SessionRule), p.session, p)
+	return e.runRule(NewValStr(SessionRule), p.session)
 }
 
-func (e *Evaluator) Eval(event string, p *Policy) error {
+func (e *Evaluator) Eval(event string, p *Module) error {
 	defer func() {
 		e.drainEventQueue(p)
 	}()
 
 	if prog := p.findEvent(event); prog != nil {
-		return e.runRule(NewValNull(), prog, p)
+		return e.runRule(NewValNull(), prog)
 	} else {
 		return nil
 	}
 }
 
-func (e *Evaluator) EvalWithContext(event string, context Val, p *Policy) error {
+func (e *Evaluator) EvalWithContext(event string, context Val, p *Module) error {
 	defer func() {
 		e.drainEventQueue(p)
 	}()
 
 	if prog := p.findEvent(event); prog != nil {
-		return e.runRule(context, prog, p)
+		return e.runRule(context, prog)
 	} else {
 		return nil
 	}
@@ -1880,10 +1881,10 @@ func (e *Evaluator) EvalWithContext(event string, context Val, p *Policy) error 
 func (e *Evaluator) EvalDeferred(
 	name string,
 	context Val,
-	p *Policy,
+	p *Module,
 ) error {
 	if prog := p.findEvent(name); prog != nil {
-		return e.runRule(context, prog, p)
+		return e.runRule(context, prog)
 	} else {
 		return nil
 	}
@@ -1896,16 +1897,16 @@ func (e *Evaluator) EmitEvent(
 	e.emitEvent(name, context)
 }
 
-// Used by the config module for !eval directive. Notes the policy should just
+// Used by the config module for !eval directive. Notes the module should just
 // contain one program inside of its .p field
-func (e *Evaluator) EvalExpr(p *Policy) (Val, error) {
+func (e *Evaluator) EvalExpr(p *Module) (Val, error) {
 	if len(p.p) == 0 {
 		return NewValNull(), nil
 	}
 	if len(p.p) != 1 {
-		return NewValNull(), fmt.Errorf("not an expression policy")
+		return NewValNull(), fmt.Errorf("not an expression module")
 	}
-	if err := e.runRule(NewValNull(), p.p[0], p); err != nil {
+	if err := e.runRule(NewValNull(), p.p[0]); err != nil {
 		return NewValNull(), err
 	}
 	return e.top0(), nil

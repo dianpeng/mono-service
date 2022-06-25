@@ -214,18 +214,19 @@ type callentry struct {
 
 type parser struct {
 	l         *lexer
-	policy    *Policy
+	module    *Module
 	stbl      *lexicalScope
 	globalVar []string
 	sessVar   []string
 	callPatch []callentry
 	counter   uint64 // random counter used to generate unique id etc ...
+	isModule  bool   // whether we are parsing a module
 }
 
 func newParser(input string) *parser {
 	return &parser{
 		l:      newLexer(input),
-		policy: newPolicy(),
+		module: newModule(),
 	}
 }
 
@@ -529,9 +530,9 @@ func (p *parser) errf(f string, a ...interface{}) error {
 	return p.err(fmt.Sprintf(f, a...))
 }
 
-func (p *parser) parseExpression() (*Policy, error) {
+func (p *parser) parseExpression() (*Module, error) {
 	p.l.next()
-	prog := newProgram(p.policy, "$expression", progExpression)
+	prog := newProgram(p.module, "$expression", progExpression)
 	p.enterScopeTop(entryExpr, prog)
 	defer func() {
 		p.leaveScope()
@@ -546,11 +547,11 @@ func (p *parser) parseExpression() (*Policy, error) {
 	}
 	prog.emit0(p.l, bcHalt)
 
-	p.policy.p = append(p.policy.p, prog)
+	p.module.p = append(p.module.p, prog)
 
 	p.patchAllCall()
 
-	return p.policy, nil
+	return p.module, nil
 }
 
 func (p *parser) parseFwd() error {
@@ -587,7 +588,7 @@ func (p *parser) parseFwd() error {
 	return nil
 }
 
-func (p *parser) parse() (*Policy, error) {
+func (p *parser) parse() (*Module, error) {
 	p.l.next()
 
 	if err := p.parseFwd(); err != nil {
@@ -647,11 +648,11 @@ LOOP:
 
 	// lastly check whether we have config scope, if so, we need to patch config
 	// to include a bcHalt otherwise will break our VM
-	if p.policy.config != nil {
-		p.policy.config.emit0(p.l, bcHalt)
+	if p.module.config != nil {
+		p.module.config.emit0(p.l, bcHalt)
 	}
 
-	return p.policy, nil
+	return p.module, nil
 }
 
 func (p *parser) parseSessionLoad(prog *program) error {
@@ -678,7 +679,7 @@ func (p *parser) parseSessionScope() error {
 		return err
 	}
 	p.sessVar = list
-	p.policy.session = x
+	p.module.session = x
 	return nil
 }
 
@@ -695,8 +696,8 @@ func (p *parser) parseGlobalScope() error {
 
 	p.globalVar = list
 
-	p.policy.global.globalProgram = x
-	p.policy.sinfo.globalName = list
+	p.module.global.globalProgram = x
+	p.module.sinfo.globalName = list
 	return nil
 }
 
@@ -707,8 +708,8 @@ func (p *parser) parseVarScope(rulename string,
 	}
 	p.l.next()
 
-	prog := newProgram(p.policy, rulename, progSession)
-	must(p.policy.addEvent(rulename, prog), "session must be unique")
+	prog := newProgram(p.module, rulename, progSession)
+	must(p.module.addEvent(rulename, prog), "session must be unique")
 
 	p.enterScopeTop(entryVar, prog)
 	defer func() {
@@ -771,21 +772,21 @@ func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 		funcName = p.l.valueText
 		p.l.next()
 	} else {
-		funcName = p.policy.nextAnonymousFuncName()
+		funcName = p.module.nextAnonymousFuncName()
 	}
 
-	prog := newProgram(p.policy, funcName, progFunc)
+	prog := newProgram(p.module, funcName, progFunc)
 	p.enterScopeTop(entryFunc, prog)
 	defer func() {
 		p.leaveScope()
 	}()
 
 	localR := prog.patch(p.l)
-	p.policy.fn = append(p.policy.fn, prog)
+	p.module.fn = append(p.module.fn, prog)
 	defer func() {
 		if the_error != nil {
-			sz := len(p.policy.fn)
-			p.policy.fn = p.policy.fn[:sz-1]
+			sz := len(p.module.fn)
+			p.module.fn = p.module.fn[:sz-1]
 		}
 	}()
 
@@ -866,7 +867,7 @@ func (p *parser) parseRule() error {
 
 	var name string
 
-	// parsing the policy name, we accept few different types to ease user's
+	// parsing the module name, we accept few different types to ease user's
 	// own syntax flavor
 	if p.l.token == tkStr || p.l.token == tkId {
 		name = p.l.valueText
@@ -896,7 +897,7 @@ func (p *parser) parseRule() error {
 		return p.err("invalid rule name, cannot start with @ which is builtin name")
 	}
 
-	prog := newProgram(p.policy, name, progRule)
+	prog := newProgram(p.module, name, progRule)
 	p.enterScopeTop(entryRule, prog)
 
 	p.mustAddLocalVar("#event")
@@ -907,7 +908,7 @@ func (p *parser) parseRule() error {
 
 	localR := prog.patch(p.l)
 
-	if !p.policy.addEvent(name, prog) {
+	if !p.module.addEvent(name, prog) {
 		return p.err("invalid rule name, the rule has already been existed")
 	}
 
@@ -926,7 +927,7 @@ func (p *parser) parseRule() error {
 	prog.emit0(p.l, bcHalt)
 	prog.localSize = p.stbl.topMaxLocal() - 1
 	prog.emit1At(p.l, localR, bcReserveLocal, p.stbl.topMaxLocal()-1)
-	p.policy.p = append(p.policy.p, prog)
+	p.module.p = append(p.module.p, prog)
 
 	return nil
 }
@@ -2588,7 +2589,7 @@ func (p *parser) parsePrimary(prog *program, l lexeme) error {
 		if err != nil {
 			return err
 		}
-		scallIdx := p.policy.getFunctionIndex(funcName)
+		scallIdx := p.module.getFunctionIndex(funcName)
 		must(scallIdx != -1, "the function(anonymouse) must be existed")
 		prog.emit1(p.l, bcNewClosure, scallIdx)
 		break
@@ -2759,6 +2760,66 @@ func (p *parser) parseVCall(prog *program) error {
 	return nil
 }
 
+// module symbols
+type modSymbol struct {
+	prefix string
+	rest   []string
+}
+
+func (m *modSymbol) fullname() string {
+	if len(m.rest) == 0 {
+		return m.prefix
+	}
+	x := []string{m.prefix}
+	x = append(x, m.rest...)
+	return strings.Join(x, modSep)
+}
+
+func (m *modSymbol) isModule() bool {
+	return len(m.rest) > 0
+}
+
+// If the symbol is a::b::c, then this function returns a::b
+func (m *modSymbol) modulePrefix() string {
+	if len(m.rest) == 0 {
+		return ""
+	}
+	return strings.Join(m.rest, modSep)
+}
+
+func (m *modSymbol) topModuleName() string {
+	if len(m.rest) == 0 {
+		return ""
+	}
+	return m.rest[0]
+}
+
+// Optionally parsing the module symbol
+func (p *parser) parseModSymbol(
+	prefix string,
+) (modSymbol, error) {
+	m := modSymbol{
+		prefix: prefix,
+	}
+	if p.l.token == tkScope {
+		p.l.next()
+
+		for {
+			if !p.l.expectCurrent(tkId) {
+				return m, p.l.toError()
+			}
+			m.rest = append(m.rest, p.l.valueText)
+
+			if p.l.next() != tkScope {
+				break
+			}
+			p.l.next()
+		}
+	}
+
+	return m, nil
+}
+
 // Rules for unbounded call name resolution
 
 // The unbounded call's name resolution is little bit different from the normal
@@ -2778,10 +2839,11 @@ func (p *parser) parseVCall(prog *program) error {
 // NOTES(dpeng): bcCall is depracated
 
 func (p *parser) parseUnboundCall(prog *program,
-	name string,
+	modName modSymbol,
 	argAdd int,
 	isPipe bool,
 ) error {
+	name := modName.fullname()
 
 	entryIndex := prog.patch(p.l)
 	swapPos := -1
@@ -2803,7 +2865,6 @@ func (p *parser) parseUnboundCall(prog *program,
 	}
 
 	// now try to resolve the name via variable lookup in case it is just a vcall
-
 	symtype, symindex := p.resolveSymbol(
 		name,
 		false,
@@ -2873,7 +2934,7 @@ func (p *parser) patchAllCall() {
 
 			e.prog.emit1At(p.l, e.callPos, bcICall, e.arg)
 		} else {
-			scallIdx := p.policy.getFunctionIndex(e.symbol)
+			scallIdx := p.module.getFunctionIndex(e.symbol)
 			if scallIdx != -1 {
 				idx := e.prog.addInt(int64(scallIdx))
 				e.prog.emit1At(p.l, e.entryPos, bcLoadInt, idx)
@@ -2887,42 +2948,6 @@ func (p *parser) patchAllCall() {
 			}
 		}
 	}
-}
-
-type modname struct {
-	prefix string
-	rest   []string
-}
-
-func (m *modname) fullname() string {
-	x := []string{m.prefix}
-	x = append(x, m.rest...)
-	return strings.Join(x, modSep)
-}
-
-func (p *parser) parseModName(
-	prefix string,
-) (modname, error) {
-	must(p.l.token == tkScope, "must be ::")
-	p.l.next()
-
-	m := modname{
-		prefix: prefix,
-	}
-
-	for {
-		if !p.l.expectCurrent(tkId) {
-			return m, p.l.toError()
-		}
-		m.rest = append(m.rest, p.l.valueText)
-
-		if p.l.next() != tkScope {
-			break
-		}
-		p.l.next()
-	}
-
-	return m, nil
 }
 
 const (
@@ -2994,18 +3019,12 @@ SUFFIX:
 			name := p.l.valueText
 			p.l.next()
 
-			// FIXME(dpeng): abstract module call name resolution out or put it into lexer
-
 			// optionally module name
-			if p.l.token == tkScope {
-				if mname, err := p.parseModName(name); err != nil {
-					return err
-				} else {
-					name = mname.fullname()
-				}
+			mname, err := p.parseModSymbol(name)
+			if err != nil {
+				return err
 			}
-
-			if err := p.parseUnboundCall(prog, name, 1, true); err != nil {
+			if err := p.parseUnboundCall(prog, mname, 1, true); err != nil {
 				return err
 			}
 			break
@@ -3028,20 +3047,19 @@ func (p *parser) parseSuffix(prog *program) error {
 // foo["bar"]
 // foo:bar()
 func (p *parser) parsePExpr(prog *program, tk int, name string) error {
-	if p.l.token == tkScope {
-		if mname, err := p.parseModName(name); err != nil {
-			return err
-		} else {
-			name = mname.fullname()
-		}
+	mname, err := p.parseModSymbol(name)
+	if err != nil {
+		return err
 	}
+
+	name = mname.fullname()
 
 	switch tk {
 	case tkId:
 		// identifier leading types
 		switch p.l.token {
 		case tkLPar:
-			if err := p.parseUnboundCall(prog, name, 0, false); err != nil {
+			if err := p.parseUnboundCall(prog, mname, 0, false); err != nil {
 				return err
 			}
 			break
@@ -3357,7 +3375,7 @@ func (p *parser) parseStrInterpolationExpr(strV string, offset int, prog *progra
 	pp.stbl = p.stbl
 	pp.globalVar = p.globalVar
 	pp.sessVar = p.sessVar
-	pp.policy = p.policy
+	pp.module = p.module
 
 	// allow DRBra to be parsed as symbol, otherwise will never be able to met the
 	// end of the expression
@@ -3501,10 +3519,10 @@ func (p *parser) parseStrInterpolation(prog *program, strV string) error {
 // typical headache for many users.
 func (p *parser) parseConfig() error {
 	// try to find an existed config scope
-	prog := p.policy.config
+	prog := p.module.config
 	if prog == nil {
-		prog = newProgram(p.policy, ConfigRule, progConfig)
-		p.policy.config = prog
+		prog = newProgram(p.module, ConfigRule, progConfig)
+		p.module.config = prog
 	}
 	return p.parseConfigScope(prog)
 }

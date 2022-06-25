@@ -38,7 +38,7 @@ type vhost struct {
 	HttpServer  *http.Server
 	LogFormat   *alog.SessionLogFormat
 	Config      *vhostConfig
-	Policy      *pl.Policy
+	Module      *pl.Module
 	clientPool  *hclient.HClientPool
 }
 
@@ -47,7 +47,7 @@ type vhostConfigBuilder struct {
 	config     *vhostConfig
 }
 
-func (config *vhostConfig) Compose(p *pl.Policy) (*vhost, error) {
+func (config *vhostConfig) Compose(p *pl.Module) (*vhost, error) {
 	vhost := &vhost{}
 
 	{
@@ -72,7 +72,7 @@ func (config *vhostConfig) Compose(p *pl.Policy) (*vhost, error) {
 	vhost.Config = config
 	vhost.Router = router
 	vhost.ServiceList = nil
-	vhost.Policy = p
+	vhost.Module = p
 
 	vhost.HttpServer = &http.Server{
 		Addr:           config.Endpoint,

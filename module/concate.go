@@ -2,13 +2,13 @@ package module
 
 // Concate services, ie generate a merge/concate of multiple http upstream
 // content and send them as downstream response. This module allows highly
-// flexible customization via policy engine.
+// flexible customization via module engine.
 
 // Each request will be splitted into 2 different phases. And the go code will
 // drive each phase enter and leave
 
 // 1. generate
-//    In this phase, the policy engine's is responsible to generate a output
+//    In this phase, the module engine's is responsible to generate a output
 //    via action "url" which contains a list of strings that indicates the
 //    URL a request must be made against to
 
