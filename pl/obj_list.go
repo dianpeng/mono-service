@@ -7,7 +7,7 @@ import (
 var (
 	mpListLength   = MustNewFuncProto("list.length", "%0")
 	mpListPushBack = MustNewFuncProto("list.push_back", "%a")
-	mpListPopBack  = MustNewFuncProto("list.pop_back", "%d")
+	mpListPopBack  = MustNewFuncProto("list.pop_back", "{%d}{%0}")
 	mpListExtend   = MustNewFuncProto("list.extend", "%l")
 	mpListSlice    = MustNewFuncProto("list.slice", "{%d}{%d%d}")
 )
@@ -123,21 +123,24 @@ func (l *List) Method(name string, args []Val) (Val, error) {
 		for _, x := range args {
 			l.Append(x)
 		}
-		return NewValNull(), nil
+		return NewValListFromList(l), nil
 
 	case "pop_back":
-		_, err := mpListPopBack.Check(args)
+		alog, err := mpListPopBack.Check(args)
 		if err != nil {
 			return NewValNull(), err
 		}
-		num := int(args[0].Int())
+		num := 1
+		if alog == 1 {
+			num = int(args[0].Int())
+		}
 		if num < len(l.Data) {
 			l.Data = l.Data[0 : len(l.Data)-num]
 		} else {
 			l.Data = make([]Val, 0, 0)
 		}
 
-		return NewValNull(), nil
+		return NewValListFromList(l), nil
 
 	case "extend":
 		_, err := mpListExtend.Check(args)
@@ -147,7 +150,7 @@ func (l *List) Method(name string, args []Val) (Val, error) {
 		for _, x := range args[0].List().Data {
 			l.Append(x)
 		}
-		return NewValNull(), nil
+		return NewValListFromList(l), nil
 
 	case "slice":
 		alog, err := mpListSlice.Check(args)
@@ -155,11 +158,23 @@ func (l *List) Method(name string, args []Val) (Val, error) {
 			return NewValNull(), err
 		}
 		var ret []Val
+
+		length := l.Length()
+		start := int(args[0].Int())
+		end := length
+
 		if alog == 2 {
-			ret = l.Data[args[0].Int():args[1].Int()]
-		} else {
-			ret = l.Data[args[0].Int():]
+			end = int(args[1].Int())
+			if end > length {
+				end = length
+			}
 		}
+
+		if start >= length {
+			start = length
+		}
+
+		ret = l.Data[start:end]
 		return NewValListRaw(ret), nil
 
 	default:

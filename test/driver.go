@@ -5,6 +5,7 @@ import (
 	"github.com/dianpeng/mono-service/pl"
 	"os"
 	pa "path"
+	"path/filepath"
 )
 
 type testResult struct {
@@ -88,6 +89,9 @@ func runAllTestFile(path string) (testResult, error) {
 
 	for _, f := range fs {
 		if f.IsDir() {
+			continue
+		}
+		if filepath.Ext(f.Name()) != ".pl" {
 			continue
 		}
 

@@ -243,7 +243,7 @@ func (m *Map) Method(name string, args []Val) (Val, error) {
 			return NewValNull(), err
 		}
 		m.Set(args[0].String(), args[1])
-		return NewValNull(), nil
+		return NewValMapFromMap(m), nil
 
 	case "del":
 		_, err := mpMapDel.Check(args)
@@ -251,7 +251,7 @@ func (m *Map) Method(name string, args []Val) (Val, error) {
 			return NewValNull(), err
 		}
 		m.Del(args[0].String())
-		return NewValNull(), nil
+		return NewValMapFromMap(m), nil
 
 	case "get":
 		_, err := mpMapGet.Check(args)

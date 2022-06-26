@@ -22,8 +22,12 @@ const (
 	modSep = "::"
 )
 
+func modSymbolName(m string, s string) string {
+	return fmt.Sprintf("%s::%s", m, s)
+}
+
 func modFuncName(m string, f string) string {
-	return fmt.Sprintf("%s::%s", m, f)
+	return modSymbolName(m, f)
 }
 
 // the VM's returned argument is transient and violatile. User must duplicate it

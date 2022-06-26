@@ -101,7 +101,6 @@ const (
 	tkCase
 	tkModule
 	tkImport
-	tkExport
 	tkExtern
 	tkIf
 	tkElif
@@ -291,8 +290,6 @@ func getTokenName(tk int) string {
 		return "module"
 	case tkImport:
 		return "import"
-	case tkExport:
-		return "export"
 
 	case tkTry:
 		return "try"
@@ -617,8 +614,8 @@ var lexerkeyword = map[string]int{
 	"session": tkSession,
 	"extern":  tkExtern,
 
+	"module": tkModule,
 	"import": tkImport,
-	"export": tkExport,
 
 	"let":   tkLet,
 	"const": tkConst,

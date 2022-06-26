@@ -212,22 +212,57 @@ type callentry struct {
 	symbol   string
 }
 
+type modParser struct {
+	path    string // path to the module that is been parsing
+	modName string // module's prefix name
+
+	// these fields indicates the offset inside of the symbol table when we
+	// start to parse the module. We will need to patch the symbol name once
+	// the module parsing is done
+	gIndex int
+	sIndex int
+	fIndex int
+}
+
 type parser struct {
-	l         *lexer
-	module    *Module
-	stbl      *lexicalScope
+	l      *lexer
+	module *Module
+	stbl   *lexicalScope
+
 	globalVar []string
 	sessVar   []string
 	callPatch []callentry
-	counter   uint64 // random counter used to generate unique id etc ...
-	isModule  bool   // whether we are parsing a module
+
+	counter uint64 // random counter used to generate unique id etc ...
+
+	// module parsing related. The module is essentially just like include in
+	// C/C++ style language. We don't really have compiled global module but
+	// instead we import each module like copy paste the code right here but
+	// with symbol manipulation. All the import code will not result in different
+	// Module object but will be merged into the same module with different
+	// symbol name for external binding.
+	mlist      []*modParser
+	importList map[string]bool
+
+	// intermediate results
+	modModName    string
+	modImportPath string
 }
 
 func newParser(input string) *parser {
 	return &parser{
-		l:      newLexer(input),
-		module: newModule(),
+		l:          newLexer(input),
+		module:     newModule(),
+		importList: make(map[string]bool),
 	}
+}
+
+func (p *parser) parsingMod() bool {
+	return len(p.mlist) != 0
+}
+
+func (p *parser) curMod() *modParser {
+	return p.mlist[len(p.mlist)-1]
 }
 
 const (
@@ -554,8 +589,15 @@ func (p *parser) parseExpression() (*Module, error) {
 	return p.module, nil
 }
 
-func (p *parser) parseFwd() error {
+func (p *parser) parse() (*Module, error) {
+	p.l.next()
+	if err := p.parseEntry(); err != nil {
+		return nil, err
+	}
+	return p.module, nil
+}
 
+func (p *parser) parseTopVarScope() error {
 	// top of the program allow user to write 2 types of special scope
 	//
 	// 1) Global scope, ie definition of global variable which is initialized once
@@ -588,11 +630,267 @@ func (p *parser) parseFwd() error {
 	return nil
 }
 
-func (p *parser) parse() (*Module, error) {
+// ----------------------------------------------------------------------------
+// Module parsing
+// Module in PL is just a syntax sugar. It is almost the same as paste the code
+// from the import tree right inside of our source tree and parse them just as
+// if the symbol is in the file. Except the parser will rename the symbol with
+// module syntax to allow them to be used.
+//
+// The naming convention of module is as following. Each module will have a
+// module name as namespace. By default each module's symbol can only be visiable
+// by using mod_name::symbol_name style module naming. Additionally, all import
+// module's symbol, as long as the symbol is exporting, will be exported to the
+// include module. It means if root file import module A and module A import
+// module B. Then root file will aslo have module B's symbol. This is just for
+// simplicity
+//
+// If multiple duplicates import is included, then the parser will automatically
+// ignore the same name (same path) module by default.
+func (p *parser) parseModDec() error {
+	if p.l.token != tkModule {
+		fmt.Printf("xx: %s\n", p.l.tokenName())
+		return p.errf("parsing imported module: %s, first statement must be "+
+			"module declaration", p.modImportPath)
+	}
+	if !p.l.expect(tkId) {
+		return p.l.toError()
+	}
+
+  prefix := p.l.valueText
+  p.l.next()
+
+  if mname, err := p.parseModSymbol(
+    prefix,
+  ); err != nil {
+    return err
+  } else {
+    p.modModName = mname.fullname()
+    return nil
+  }
+}
+
+func (p *parser) importLoop() error {
+	for _, v := range p.mlist {
+		if v.path == p.modImportPath {
+			return p.errf("the module %s has been imported already, cycle detected",
+				p.modImportPath,
+			)
+		}
+	}
+
+	return nil
+}
+
+func (p *parser) doImport() error {
+	// try to check whether we have a cycle
+	if err := p.importLoop(); err != nil {
+		return err
+	}
+
+	// try to check wether the import path has already been done
+	if _, ok := p.importList[p.modImportPath]; ok {
+		return nil
+	}
+	p.importList[p.modImportPath] = true
+
+	// now start to perform the import operation
+	data, err := util.LoadFile(p.modImportPath)
+	if err != nil {
+		return p.errf("cannot load import file from path %s: %s", p.modImportPath, err.Error())
+	}
+
+	// save the lexer
+	savedL := p.l
+	defer func() {
+		p.l = savedL
+	}()
+
+	p.l = newLexer(data)
 	p.l.next()
 
-	if err := p.parseFwd(); err != nil {
-		return nil, err
+	// start to parse the imported module
+	if err := p.parseModule(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *parser) parseImportStmt() error {
+	must(p.l.token == tkImport, "must be import")
+	p.l.next()
+	if p.l.token == tkStr {
+		p.modImportPath = p.l.valueText
+		p.l.next()
+
+		return p.doImport()
+	} else if p.l.token == tkLPar {
+		p.l.next()
+		if p.l.token == tkRPar {
+			return p.err("nothing has been imported, do you forget to write import path ?")
+		}
+
+		for {
+			if !p.l.expectCurrent(tkStr) {
+				return p.l.toError()
+			}
+			p.modImportPath = p.l.valueText
+			p.l.next()
+
+			if err := p.doImport(); err != nil {
+				return err
+			}
+
+			if p.l.token == tkRPar {
+				p.l.next()
+				break
+			}
+		}
+
+		return nil
+	} else {
+		return p.err("expect a string as module path or '(' to start a group of " +
+			"paths after import")
+	}
+}
+
+func (p *parser) parseImport() error {
+	for p.l.token == tkImport {
+		if err := p.parseImportStmt(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *parser) startModule() error {
+	p.mlist = append(
+		p.mlist,
+		&modParser{
+			path:    p.modImportPath,
+			modName: p.modModName,
+			gIndex:  len(p.globalVar),
+			sIndex:  len(p.sessVar),
+			fIndex:  len(p.module.fn),
+		},
+	)
+
+	return nil
+}
+
+func (p *parser) endModule() error {
+	cmod := p.curMod()
+
+	{
+		sz := len(p.globalVar)
+		for i := cmod.gIndex; i < sz; i++ {
+			p.globalVar[i] = modSymbolName(
+				cmod.modName,
+				p.globalVar[i],
+			)
+		}
+	}
+
+	{
+		sz := len(p.sessVar)
+		for i := cmod.sIndex; i < sz; i++ {
+			p.sessVar[i] = modSymbolName(
+				cmod.modName,
+				p.sessVar[i],
+			)
+		}
+	}
+
+	{
+		sz := len(p.module.fn)
+		for i := cmod.fIndex; i < sz; i++ {
+			oldName := p.module.fn[i].name
+			p.module.fn[i].name = modSymbolName(
+				cmod.modName,
+				oldName,
+			)
+		}
+	}
+
+	p.mlist = p.mlist[:len(p.mlist)-1]
+	return nil
+}
+
+func (p *parser) parseModule() error {
+	// handle first module declaration to get module prefix name
+	if err := p.parseModDec(); err != nil {
+		return err
+	}
+
+	// push the module object
+	if err := p.startModule(); err != nil {
+		return err
+	}
+
+	// handle import
+	if err := p.parseImport(); err != nil {
+		return err
+	}
+
+	// handle top var scope
+	if err := p.parseTopVarScope(); err != nil {
+		return err
+	}
+
+	// handle rest of the top level statement
+LOOP:
+	for {
+		tk := p.l.token
+		switch tk {
+		case tkFunction:
+			// eat the fn token, parseFunction expect after the fn keyword
+			p.l.next()
+			if _, err := p.parseFunction(false); err != nil {
+				return err
+			}
+			break
+
+		case tkError:
+			return p.l.toError()
+
+		default:
+			if tk != tkEof {
+				// print a little bit better diagnostic information, well, in general
+				// we should invest more to error reporting
+				switch tk {
+				case tkSession:
+					return p.errf("session section should be put at the top, after global scope")
+				case tkGlobal:
+					return p.errf("global section should be put at the top")
+				default:
+					return p.errf("unknown token: %s, unrecognized statement", p.l.tokenName())
+				}
+			} else {
+				break LOOP
+			}
+		}
+	}
+
+	// patch all the pending call instructions
+	p.patchAllCall()
+
+	// lastly patch all the module symbol
+	if err := p.endModule(); err != nil {
+		return err
+	}
+
+	// done
+	return nil
+}
+
+func (p *parser) parseEntry() error {
+	if err := p.parseImport(); err != nil {
+		return err
+	}
+
+	if err := p.parseTopVarScope(); err != nil {
+		return err
 	}
 
 	// top most statement allowed ------------------------------------------------
@@ -602,7 +900,7 @@ LOOP:
 		switch tk {
 		case tkRule, tkId, tkStr, tkLSqr:
 			if err := p.parseRule(); err != nil {
-				return nil, err
+				return err
 			}
 			break
 
@@ -611,7 +909,7 @@ LOOP:
 			// rule for internal use cases.
 			p.l.next()
 			if err := p.parseConfig(); err != nil {
-				return nil, err
+				return err
 			}
 			break
 
@@ -619,12 +917,12 @@ LOOP:
 			// eat the fn token, parseFunction expect after the fn keyword
 			p.l.next()
 			if _, err := p.parseFunction(false); err != nil {
-				return nil, err
+				return err
 			}
 			break
 
 		case tkError:
-			return nil, p.l.toError()
+			return p.l.toError()
 
 		default:
 			if tk != tkEof {
@@ -632,11 +930,11 @@ LOOP:
 				// we should invest more to error reporting
 				switch tk {
 				case tkSession:
-					return nil, p.errf("session section should be put at the top, after global scope")
+					return p.errf("session section should be put at the top, after global scope")
 				case tkGlobal:
-					return nil, p.errf("global section should be put at the top")
+					return p.errf("global section should be put at the top")
 				default:
-					return nil, p.errf("unknown token: %s, unrecognized statement", p.l.tokenName())
+					return p.errf("unknown token: %s, unrecognized statement", p.l.tokenName())
 				}
 			} else {
 				break LOOP
@@ -652,7 +950,7 @@ LOOP:
 		p.module.config.emit0(p.l, bcHalt)
 	}
 
-	return p.module, nil
+	return nil
 }
 
 func (p *parser) parseSessionLoad(prog *program) error {
@@ -2621,7 +2919,7 @@ func (p *parser) parsePrimary(prog *program, l lexeme) error {
 		break
 
 	case tkDollar, tkId, tkGId, tkSId, tkDId:
-		if err := p.parsePExpr(prog, tk, l.sval); err != nil {
+		if err := p.parsePrefixExpr(prog, tk, l.sval); err != nil {
 			return err
 		}
 		break
@@ -2801,6 +3099,7 @@ func (p *parser) parseModSymbol(
 	m := modSymbol{
 		prefix: prefix,
 	}
+
 	if p.l.token == tkScope {
 		p.l.next()
 
@@ -3046,7 +3345,7 @@ func (p *parser) parseSuffix(prog *program) error {
 // foo.bar
 // foo["bar"]
 // foo:bar()
-func (p *parser) parsePExpr(prog *program, tk int, name string) error {
+func (p *parser) parsePrefixExpr(prog *program, tk int, name string) error {
 	mname, err := p.parseModSymbol(name)
 	if err != nil {
 		return err

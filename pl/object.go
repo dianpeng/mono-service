@@ -431,10 +431,24 @@ func NewValList() Val {
 	}
 }
 
+func NewValListFromList(l *List) Val {
+	return Val{
+		Type:  ValList,
+		vData: l,
+	}
+}
+
 func NewValMap() Val {
 	return Val{
 		Type:  ValMap,
 		vData: NewMap(),
+	}
+}
+
+func NewValMapFromMap(m *Map) Val {
+	return Val{
+		Type:  ValMap,
+		vData: m,
 	}
 }
 
