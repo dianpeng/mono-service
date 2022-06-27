@@ -9,7 +9,7 @@ import (
 
 type globalState struct {
 	// global program snippet, ie used for initialization of the module
-	globalProgram *program
+	globalProgram []*program
 
 	// global variable, should not be used directly, but should be using
 	// function to manipulate since it needs to be guarded with lock
@@ -30,7 +30,7 @@ type Module struct {
 
 	// initialization part of the module, if module does not have initialization
 	// code then this part is empty
-	session *program
+	session []*program
 
 	// config scope, ie used for configuration initialization etc ...
 	config *program
@@ -54,68 +54,27 @@ type Module struct {
 	sinfo symbolInfo
 }
 
-func (g *globalState) size() int {
-	g.lock.RLock()
-	defer func() {
-		g.lock.RUnlock()
-	}()
-	return len(g.globalVar)
-}
-
-func (g *globalState) set(
-	i int,
-	v Val,
-) bool {
-	if !v.IsImmutable() {
-		return false
-	}
-
-	g.lock.Lock()
-	defer func() {
-		g.lock.Unlock()
-	}()
-	if len(g.globalVar) <= i {
-		return false
-	}
-	g.globalVar[i] = v
-	return true
-}
-
-func (g *globalState) get(
-	i int,
-) (Val, bool) {
-	g.lock.RLock()
-	defer func() {
-		g.lock.RUnlock()
-	}()
-
-	if len(g.globalVar) <= i {
-		return NewValNull(), false
-	}
-	return g.globalVar[i], true
-}
-
-func (g *globalState) add(
-	v Val,
-) bool {
-	if !v.IsImmutable() {
-		return false
-	}
-
-	// may not need lock since it is only called during setup
-	g.lock.Lock()
-	defer func() {
-		g.lock.Unlock()
-	}()
-	g.globalVar = append(g.globalVar, v)
-	return true
-}
-
 func newModule() *Module {
 	return &Module{
 		global:   &globalState{},
 		eventMap: make(map[string]*program),
 	}
+}
+
+func (p *Module) addSessionProgram(
+	prog *program,
+	nameList []string,
+) {
+	p.session = append(p.session, prog)
+	p.sinfo.sessionName = append(p.sinfo.sessionName, nameList...)
+}
+
+func (p *Module) addGlobalProgram(
+	prog *program,
+	nameList []string,
+) {
+	p.global.globalProgram = append(p.global.globalProgram, prog)
+	p.sinfo.globalName = append(p.sinfo.globalName, nameList...)
 }
 
 func (p *Module) GetGlobal(i int) (Val, bool) {
@@ -191,7 +150,7 @@ func (p *Module) GetFunction(name string) Val {
 }
 
 func (p *Module) HasSession() bool {
-	return p.session != nil
+	return len(p.session) != 0
 }
 
 func (p *Module) HasConfig() bool {
@@ -199,7 +158,7 @@ func (p *Module) HasConfig() bool {
 }
 
 func (p *Module) HasGlobal() bool {
-	return p.global.globalProgram != nil
+	return len(p.global.globalProgram) != 0
 }
 
 func (p *Module) HaveEvent(name string) bool {
@@ -257,4 +216,61 @@ func CompileModuleAsExpression(expr string) (*Module, error) {
 		return nil, err
 	}
 	return po, nil
+}
+
+func (g *globalState) size() int {
+	g.lock.RLock()
+	defer func() {
+		g.lock.RUnlock()
+	}()
+	return len(g.globalVar)
+}
+
+func (g *globalState) set(
+	i int,
+	v Val,
+) bool {
+	if !v.IsImmutable() {
+		return false
+	}
+
+	g.lock.Lock()
+	defer func() {
+		g.lock.Unlock()
+	}()
+	if len(g.globalVar) <= i {
+		return false
+	}
+	g.globalVar[i] = v
+	return true
+}
+
+func (g *globalState) get(
+	i int,
+) (Val, bool) {
+	g.lock.RLock()
+	defer func() {
+		g.lock.RUnlock()
+	}()
+
+	if len(g.globalVar) <= i {
+		return NewValNull(), false
+	}
+	return g.globalVar[i], true
+}
+
+func (g *globalState) add(
+	v Val,
+) bool {
+	if !v.IsImmutable() {
+		return false
+	}
+
+	// may not need lock since it is only called during setup
+	g.lock.Lock()
+	defer func() {
+		g.lock.Unlock()
+	}()
+	g.globalVar = append(g.globalVar, v)
+	return true
 }

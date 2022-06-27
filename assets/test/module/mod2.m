@@ -1,8 +1,13 @@
 module zz
 
 global {
-  ag = 10;
-  bg = 20;
+  mod2_global_a = 10;
+  mod2_global_b = 20;
+}
+
+session {
+  mod2_session_a = 10;
+  mod2_session_b = 20;
 }
 
 fn Add(a, b) {

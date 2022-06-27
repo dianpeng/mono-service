@@ -1809,7 +1809,6 @@ func (e *Evaluator) runNFunc(
 
 	// since native function does not support recover from exception for now,
 	// just pops the frame and return from where we are
-
 	e.epilogue(ret, false)
 	e.pop()
 
@@ -1836,7 +1835,13 @@ func (e *Evaluator) EvalGlobal(p *Module) error {
 		return nil
 	}
 	p.global.globalVar = nil
-	return e.runRule(NewValNull(), p.global.globalProgram)
+
+	for _, prog := range p.global.globalProgram {
+		if err := e.runRule(NewValNull(), prog); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (e *Evaluator) EvalSession(p *Module) error {
@@ -1848,7 +1853,13 @@ func (e *Evaluator) EvalSession(p *Module) error {
 		return nil
 	}
 	e.Session = nil
-	return e.runRule(NewValStr(SessionRule), p.session)
+
+	for _, prog := range p.session {
+		if err := e.runRule(NewValNull(), prog); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (e *Evaluator) Eval(event string, p *Module) error {

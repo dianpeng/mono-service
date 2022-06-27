@@ -657,17 +657,17 @@ func (p *parser) parseModDec() error {
 		return p.l.toError()
 	}
 
-  prefix := p.l.valueText
-  p.l.next()
+	prefix := p.l.valueText
+	p.l.next()
 
-  if mname, err := p.parseModSymbol(
-    prefix,
-  ); err != nil {
-    return err
-  } else {
-    p.modModName = mname.fullname()
-    return nil
-  }
+	if mname, err := p.parseModSymbol(
+		prefix,
+	); err != nil {
+		return err
+	} else {
+		p.modModName = mname.fullname()
+		return nil
+	}
 }
 
 func (p *parser) importLoop() error {
@@ -782,6 +782,7 @@ func (p *parser) startModule() error {
 func (p *parser) endModule() error {
 	cmod := p.curMod()
 
+	// (0) patch all the global variable symbol name to include the module prefix
 	{
 		sz := len(p.globalVar)
 		for i := cmod.gIndex; i < sz; i++ {
@@ -792,6 +793,7 @@ func (p *parser) endModule() error {
 		}
 	}
 
+	// (1) patch all the session variable symbol name to include the module prefix
 	{
 		sz := len(p.sessVar)
 		for i := cmod.sIndex; i < sz; i++ {
@@ -802,6 +804,7 @@ func (p *parser) endModule() error {
 		}
 	}
 
+	// (2) patch all the function symbol name to include the module prefix
 	{
 		sz := len(p.module.fn)
 		for i := cmod.fIndex; i < sz; i++ {
@@ -976,8 +979,9 @@ func (p *parser) parseSessionScope() error {
 	if err != nil {
 		return err
 	}
-	p.sessVar = list
-	p.module.session = x
+
+	p.sessVar = append(p.sessVar, list...)
+	p.module.addSessionProgram(x, list)
 	return nil
 }
 
@@ -992,10 +996,8 @@ func (p *parser) parseGlobalScope() error {
 		return err
 	}
 
-	p.globalVar = list
-
-	p.module.global.globalProgram = x
-	p.module.sinfo.globalName = list
+	p.globalVar = append(p.globalVar, list...)
+	p.module.addGlobalProgram(x, list)
 	return nil
 }
 
@@ -1007,7 +1009,6 @@ func (p *parser) parseVarScope(rulename string,
 	p.l.next()
 
 	prog := newProgram(p.module, rulename, progSession)
-	must(p.module.addEvent(rulename, prog), "session must be unique")
 
 	p.enterScopeTop(entryVar, prog)
 	defer func() {

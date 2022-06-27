@@ -677,7 +677,7 @@ func TestEval1(t *testing.T) {
 
 		module, err := CompileModule(
 			`
-module => {
+mm => {
   act_int => 10;
   act_real => 10.0;
   act_true => true;
@@ -697,7 +697,7 @@ module => {
 		}
 		assert.True(err == nil)
 
-		err = eval.Eval("module", module)
+		err = eval.Eval("mm", module)
 		if err != nil {
 			fmt.Printf(":eval %s", err.Error())
 		}
@@ -797,7 +797,7 @@ module => {
 
 		module, err := CompileModule(
 			`
-module{
+mm {
   empty_list => [];
   list1 => [1];
   list2 => [1, true];
@@ -825,7 +825,7 @@ module{
 		}
 		assert.True(err == nil)
 
-		err = eval.Eval("module", module)
+		err = eval.Eval("mm", module)
 		if err != nil {
 			fmt.Printf(":eval %s", err.Error())
 		}
@@ -946,7 +946,7 @@ func TestStrInterpo(t *testing.T) {
 		module, err := CompileModule(
 			`
 // whatever module
-"module" => {
+"mm" => {
   let var1 = 10;
   let var2 = 'xxxx';
 
@@ -958,7 +958,7 @@ func TestStrInterpo(t *testing.T) {
 		}
 		assert.True(err == nil)
 
-		err = eval.Eval("module", module)
+		err = eval.Eval("mm", module)
 		if err != nil {
 			fmt.Printf(":eval %s", err.Error())
 		}
@@ -998,7 +998,7 @@ func TestLocal(t *testing.T) {
 		module, err := CompileModule(
 			`
 // whatever module
-"module" => {
+"mm" => {
   let var1 = 10;
   let var2 = true;
   let var3 = false;
@@ -1018,7 +1018,7 @@ func TestLocal(t *testing.T) {
 		}
 		assert.True(err == nil)
 
-		err = eval.Eval("module", module)
+		err = eval.Eval("mm", module)
 		if err != nil {
 			fmt.Printf(":eval %s", err.Error())
 		}
