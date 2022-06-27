@@ -1,5 +1,9 @@
 package pl
 
+import (
+	"fmt"
+)
+
 type nativeFunc struct {
 	id    string
 	entry func([]Val) (Val, error)
@@ -13,12 +17,12 @@ func (f *nativeFunc) Type() int {
 	return ClosureNative
 }
 
-func (f *nativeFunc) Info() string {
-	return f.Id()
-}
-
 func (f *nativeFunc) Id() string {
 	return f.id
+}
+
+func (f *nativeFunc) Info() string {
+	return fmt.Sprintf("[%s: %s]", GetClosureTypeId(f.Type()), f.Id())
 }
 
 func (f *nativeFunc) ToJSON() (Val, error) {

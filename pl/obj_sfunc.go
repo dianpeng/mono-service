@@ -1,5 +1,9 @@
 package pl
 
+import (
+	"fmt"
+)
+
 // script function's value representation. We support first order function, so
 // need to have a representation of function written inside of the script
 type scriptFunc struct {
@@ -18,11 +22,11 @@ func (f *scriptFunc) Type() int {
 }
 
 func (f *scriptFunc) Id() string {
-	return GetClosureTypeId(ClosureScript)
+	return f.prog.name
 }
 
 func (f *scriptFunc) Info() string {
-	return f.Id()
+	return fmt.Sprintf("[%s:%s]", GetClosureTypeId(f.Type()), f.Id())
 }
 
 func (f *scriptFunc) Dump() string {

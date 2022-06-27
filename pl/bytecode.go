@@ -100,7 +100,6 @@ const (
 	bcStoreGlobal = 77
 
 	// call
-	bcMCall = 82
 	bcICall = 83
 	bcSCall = 84
 	bcVCall = 85 // variable call, ie calling a function that is loaded into
@@ -128,6 +127,9 @@ const (
 	// load the exception object/reason(currently should be just a string) into
 	// tos
 	bcLoadException = 103
+
+	// loading method function
+	bcLoadMethod = 104
 
 	// config extension part ---------------------------------------------------
 	bcConfigPush         = 151
@@ -444,7 +446,6 @@ func (x *bytecode) dump(resolver func(int, int) string) string {
 	case bcAddList,
 		bcAddMap,
 		bcICall,
-		bcMCall,
 		bcSCall,
 		bcReturn,
 		bcConStr,
@@ -504,8 +505,6 @@ func getBytecodeName(bc int) string {
 		return "new-pair"
 	case bcICall:
 		return "icall"
-	case bcMCall:
-		return "mcall"
 	case bcSCall:
 		return "scall"
 	case bcReturn:
@@ -612,6 +611,10 @@ func getBytecodeName(bc int) string {
 		return "pop-exception"
 	case bcLoadException:
 		return "load-exception"
+
+	// used by bcMCall
+	case bcLoadMethod:
+		return "load-method"
 
 	// config
 	case bcConfigPush:

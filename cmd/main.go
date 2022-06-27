@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	_ "github.com/dianpeng/mono-service/application"
 	"github.com/dianpeng/mono-service/server"
-
-	_ "github.com/dianpeng/mono-service/module"
 )
 
 func printHelp() {

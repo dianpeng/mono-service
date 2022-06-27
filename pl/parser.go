@@ -224,6 +224,11 @@ type modParser struct {
 	fIndex int
 }
 
+type importInfo struct {
+	path   string
+	prefix string
+}
+
 type parser struct {
 	l      *lexer
 	module *Module
@@ -242,7 +247,7 @@ type parser struct {
 	// Module object but will be merged into the same module with different
 	// symbol name for external binding.
 	mlist      []*modParser
-	importList map[string]bool
+	importList []importInfo
 
 	// intermediate results
 	modModName    string
@@ -251,9 +256,8 @@ type parser struct {
 
 func newParser(input string) *parser {
 	return &parser{
-		l:          newLexer(input),
-		module:     newModule(),
-		importList: make(map[string]bool),
+		l:      newLexer(input),
+		module: newModule(),
 	}
 }
 
@@ -269,6 +273,7 @@ const (
 	symSession = iota
 	symLocal
 	symUpval
+	symFunc
 	symGlobal
 	symDynamic
 )
@@ -537,6 +542,14 @@ func (p *parser) resolveSymbol(xx string, forWrite bool) (int, int) {
 		return symUpval, upval
 	}
 
+	if !forWrite {
+		// finding out the global function with matching symbol name
+		funcIdx := p.module.getFunctionIndex(xx)
+		if funcIdx != -1 {
+			return symFunc, funcIdx
+		}
+	}
+
 	// session symbol table
 	sessVar := p.findSessionIdx(xx)
 	if sessVar != symError {
@@ -647,6 +660,41 @@ func (p *parser) parseTopVarScope() error {
 //
 // If multiple duplicates import is included, then the parser will automatically
 // ignore the same name (same path) module by default.
+
+func (p *parser) isImported(
+	path string,
+) bool {
+	for _, x := range p.importList {
+		if x.path == path {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *parser) modPrefixExist(
+	name string,
+) bool {
+	for _, x := range p.importList {
+		if x.prefix == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *parser) addImportInfo(
+	path string,
+	prefix string,
+) {
+	p.importList = append(p.importList,
+		importInfo{
+			path:   path,
+			prefix: prefix,
+		},
+	)
+}
+
 func (p *parser) parseModDec() error {
 	if p.l.token != tkModule {
 		fmt.Printf("xx: %s\n", p.l.tokenName())
@@ -666,6 +714,22 @@ func (p *parser) parseModDec() error {
 		return err
 	} else {
 		p.modModName = mname.fullname()
+
+		if p.modPrefixExist(p.modModName) {
+			return p.errf("module from file %s, its module name %s is already existed",
+				p.modImportPath,
+				p.modModName,
+			)
+		}
+
+		p.addImportInfo(
+			p.modImportPath,
+			p.modModName,
+		)
+
+		// checking whether we have module prefix collision or not, if we have
+		// then just reporting the error
+
 		return nil
 	}
 }
@@ -689,10 +753,10 @@ func (p *parser) doImport() error {
 	}
 
 	// try to check wether the import path has already been done
-	if _, ok := p.importList[p.modImportPath]; ok {
+	if p.isImported(p.modImportPath) {
+		// skip this module since it has been imported already
 		return nil
 	}
-	p.importList[p.modImportPath] = true
 
 	// now start to perform the import operation
 	data, err := util.LoadFile(p.modImportPath)
@@ -1060,6 +1124,22 @@ func (p *parser) parseVarScope(rulename string,
 	return prog, nlist, nil
 }
 
+// checking function name collision
+func (p *parser) functionExists(
+	fname string,
+) bool {
+	offset := 0
+	if p.parsingMod() {
+		offset = p.curMod().fIndex
+	}
+	for i := offset; i < len(p.module.fn); i++ {
+		if p.module.fn[i].name == fname {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 	funcName := ""
 
@@ -1072,6 +1152,10 @@ func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 		p.l.next()
 	} else {
 		funcName = p.module.nextAnonymousFuncName()
+	}
+
+	if p.functionExists(funcName) {
+		return "", p.errf("function %s is already existed", funcName)
 	}
 
 	prog := newProgram(p.module, funcName, progFunc)
@@ -1415,6 +1499,7 @@ func (p *parser) parseBasicStmt(prog *program, lexeme lexeme, popExpr bool) (boo
 		// unbounded token/symbol, require resolution
 		case tkId:
 			sym, idx := p.resolveSymbol(lexeme.sval, true)
+			must(sym != symFunc, "cannot be function index")
 
 			if sym == symLocal && idx == symInvalidConst {
 				return true, p.errf("local variable %s is const, cannot be assigned to", lexeme.sval)
@@ -2270,6 +2355,12 @@ func (p *parser) parseContinue(prog *program) error {
 
 // parsing emit statement.
 func (p *parser) parseEmit(prog *program) error {
+	must(p.l.token == tkEmit, "must be emit")
+
+	if !p.isEntryRule() {
+		return p.err("emit statement is only allowed inside of rule body")
+	}
+
 	p.l.next()
 
 	eventName := ""
@@ -3010,20 +3101,6 @@ func (p *parser) parseCallArgs(prog *program) (int, error) {
 	return pcnt, nil
 }
 
-func (p *parser) parseCall(prog *program, name string, bc int) error {
-	{
-		idx := prog.addStr(name)
-		prog.emit1(p.l, bcLoadStr, idx)
-	}
-
-	pcnt, err := p.parseCallArgs(prog)
-	if err != nil {
-		return err
-	}
-	prog.emit1(p.l, bc, pcnt)
-	return nil
-}
-
 func (p *parser) parseICall(prog *program, index int) error {
 	{
 		idx := prog.addInt(int64(index))
@@ -3043,13 +3120,6 @@ func (p *parser) parseICall(prog *program, index int) error {
 // [argN-1]
 // [arg1]
 // [functionIndex]
-func (p *parser) parseMCall(prog *program, name string) error {
-	if !p.l.expectCurrent(tkLPar) {
-		return p.l.toError()
-	}
-	return p.parseCall(prog, name, bcMCall)
-}
-
 func (p *parser) parseVCall(prog *program) error {
 	pcnt, err := p.parseCallArgs(prog)
 	if err != nil {
@@ -3179,6 +3249,10 @@ func (p *parser) parseUnboundCall(prog *program,
 		prog.emit1At(p.l, entryIndex, bcLoadLocal, symindex)
 		break
 
+	case symFunc:
+		prog.emit1At(p.l, entryIndex, bcNewClosure, symindex)
+		break
+
 	case symUpval:
 		prog.emit1At(p.l, entryIndex, bcLoadUpvalue, symindex)
 		break
@@ -3253,7 +3327,7 @@ func (p *parser) patchAllCall() {
 const (
 	suffixDot = iota
 	suffixIndex
-	suffixMethod
+	suffixCall
 )
 
 func (p *parser) parseSuffixImpl(prog *program, lastType *int) error {
@@ -3291,16 +3365,14 @@ SUFFIX:
 			if !p.l.expect(tkId) {
 				return p.l.toError()
 			}
+			method := p.l.valueText
 			p.l.next()
 
-			method := p.l.valueText
-			*lastType = suffixMethod
-			if err := p.parseMCall(prog, method); err != nil {
-				return err
-			}
+			prog.emit1(p.l, bcLoadMethod, prog.addStr(method))
 			break
 
 		case tkLPar:
+			*lastType = suffixCall
 			if err := p.parseVCall(prog); err != nil {
 				return err
 			}
@@ -3375,6 +3447,10 @@ func (p *parser) parsePrefixExpr(prog *program, tk int, name string) error {
 			switch symT {
 			case symSession:
 				prog.emit1(p.l, bcLoadSession, symIdx)
+				break
+
+			case symFunc:
+				prog.emit1(p.l, bcNewClosure, symIdx)
 				break
 
 			case symLocal:

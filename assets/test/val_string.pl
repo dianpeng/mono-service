@@ -35,7 +35,7 @@ fn testStrInter1() {
   }
 }
 
-fn testStrIndex() {
+fn testStrIndex2() {
   assert::eq("a"[0], "a");
   assert::eq("ab"[1], "b");
 }
@@ -45,5 +45,5 @@ test {
   testStrCon();
   testStrIndex();
   testStrInter1();
-  testStrIndex();
+  testStrIndex2();
 }

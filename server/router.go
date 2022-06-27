@@ -8,6 +8,16 @@ import (
 	"github.com/gorilla/mux"
 )
 
+var httpmethodlist = []string{
+	"GET",
+	"POST",
+	"PUT",
+	"DELETE",
+	"PURGE",
+	"OPTION",
+	"HEAD",
+}
+
 // parse the compact router representation to gorilla's mux
 func newRouter(
 	router string,
@@ -31,14 +41,7 @@ func newRouter(
 
 		mlist := strings.TrimSpace(router[startSqr+1 : endSqr])
 		if mlist == "*" {
-			methodList = []string{
-				"GET",
-				"POST",
-				"PUT",
-				"DELETE",
-				"OPTION",
-				"HEAD",
-			}
+			methodList = httpmethodlist
 		} else {
 			x := strings.Split(mlist, ",")
 			for _, xx := range x {

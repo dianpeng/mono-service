@@ -243,8 +243,9 @@ func (r *responseWriterWrapper) FlushHeader() bool {
 	r.headerDone = true
 
 	// fire a interceptor event
-	_ = r.handler.hpl.Run(
+	_ = r.handler.hpl.RunWithContext(
 		EventNameResponseHookStatus,
+		pl.NewValNull(),
 	)
 
 	// write the header and status field out
@@ -271,8 +272,9 @@ func (r *responseWriterWrapper) Flush() bool {
 		return false
 	}
 
-	_ = r.handler.hpl.Run(
+	_ = r.handler.hpl.RunWithContext(
 		EventNameResponseHookBody,
+		pl.NewValNull(),
 	)
 
 	r.FlushHeader()

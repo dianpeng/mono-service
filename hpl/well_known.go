@@ -1,11 +1,11 @@
 package hpl
 
 const (
-	// global scope type
+	// global type
 	ReadableStreamTypeId = ".readablestream"
 	UrlTypeId            = ".url"
 
-	// http related
+	// http type
 	HttpHeaderTypeId       = "http.header"
 	HttpBodyTypeId         = "http.body"
 	HttpRequestTypeId      = "http.request"

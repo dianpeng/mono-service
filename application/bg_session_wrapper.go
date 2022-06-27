@@ -1,4 +1,4 @@
-package module
+package application
 
 import (
 	"github.com/dianpeng/mono-service/framework"

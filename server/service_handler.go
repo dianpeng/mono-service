@@ -233,7 +233,7 @@ func (s *serviceHandler) main(
 }
 
 func (s *serviceHandler) Log(log *alog.SessionLog) error {
-	return s.hpl.Run(EventNameLog)
+	return s.hpl.RunWithContext(EventNameLog, pl.NewValNull())
 }
 
 // interface for frame.ServiceContext

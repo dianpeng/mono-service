@@ -6,7 +6,7 @@ import (
 
 var (
 	mpListLength   = MustNewFuncProto("list.length", "%0")
-	mpListPushBack = MustNewFuncProto("list.push_back", "%a")
+	mpListPushBack = MustNewFuncProto("list.push_back", "{%a}{%a%a*}")
 	mpListPopBack  = MustNewFuncProto("list.pop_back", "{%d}{%0}")
 	mpListExtend   = MustNewFuncProto("list.extend", "%l")
 	mpListSlice    = MustNewFuncProto("list.slice", "{%d}{%d%d}")

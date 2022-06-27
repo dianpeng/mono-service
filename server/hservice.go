@@ -1,7 +1,7 @@
 package server
 
 import (
-	_ "github.com/dianpeng/mono-service/module"
+	_ "github.com/dianpeng/mono-service/application"
 	"sync"
 )
 

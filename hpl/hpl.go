@@ -346,22 +346,6 @@ func (h *Hpl) OnInit(
 }
 
 // -----------------------------------------------------------------------------
-func (h *Hpl) Run(name string) error {
-	if h.Module == nil {
-		return fmt.Errorf("the Hpl engine does not have any module binded")
-	}
-	if h.isRunning {
-		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
-	}
-
-	h.isRunning = true
-	defer func() {
-		h.isRunning = false
-	}()
-
-	return h.Eval.Eval(name, h.Module)
-}
-
 func (h *Hpl) RunWithContext(name string, context pl.Val) error {
 	if h.Module == nil {
 		return fmt.Errorf("the Hpl engine does not have any module binded")

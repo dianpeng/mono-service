@@ -132,12 +132,35 @@ type exception struct {
 
 const (
 	ftypeTop = iota
-	ftypeSFunc
-	ftypeNFunc
+
+	// ---------------------------------------------------------------------------
+	// The following 3 have funcframe.prog field set up but funcframe.closure
+	// to be nill
+
+	// a script function call, to save overhead, we do not create closure object
+	// for top level script call, ie named function call
 	ftypeScript
+
+	// intrinsic function act as fast path function invocation, still no closure
+	// object created for function frame
 	ftypeIntrinsic
+
+	// rule, ie top level entry. No closure created
 	ftypeRule
+
+	// ---------------------------------------------------------------------------
+	// The following 3 are native function calls, and it has closure set up
+	// properly, prog may be nil or not
+
+	// a method function wrapper, native function
 	ftypeMethod
+
+	// a script function wrapper, it contains a program but wrap it as a closure
+	// mostly created by VM to support upvalue captured closure execution
+	ftypeSFunc
+
+	// native function, created by embedder or runtime
+	ftypeNFunc
 )
 
 func ftypename(x int) string {
@@ -164,24 +187,74 @@ func ftypename(x int) string {
 // internal structure which we used to record the current frame and information
 // will be setup inside of the function's caller reserve slot
 type funcframe struct {
-	ftype  int
-	farg   int
-	pc     int
-	framep int
-	prog   *program
-	excep  []exception
-	sfunc  *scriptFunc
-	nfunc  *nativeFunc
-	event  Val
+	ftype   int
+	farg    int
+	pc      int
+	framep  int
+	prog    *program
+	excep   []exception
+	closure Closure
+	event   Val
 }
 
 func dupFuncFrameForErr(fr *funcframe) *funcframe {
-	return &funcframe{
-		pc:     fr.pc,
-		prog:   fr.prog,
-		framep: fr.framep,
-		farg:   fr.farg,
+	x := &funcframe{}
+	*x = *fr
+	return x
+}
+
+func (ff *funcframe) nfunc() *nativeFunc {
+	if ff.closure == nil {
+		return nil
 	}
+	x, ok := ff.closure.(*nativeFunc)
+	if ok {
+		return x
+	} else {
+		return nil
+	}
+}
+
+func (ff *funcframe) mustNFunc() *nativeFunc {
+	x := ff.nfunc()
+	must(x != nil, "must existed(nfunc)")
+	return x
+}
+
+func (ff *funcframe) sfunc() *scriptFunc {
+	if ff.closure == nil {
+		return nil
+	}
+	x, ok := ff.closure.(*scriptFunc)
+	if ok {
+		return x
+	} else {
+		return nil
+	}
+}
+
+func (ff *funcframe) mustSFunc() *scriptFunc {
+	x := ff.sfunc()
+	must(x != nil, "must existed(sfunc)")
+	return x
+}
+
+func (ff *funcframe) mfunc() *methodFunc {
+	if ff.closure == nil {
+		return nil
+	}
+	x, ok := ff.closure.(*methodFunc)
+	if ok {
+		return x
+	} else {
+		return nil
+	}
+}
+
+func (ff *funcframe) mustMFunc() *methodFunc {
+	x := ff.mfunc()
+	must(x != nil, "must existed(mfunc)")
+	return x
 }
 
 func (ff *funcframe) markTop() {
@@ -191,8 +264,7 @@ func (ff *funcframe) markTop() {
 	ff.framep = 0
 	ff.prog = nil
 	ff.excep = nil
-	ff.sfunc = nil
-	ff.nfunc = nil
+	ff.closure = nil
 	ff.event = NewValNull()
 }
 
@@ -205,9 +277,11 @@ func (ff *funcframe) isScript() bool {
 }
 
 func (ff *funcframe) frameInfo() string {
-	switch ff.ftype {
-	case ftypeScript, ftypeSFunc, ftypeRule:
-		must(ff.prog != nil, "must have prog")
+	if ff.isTop() {
+		must(ff.prog == nil, "???")
+	}
+
+	if ff.prog != nil {
 		return fmt.Sprintf("[pc=%d]"+
 			"[framep=%d]"+
 			"[argcount=%d]"+
@@ -225,21 +299,19 @@ func (ff *funcframe) frameInfo() string {
 			ff.prog.localSize,
 			ff.prog.dbgList[ff.pc].where(),
 		)
-
-	case ftypeNFunc:
-		must(ff.nfunc != nil, "must have nfunc")
+	} else if ff.closure != nil {
 		return fmt.Sprintf("[pc=%d]"+
 			"[framep=%d]"+
 			"[argcount=%d]"+
-			"[native_function]"+
-			"[id=%s]",
+			"[closure_type=%s]"+
+			"%s",
 			ff.pc,
 			ff.framep,
 			ff.farg,
-			ff.nfunc.Id(),
+			GetClosureTypeId(ff.closure.Type()),
+			ff.closure.Info(),
 		)
-
-	default:
+	} else {
 		return fmt.Sprintf("[pc=%d]"+
 			"[framep=%d]"+
 			"[argcount=%d]"+
@@ -374,18 +446,16 @@ func newfuncframe(
 	framep int,
 	farg int,
 	excep []exception,
-	sfunc *scriptFunc,
-	nfunc *nativeFunc,
+	closure Closure,
 ) (*funcframe, Val) {
 	ff := &funcframe{
-		ftype:  ftype,
-		pc:     pc,
-		prog:   prog,
-		framep: framep,
-		farg:   farg,
-		excep:  excep,
-		sfunc:  sfunc,
-		nfunc:  nfunc,
+		ftype:   ftype,
+		pc:      pc,
+		prog:    prog,
+		framep:  framep,
+		farg:    farg,
+		excep:   excep,
+		closure: closure,
 	}
 	return ff, newValFrame(ff)
 }
@@ -1016,7 +1086,6 @@ FUNC:
 				paramSize,
 				nil,
 				nil,
-				nil,
 			)
 
 			fentry := intrinsicFunc[funcIndex.Int()]
@@ -1028,33 +1097,17 @@ FUNC:
 			pc, prog = e.epilogue(r, false)
 			break
 
-		case bcMCall:
-			paramSize := bc.argument
-			methodName := e.topN(paramSize)
-			recv := e.topN(paramSize + 1)
-			must(methodName.Type == ValStr,
-				fmt.Sprintf("method name must be string but %s", methodName.Id()))
+		case bcLoadMethod:
+			recv := e.top0()
+			e.pop()
 
-			// prepare argument list slice
-			argStart := len(e.Stack) - paramSize
-			argEnd := len(e.Stack)
-			arg := e.Stack[argStart:argEnd]
-
-			e.curframe.pc = pc
-			e.prologue(
-				ftypeMethod,
-				paramSize,
-				nil,
-				nil,
-				nil,
-			)
-
-			ret, err := recv.Method(methodName.String(), arg)
+			name := prog.idxStr(bc.argument)
+			method, err := recv.MethodClosure(name)
 			if err != nil {
 				return rrErr(prog, pc, err)
 			}
+			e.push(method)
 
-			pc, prog = e.epilogue(ret, true)
 			break
 
 			// script function call and return
@@ -1062,8 +1115,10 @@ FUNC:
 			paramSize := bc.argument
 			funcIndexOrEntry := e.topN(paramSize)
 
-			var sfunc *scriptFunc
 			var nfunc *nativeFunc
+			var mfunc *methodFunc
+			var closure Closure
+
 			ftype := 0
 
 			// enter into the new call
@@ -1072,17 +1127,13 @@ FUNC:
 				prog = prog.module.fn[int(idx)]
 				must(prog.freeCall(), "must be freecall")
 				ftype = ftypeScript
-				if paramSize != prog.argSize {
-					return rrErrf(prog, pc, "script function call, argument number mismatch")
-				}
 			} else {
 				if funcIndexOrEntry.IsClosure() {
-					closure := funcIndexOrEntry.Closure()
+					closure = funcIndexOrEntry.Closure()
 					switch closure.Type() {
 					case ClosureScript:
 						fn, _ := closure.(*scriptFunc)
 						prog = fn.prog
-						sfunc = fn
 						ftype = ftypeSFunc
 						break
 
@@ -1092,6 +1143,13 @@ FUNC:
 						prog = nil
 						nfunc = fn
 						ftype = ftypeNFunc
+						break
+
+					case ClosureMethod:
+						fn, _ := closure.(*methodFunc)
+						prog = nil
+						mfunc = fn
+						ftype = ftypeMethod
 						break
 
 					default:
@@ -1109,17 +1167,18 @@ FUNC:
 				ftype,
 				paramSize,
 				prog,
-				sfunc,
-				nfunc,
+				closure,
 			)
 
 			if prog != nil {
+				if paramSize != prog.argSize {
+					return rrErrf(prog, pc, "script function call, argument number mismatch")
+				}
 				// make sure to reset the PC when entering into the new function
 				pc = 0
 
 				goto FUNC
 			} else {
-				must(nfunc != nil, "nfunc cannot be nil")
 
 				// call the native function as if we are in a new frame, this is thee
 				// native call trampoline, but written inline here as go code
@@ -1128,15 +1187,31 @@ FUNC:
 				argEnd := stackSize - 1
 				args := e.Stack[argStart:argEnd]
 
-				val, err := nfunc.entry(
-					args,
-				)
+				var ret Val
 
-				if err != nil {
-					return rrErr(prog, pc, err)
+				// native function
+				if nfunc != nil {
+					if val, err := nfunc.entry(
+						args,
+					); err != nil {
+						return rrErr(prog, pc, err)
+					} else {
+						ret = val
+					}
+				} else {
+					// method function
+					must(mfunc != nil, "method must existed")
+					if val, err := mfunc.entry(
+						mfunc.name,
+						args,
+					); err != nil {
+						return rrErr(prog, pc, err)
+					} else {
+						ret = val
+					}
 				}
 
-				pc, prog = e.epilogue(val, false)
+				pc, prog = e.epilogue(ret, false)
 				break
 			}
 
@@ -1155,11 +1230,14 @@ FUNC:
 		case bcNewClosure:
 			fn := prog.module.fn[bc.argument]
 			sfunc := newScriptFunc(fn)
+			upsfunc := e.curframe.sfunc()
+
 			for _, uv := range fn.upvalue {
 				if uv.onStack {
 					sfunc.upvalue = append(sfunc.upvalue, e.Stack[e.localslot(uv.index)])
 				} else {
-					sfunc.upvalue = append(sfunc.upvalue, e.curframe.sfunc.upvalue[uv.index])
+					must(upsfunc != nil, "upvalue capture function not existed?")
+					sfunc.upvalue = append(sfunc.upvalue, upsfunc.upvalue[uv.index])
 				}
 			}
 
@@ -1167,11 +1245,13 @@ FUNC:
 			break
 
 		case bcLoadUpvalue:
-			e.push(e.curframe.sfunc.upvalue[bc.argument])
+			sfunc := e.curframe.mustSFunc()
+			e.push(sfunc.upvalue[bc.argument])
 			break
 
 		case bcStoreUpvalue:
-			e.curframe.sfunc.upvalue[bc.argument] = e.top0()
+			sfunc := e.curframe.mustSFunc()
+			sfunc.upvalue[bc.argument] = e.top0()
 			e.pop()
 			break
 
@@ -1580,8 +1660,7 @@ func (e *Evaluator) prologue(
 	ftype int,
 	alen int,
 	prog *program,
-	sfunc *scriptFunc,
-	nfunc *nativeFunc,
+	closure Closure,
 ) {
 
 	// push current frame onto stack and once we are done we will return from it
@@ -1592,8 +1671,7 @@ func (e *Evaluator) prologue(
 		e.curframe.framep,
 		e.curframe.farg,
 		e.curframe.excep,
-		e.curframe.sfunc,
-		e.curframe.nfunc,
+		e.curframe.closure,
 	)
 	e.push(newFV)
 
@@ -1602,8 +1680,8 @@ func (e *Evaluator) prologue(
 	e.curframe.framep = fp
 	e.curframe.farg = alen
 	e.curframe.prog = prog
-	e.curframe.sfunc = sfunc
-	e.curframe.nfunc = nfunc
+	e.curframe.pc = 0
+	e.curframe.closure = closure
 	e.curframe.ftype = ftype
 	e.curframe.excep = nil
 }
@@ -1629,27 +1707,22 @@ func (e *Evaluator) epilogue(v Val, isMethod bool) (int, *program) {
 func (e *Evaluator) closureProlog(fn Val, args []Val) {
 	var ftype int
 	var prog *program
-	var sfunc *scriptFunc
-	var nfunc *nativeFunc
 
 	closure := fn.Closure()
-
 	switch closure.Type() {
 	case ClosureScript:
-		f, _ := closure.(*scriptFunc)
+		x, _ := closure.(*scriptFunc)
+		prog = x.prog
 		ftype = ftypeSFunc
-		sfunc = f
-		prog = sfunc.prog
 		break
 
 	case ClosureNative:
-		f, _ := closure.(*nativeFunc)
 		ftype = ftypeNFunc
-		nfunc = f
 		break
 
 	default:
-		unreachable("invalid function type")
+		ftype = ftypeMethod
+		break
 	}
 
 	// performing arguments shuffling here, ie move user provided function
@@ -1661,7 +1734,7 @@ func (e *Evaluator) closureProlog(fn Val, args []Val) {
 		e.push(a)
 	}
 
-	e.prologue(ftype, len(args), prog, sfunc, nfunc)
+	e.prologue(ftype, len(args), prog, closure)
 }
 
 func (e *Evaluator) runRule(event Val, prog *program) error {
@@ -1689,7 +1762,6 @@ func (e *Evaluator) runRule(event Val, prog *program) error {
 		ftypeRule,
 		1,
 		prog,
-		&scriptFunc{},
 		nil,
 	)
 
@@ -1772,7 +1844,7 @@ func (e *Evaluator) runSFunc(
 			// unwind until we hit a native frame and then just report the error
 			a, b, c, d := e.unwindForExcep(
 				func() bool {
-					return e.curframe.sfunc == sfunc
+					return e.curframe.sfunc() == sfunc
 				},
 				rr.e,
 			)
@@ -1787,7 +1859,6 @@ func (e *Evaluator) runSFunc(
 
 		// notes the current frame is still our script frame and we should pop
 		// it up
-		must(e.curframe.sfunc == sfunc, "must be sfunc")
 		e.popfuncframe(e.prevfuncframe())
 
 		return NewValNull(), e.doErr(bt, rr.prog, rr.pc, rr.e)

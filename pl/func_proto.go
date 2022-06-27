@@ -32,6 +32,7 @@ import (
 // %c -> closure
 // %C -> Script closure
 // %R -> native closure
+// %M -> method closure
 // %a -> any type
 // %0 -> no arguments
 // %- -> always pass, do nothing
@@ -92,6 +93,7 @@ const (
 	PClosure
 	PNFunc
 	PSFunc
+	PMFunc
 	PAny
 	PNone
 )
@@ -116,7 +118,7 @@ func mapToObjType(ptype int) int {
 		return ValPair
 	case PRegexp:
 		return ValRegexp
-	case PClosure, PNFunc, PSFunc:
+	case PClosure, PNFunc, PSFunc, PMFunc:
 		return ValClosure
 	case PUsr:
 		return ValUsr
@@ -275,6 +277,8 @@ func (p *protoelem) str() string {
 		return "native_function"
 	case PSFunc:
 		return "script_function"
+	case PMFunc:
+		return "method_function"
 	case PUsr:
 		return fmt.Sprintf("user[%s]", p.tname)
 	case PAny:
@@ -440,6 +444,9 @@ func (f *FuncProto) compT(rList []rune, cursor int, vlen *bool) (int, protoelem,
 	case 'R':
 		opcode = PNFunc
 		break
+	case 'M':
+		opcode = PMFunc
+		break
 	case 'a':
 		opcode = PAny
 		break
@@ -537,7 +544,9 @@ func (f *FuncProto) compT(rList []rune, cursor int, vlen *bool) (int, protoelem,
 		// any numbers of user context with type name foo.bar
 		if nnc == '*' {
 			*vlen = true
-			if cursor+1 != sz {
+
+			if (cursor+1 < sz && rList[cursor+1] != '}') &&
+				(cursor+1 != sz) {
 				return -1, protoelem{}, fmt.Errorf("nothing should be expeceted after %%%c*", nc)
 			}
 			cursor++
@@ -767,6 +776,9 @@ func (f *FuncProto) check0(exp protoelem, got Val, c convoneval) (the_return boo
 		}
 		if exp.opcode == PSFunc {
 			return got.Closure().Type() == ClosureScript
+		}
+		if exp.opcode == PMFunc {
+			return got.Closure().Type() == ClosureMethod
 		}
 		return false
 

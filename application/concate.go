@@ -1,4 +1,4 @@
-package module
+package application
 
 // Concate services, ie generate a merge/concate of multiple http upstream
 // content and send them as downstream response. This module allows highly
@@ -446,8 +446,9 @@ func (c *concateApplication) Accept(
 	)
 
 	// run hpl
-	err := context.Hpl().Run(
+	err := context.Hpl().RunWithContext(
 		"concate.generate",
+		pl.NewValNull(),
 	)
 
 	if err != nil {

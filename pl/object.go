@@ -67,6 +67,7 @@ const (
 const (
 	ClosureScript = iota
 	ClosureNative
+	ClosureMethod
 )
 
 func GetClosureTypeId(id int) string {
@@ -75,11 +76,17 @@ func GetClosureTypeId(id int) string {
 		return "closure_script"
 	case ClosureNative:
 		return "closure_native"
+	case ClosureMethod:
+		return "closure_method"
 	default:
 		unreachable("invalid closure type")
 		return ""
 	}
 }
+
+// Method function's signature. Method is been exposed by internal runtime or
+// User structure.
+type MethodFn func(string, []Val) (Val, error)
 
 // Closure interface, ie wrapping around the function calls
 type Closure interface {
@@ -512,6 +519,19 @@ func newValNFunc(
 	return Val{
 		Type:  ValClosure,
 		vData: nfunc,
+	}
+}
+
+func NewValMethodFunction(
+	entry MethodFn,
+	name string,
+) Val {
+	return Val{
+		Type: ValClosure,
+		vData: newMethodFunc(
+			entry,
+			name,
+		),
 	}
 }
 
@@ -1025,6 +1045,71 @@ func (v *Val) methodStr(name string, args []Val) (Val, error) {
 
 func (v *Val) methodUsr(name string, args []Val) (Val, error) {
 	return v.Usr().Method(name, args)
+}
+
+// convert method to a callable clousre, used by the external world
+func (v *Val) MethodClosure(name string) (Val, error) {
+	switch v.Type {
+	case ValInt:
+		return NewValMethodFunction(
+			v.Method,
+			name,
+		), nil
+
+	case ValReal:
+		return NewValMethodFunction(
+			v.methodReal,
+			name,
+		), nil
+
+	case ValBool:
+		return NewValMethodFunction(
+			v.methodBool,
+			name,
+		), nil
+
+	case ValNull:
+		return NewValMethodFunction(
+			v.methodNull,
+			name,
+		), nil
+
+	case ValStr:
+		return NewValMethodFunction(
+			v.methodStr,
+			name,
+		), nil
+
+	case ValList:
+		return NewValMethodFunction(
+			v.List().Method,
+			name,
+		), nil
+
+	case ValMap:
+		return NewValMethodFunction(
+			v.Map().Method,
+			name,
+		), nil
+
+	case ValRegexp, ValIter, ValClosure:
+		break
+
+	case valFrame:
+		unreachable("should never create frame's method")
+		break
+
+	case ValUsr:
+		return NewValMethodFunction(
+			v.methodUsr,
+			name,
+		), nil
+
+	default:
+		break
+	}
+
+	return NewValNull(), fmt.Errorf("type %s does not have method %s", v.Id(), name)
 }
 
 func (v *Val) Method(name string, args []Val) (Val, error) {
