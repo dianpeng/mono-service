@@ -209,8 +209,49 @@ func (h *Header) IsImmutable() bool {
 	return false
 }
 
+// iterator of http header
+type headerentry struct {
+	key   string
+	value string
+}
+type headeriter struct {
+	kv     []headerentry
+	cursor int
+}
+
+func newheaderiter(
+	h http.Header,
+) *headeriter {
+	kv := []headerentry{}
+	for k, vlist := range h {
+		for _, v := range vlist {
+			kv = append(kv, headerentry{
+				key:   k,
+				value: v,
+			})
+		}
+	}
+	return &headeriter{kv: kv}
+}
+
+func (h *headeriter) Has() bool {
+	return h.cursor < len(h.kv)
+}
+
+func (h *headeriter) Next() bool {
+	h.cursor++
+	return h.Has()
+}
+
+func (h *headeriter) Deref() (pl.Val, pl.Val, error) {
+	if !h.Has() {
+		return pl.NewValNull(), pl.NewValNull(), fmt.Errorf("iterator out of bound")
+	}
+	return pl.NewValStr(h.kv[h.cursor].key), pl.NewValStr(h.kv[h.cursor].value), nil
+}
+
 func (h *Header) NewIterator() (pl.Iter, error) {
-	return nil, fmt.Errorf("http.header does not support iterator")
+	return newheaderiter(h.header), nil
 }
 
 func NewHeaderVal(header http.Header) pl.Val {

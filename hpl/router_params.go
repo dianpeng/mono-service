@@ -66,8 +66,37 @@ func (h *RouterParams) IsImmutable() bool {
 	return false
 }
 
+type routerpariter struct {
+	kv     []hrouter.KV
+	cursor int
+}
+
+func (h *routerpariter) Has() bool {
+	return h.cursor < len(h.kv)
+}
+
+func (h *routerpariter) Next() bool {
+	h.cursor++
+	return h.Has()
+}
+
+func newrouterpariter(
+	p hrouter.Params,
+) *routerpariter {
+	return &routerpariter{
+		kv: p.ToList(),
+	}
+}
+
+func (h *routerpariter) Deref() (pl.Val, pl.Val, error) {
+	if !h.Has() {
+		return pl.NewValNull(), pl.NewValNull(), fmt.Errorf("iterator out of bound")
+	}
+	return pl.NewValStr(h.kv[h.cursor].Key), pl.NewValStr(h.kv[h.cursor].Value), nil
+}
+
 func (h *RouterParams) NewIterator() (pl.Iter, error) {
-	return nil, fmt.Errorf("http.router.params does not support iterator")
+	return newrouterpariter(h.params), nil
 }
 
 func NewRouterParamsVal(r hrouter.Params) pl.Val {

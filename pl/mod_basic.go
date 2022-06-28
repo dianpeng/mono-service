@@ -168,6 +168,32 @@ func init() {
 			if err != nil {
 				return NewValNull(), err
 			}
+			return NewValStr(args[0].TypeName()), nil
+		},
+	)
+
+	addF(
+		"info",
+		"",
+		"{%a}",
+		func(info *IntrinsicInfo, _ *Evaluator, _ string, args []Val) (Val, error) {
+			_, err := info.argproto.Check(args)
+			if err != nil {
+				return NewValNull(), err
+			}
+			return NewValStr(args[0].Info()), nil
+		},
+	)
+
+	addF(
+		"id",
+		"",
+		"{%a}",
+		func(info *IntrinsicInfo, _ *Evaluator, _ string, args []Val) (Val, error) {
+			_, err := info.argproto.Check(args)
+			if err != nil {
+				return NewValNull(), err
+			}
 			return NewValStr(args[0].Id()), nil
 		},
 	)

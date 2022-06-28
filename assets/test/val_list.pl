@@ -70,8 +70,38 @@ fn test3() {
   assert::eq([1, 2, 3]:slice(100, 3), []);
 }
 
+fn testBasic() {
+  assert::eq(type([]), "list");
+}
+
+fn testNest() {
+  assert::eq(
+    [
+      [
+        [
+          [
+            [
+              [
+                [
+                  [
+                    [
+                      [10]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    ][0][0][0][0][0][0][0][0][0][0], 10);
+}
+
+
 test {
   test1();
   test2();
   test3();
+  testBasic();
+  testNest();
 }

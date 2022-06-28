@@ -9,7 +9,8 @@ var (
 	mpMapLength = MustNewFuncProto("map.length", "%0")
 	mpMapSet    = MustNewFuncProto("map.set", "%s%a")
 	mpMapDel    = MustNewFuncProto("map.del", "%s")
-	mpMapGet    = MustNewFuncProto("map.get", "%s%a")
+	mpMapTryGet = MustNewFuncProto("map.tryGet", "%s%a")
+	mpMapGet    = MustNewFuncProto("map.get", "%s")
 	mpMapHas    = MustNewFuncProto("map.has", "%s")
 )
 
@@ -253,6 +254,18 @@ func (m *Map) Method(name string, args []Val) (Val, error) {
 		m.Del(args[0].String())
 		return NewValMapFromMap(m), nil
 
+	case "tryGet":
+		_, err := mpMapTryGet.Check(args)
+		if err != nil {
+			return NewValNull(), err
+		}
+		v, ok := m.Get(args[0].String())
+		if !ok {
+			return args[1], nil
+		} else {
+			return v, nil
+		}
+
 	case "get":
 		_, err := mpMapGet.Check(args)
 		if err != nil {
@@ -260,7 +273,7 @@ func (m *Map) Method(name string, args []Val) (Val, error) {
 		}
 		v, ok := m.Get(args[0].String())
 		if !ok {
-			return args[1], nil
+			return NewValNull(), fmt.Errorf("key %s not found", args[0].String())
 		} else {
 			return v, nil
 		}

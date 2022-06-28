@@ -11,16 +11,16 @@ type bgApplicationWrapper struct {
 	application framework.Application
 }
 
-func (b *bgApplicationWrapper) OnLoadVar(name string) (pl.Val, error) {
-	return b.parent.OnLoadVar(name)
+func (b *bgApplicationWrapper) OnLoadVar(x *pl.Evaluator, name string) (pl.Val, error) {
+	return b.parent.OnLoadVar(x, name)
 }
 
-func (b *bgApplicationWrapper) OnStoreVar(name string, value pl.Val) error {
-	return b.parent.OnStoreVar(name, value)
+func (b *bgApplicationWrapper) OnStoreVar(x *pl.Evaluator, name string, value pl.Val) error {
+	return b.parent.OnStoreVar(x, name, value)
 }
 
-func (b *bgApplicationWrapper) OnAction(name string, val pl.Val) error {
-	return b.parent.OnAction(name, val)
+func (b *bgApplicationWrapper) OnAction(x *pl.Evaluator, name string, val pl.Val) error {
+	return b.parent.OnAction(x, name, val)
 }
 
 func (b *bgApplicationWrapper) GetHttpClient(url string) (hpl.HttpClient, error) {

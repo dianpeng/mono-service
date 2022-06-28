@@ -11,6 +11,14 @@ type Url struct {
 	url *url.URL
 }
 
+func newUrl(
+	u *url.URL,
+) *Url {
+	return &Url{
+		url: u,
+	}
+}
+
 func ValIsUrl(v pl.Val) bool {
 	return v.Id() == ".url"
 }
@@ -37,6 +45,8 @@ func (h *Url) Index(key pl.Val) (pl.Val, error) {
 		return pl.NewValStr(h.url.Path), nil
 	case "query":
 		return pl.NewValStr(h.url.RawQuery), nil
+	case "search":
+		return NewUrlSearchValFromValues(h.url.Query()), nil
 	case "url":
 		return pl.NewValStr(h.url.String()), nil
 	case "userInfo":
@@ -166,8 +176,5 @@ func (h *Url) NewIterator() (pl.Iter, error) {
 }
 
 func NewUrlVal(url *url.URL) pl.Val {
-	x := &Url{
-		url: url,
-	}
-	return pl.NewValUsr(x)
+	return pl.NewValUsr(newUrl(url))
 }

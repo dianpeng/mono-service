@@ -14,7 +14,6 @@ rule "body_sign.sign" => {
 }
 
 rule "body_sign.reject" => {
-  println("B");
   response.status = 404;
   response.header:set("x-body-sign-result", $.sign);
   response.header.set("x-body-sign-expect", $.signExpect);
@@ -22,7 +21,6 @@ rule "body_sign.reject" => {
 }
 
 rule "body_sign.pass" => {
-  println("C");
   response.status = 202;
   response.header:set("x-body-sign-result", $.sign);
   response.header:set("x-body-sign-expect", $.signExpect);

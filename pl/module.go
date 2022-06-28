@@ -183,6 +183,11 @@ func (p *Module) findEvent(name string) *program {
 	}
 }
 
+func (p *Module) HasEvent(name string) bool {
+	_, ok := p.eventMap[name]
+	return ok
+}
+
 func (p *Module) Dump() string {
 	var b bytes.Buffer
 	b.WriteString("function> -------------------------------- \n")

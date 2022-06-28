@@ -46,4 +46,5 @@ test {
   testStrIndex();
   testStrInter1();
   testStrIndex2();
+  assert::eq(type(""), "string");
 }

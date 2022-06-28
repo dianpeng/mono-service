@@ -1168,6 +1168,37 @@ func (v *Val) NewIterator() (Iter, error) {
 	}
 }
 
+func (v *Val) TypeName() string {
+	switch v.Type {
+	case ValInt:
+		return "int"
+	case ValReal:
+		return "real"
+	case ValBool:
+		return "bool"
+	case ValNull:
+		return "null"
+	case ValStr:
+		return "string"
+	case ValList:
+		return "list"
+	case ValMap:
+		return "map"
+	case ValPair:
+		return "pair"
+	case ValRegexp:
+		return "regexp"
+	case ValIter:
+		return "iter"
+	case ValClosure:
+		return "closure"
+	case valFrame:
+		return "#frame"
+	default:
+		return "user"
+	}
+}
+
 func (v *Val) Id() string {
 	switch v.Type {
 	case ValInt:
@@ -1179,7 +1210,7 @@ func (v *Val) Id() string {
 	case ValNull:
 		return "null"
 	case ValStr:
-		return "str"
+		return "string"
 	case ValList:
 		return "list"
 	case ValMap:

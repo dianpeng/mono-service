@@ -13,6 +13,11 @@ type Params struct {
 	p parlist
 }
 
+type KV struct {
+	Key   string
+	Value string
+}
+
 func NewParams(r *http.Request) Params {
 	return Params{
 		p: mux.Vars(r),
@@ -23,6 +28,17 @@ func NewEmptyParams() Params {
 	return Params{
 		p: make(parlist),
 	}
+}
+
+func (p *Params) ToList() []KV {
+	x := []KV{}
+	for k, v := range p.p {
+		x = append(x, KV{
+			Key:   k,
+			Value: v,
+		})
+	}
+	return x
 }
 
 func (p *Params) ByName(id string) string {

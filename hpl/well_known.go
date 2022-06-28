@@ -4,6 +4,7 @@ const (
 	// global type
 	ReadableStreamTypeId = ".readablestream"
 	UrlTypeId            = ".url"
+	UrlSearchTypeId      = ".urlsearch"
 
 	// http type
 	HttpHeaderTypeId       = "http.header"

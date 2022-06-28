@@ -30,6 +30,8 @@ fn testNumberToString() {
     let z = 1.1;
     assert::eq(z:cell(), 2.0);
   }
+  assert::eq(type(1), "int");
+  assert::eq(type(1.0), "real");
 }
 
 fn testBoolean() {
@@ -40,10 +42,13 @@ fn testBoolean() {
 fn testBooleanToString() {
   assert::eq(true:to_string(), "true");
   assert::eq(false:to_string(), "false");
+  assert::eq(type(true), "bool");
+  assert::eq(type(false), "bool");
 }
 
 fn testNull() {
   assert::eq(null:to_string(), "null");
+  assert::eq(type(null), "null");
 }
 
 test {

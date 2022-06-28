@@ -135,4 +135,22 @@ func init() {
 		"%a*",
 		fnConcateHttpBody,
 	)
+
+	pl.AddModFunction(
+		"http",
+		"new_url_search",
+		"",
+		"%s",
+		func(info *pl.IntrinsicInfo, _ *pl.Evaluator, _ string, argument []pl.Val) (pl.Val, error) {
+			_, err := info.Check(argument)
+			if err != nil {
+				return pl.NewValNull(), err
+			}
+			v, err := NewUrlSearchValFromString(argument[0].String())
+			if err != nil {
+				return pl.NewValNull(), fmt.Errorf("http::new_url_search parsing error: %s", err.Error())
+			}
+			return v, nil
+		},
+	)
 }

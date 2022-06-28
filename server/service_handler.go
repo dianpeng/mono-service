@@ -298,21 +298,21 @@ func (s *serviceHandler) GetHttpClient(url string) (hpl.HttpClient, error) {
 	return &c, nil
 }
 
-func (s *serviceHandler) OnLoadVar(name string) (pl.Val, error) {
+func (s *serviceHandler) OnLoadVar(_ *pl.Evaluator, name string) (pl.Val, error) {
 	return pl.NewValNull(), fmt.Errorf(
 		"unknown variable name: %s",
 		name,
 	)
 }
 
-func (s *serviceHandler) OnStoreVar(name string, _ pl.Val) error {
+func (s *serviceHandler) OnStoreVar(_ *pl.Evaluator, name string, _ pl.Val) error {
 	return fmt.Errorf(
 		"unknown variable name: %s",
 		name,
 	)
 }
 
-func (s *serviceHandler) OnAction(name string, _ pl.Val) error {
+func (s *serviceHandler) OnAction(_ *pl.Evaluator, name string, _ pl.Val) error {
 	return fmt.Errorf(
 		"unknown action name: %s",
 		name,

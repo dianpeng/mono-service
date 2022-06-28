@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/pl"
+	"net/http"
 	"os"
 	pa "path"
 	"path/filepath"
+	"time"
 )
 
 type testResult struct {
@@ -19,9 +22,10 @@ type testResult struct {
 
 type testcontext struct {
 	theValue pl.Val
+	slot     pl.Val
 }
 
-func (x *testcontext) LoadVar(e *pl.Evaluator, name string) (pl.Val, error) {
+func (x *testcontext) OnLoadVar(e *pl.Evaluator, name string) (pl.Val, error) {
 	switch name {
 	case "test":
 		return pl.NewValStr("testing_driver"), nil
@@ -29,6 +33,8 @@ func (x *testcontext) LoadVar(e *pl.Evaluator, name string) (pl.Val, error) {
 		return pl.NewValStr("1.0"), nil
 	case "theValue":
 		return x.theValue, nil
+	case "slot":
+		return x.slot, nil
 	case "callback":
 		return pl.NewValNativeFunction(
 			"callback",
@@ -57,7 +63,7 @@ func (x *testcontext) LoadVar(e *pl.Evaluator, name string) (pl.Val, error) {
 	}
 }
 
-func (x *testcontext) StoreVar(
+func (x *testcontext) OnStoreVar(
 	_ *pl.Evaluator,
 	name string,
 	val pl.Val,
@@ -71,12 +77,22 @@ func (x *testcontext) StoreVar(
 	}
 }
 
-func (x *testcontext) Action(
+func (x *testcontext) OnAction(
 	_ *pl.Evaluator,
 	name string,
-	_ pl.Val,
+	v pl.Val,
 ) error {
+	if name == "slot" {
+		x.slot = v
+		return nil
+	}
 	return fmt.Errorf("unknown action: %s", name)
+}
+
+func (x *testcontext) GetHttpClient(url string) (hpl.HttpClient, error) {
+	return &http.Client{
+		Timeout: time.Duration(10) * time.Second,
+	}, nil
 }
 
 func runAllTestFile(path string) (testResult, error) {
@@ -110,24 +126,28 @@ func runAllTestFile(path string) (testResult, error) {
 			fmt.Printf(">> Compile: %s\n", err.Error())
 			t.compileFail++
 		} else {
-			ev := pl.NewEvaluatorWithContext(
-				&testcontext{},
-			)
+			hpl := hpl.NewHpl()
+			hpl.SetModule(p)
 
-			if err := ev.EvalGlobal(p); err != nil {
+			ctx := &testcontext{}
+
+			if err := hpl.OnGlobal(ctx); err != nil {
 				fmt.Printf(">> EvalGlobal: %s\n", err.Error())
 				t.constFail++
+				continue
 			}
-			if err := ev.EvalSession(p); err != nil {
+
+			if err := hpl.OnTestSession(ctx); err != nil {
 				fmt.Printf(">> EvalSession: %s\n", err.Error())
 				t.sessionFail++
+				continue
+			}
+
+			if err := hpl.OnTest("test", pl.NewValNull()); err != nil {
+				fmt.Printf(">> Eval: %s\n", err.Error())
+				t.execFail++
 			} else {
-				if err := ev.Eval("test", p); err != nil {
-					fmt.Printf(">> Eval: %s\n", err.Error())
-					t.execFail++
-				} else {
-					t.pass++
-				}
+				t.pass++
 			}
 		}
 	}

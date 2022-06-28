@@ -6,9 +6,6 @@ config service {
     "application",
     "this is the value"
   );
-
-  response {
-  }
 }
 
 session {

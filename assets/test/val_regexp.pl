@@ -15,4 +15,5 @@ fn test1() {
 
 test {
   test1();
+  assert::eq(type(r""), "regexp");
 }
