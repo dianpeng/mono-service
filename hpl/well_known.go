@@ -5,6 +5,7 @@ const (
 	ReadableStreamTypeId = ".readablestream"
 	UrlTypeId            = ".url"
 	UrlSearchTypeId      = ".urlsearch"
+	TLSConnStateTypeId   = ".tlsconnstate"
 
 	// http type
 	HttpHeaderTypeId       = "http.header"
@@ -12,4 +13,5 @@ const (
 	HttpRequestTypeId      = "http.request"
 	HttpResponseTypeId     = "http.response"
 	HttpRouterParamsTypeId = "http.router.params"
+	HttpCookieTypeId       = "http.cookie"
 )

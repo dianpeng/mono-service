@@ -1769,28 +1769,15 @@ func (p *parser) parseTry(prog *program,
 	p.l.next()
 
 	// optionally let, which allow user to capture the exception/error
-	if p.l.token == tkLet || p.l.token == tkId {
-		var idx int
-		if p.l.token == tkLet {
-			if !p.l.expect(tkId) {
-				return p.l.toError()
-			}
-			idx = p.defLocalVar(p.l.valueText)
-			if idx == symError {
-				return p.errf("duplicate local variable: %s", p.l.valueText)
-			}
-			p.l.next()
-		} else {
-			idx = p.findLocalVar(p.l.valueText)
-			if idx == symError {
-				return p.errf("local variable not found: %s", p.l.valueText)
-			} else if idx == symInvalidConst {
-				return p.errf("local variable is const: %s", p.l.valueText)
-			}
-			p.l.next()
+	if p.l.token == tkLet {
+		if !p.l.expect(tkId) {
+			return p.l.toError()
 		}
-		must(idx >= 0, "must be valid index")
-
+		idx := p.defLocalVar(p.l.valueText)
+		if idx == symError {
+			return p.errf("duplicate local variable: %s", p.l.valueText)
+		}
+		p.l.next()
 		prog.emit0(p.l, bcLoadException)
 		prog.emit1(p.l, bcStoreLocal, idx)
 	}
@@ -2560,7 +2547,7 @@ func (p *parser) parseExprStmt(prog *program) (bool, bool, error) {
 	case tkFor:
 		return false, false, p.parseFor(prog)
 	case tkSemicolon:
-		return false, false, nil
+		return true, false, nil
 
 	default:
 		lexeme := p.lexeme()
@@ -3325,9 +3312,11 @@ func (p *parser) patchAllCall() {
 }
 
 const (
-	suffixDot = iota
+  suffixUnknown = iota
+	suffixDot
 	suffixIndex
 	suffixCall
+  suffixMethod
 )
 
 func (p *parser) parseSuffixImpl(prog *program, lastType *int) error {
@@ -3362,6 +3351,8 @@ SUFFIX:
 			break
 
 		case tkColon:
+			*lastType = suffixMethod
+
 			if !p.l.expect(tkId) {
 				return p.l.toError()
 			}
@@ -3373,12 +3364,15 @@ SUFFIX:
 
 		case tkLPar:
 			*lastType = suffixCall
+
 			if err := p.parseVCall(prog); err != nil {
 				return err
 			}
 			break
 
 		case tkPipe:
+			*lastType = suffixCall
+
 			// Pipe style expression
 			// Pipe is used to invoke free/global function in a compact format,
 			// case 1> a | b[(args)] => b(a, [args])

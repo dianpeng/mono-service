@@ -1,7 +1,6 @@
 package hpl
 
 import (
-	"crypto/tls"
 	"fmt"
 	"github.com/dianpeng/mono-service/pl"
 	"io"
@@ -15,6 +14,7 @@ type Request struct {
 	header  pl.Val
 	url     pl.Val
 	body    pl.Val
+	tls     pl.Val
 }
 
 func ValIsHttpRequest(v pl.Val) bool {
@@ -72,27 +72,6 @@ func (h *Request) isTLS() bool {
 	return h.request.TLS != nil
 }
 
-func (h *Request) tlsVersion() string {
-	if !h.isTLS() {
-		return ""
-	} else {
-		switch h.request.TLS.Version {
-		case tls.VersionTLS10:
-			return "tls10"
-		case tls.VersionTLS11:
-			return "tls11"
-		case tls.VersionTLS12:
-			return "tls12"
-		case tls.VersionTLS13:
-			return "tls13"
-		case tls.VersionSSL30:
-			return "ssl3"
-		default:
-			return "unknown"
-		}
-	}
-}
-
 func (h *Request) isChunked() bool {
 	for _, xx := range h.request.TransferEncoding {
 		if xx == "chunked" {
@@ -137,26 +116,10 @@ func (h *Request) Index(key pl.Val) (pl.Val, error) {
 	// tls information
 	case "isTLS":
 		return pl.NewValBool(h.isTLS()), nil
-	case "tlsServerName":
-		if h.isTLS() {
-			return pl.NewValStr(h.request.TLS.ServerName), nil
-		} else {
-			return pl.NewValNull(), nil
-		}
-	case "tlsVersion":
-		if h.isTLS() {
-			return pl.NewValStr(h.tlsVersion()), nil
-		} else {
-			return pl.NewValNull(), nil
-		}
-	case "tlsProtocol":
-		if h.isTLS() {
-			return pl.NewValStr(h.request.TLS.NegotiatedProtocol), nil
-		} else {
-			return pl.NewValNull(), nil
-		}
+	case "tls":
+		return h.tls, nil
 
-	// ContentLength or TransferEncoding
+		// Special header and other information
 	case "contentLength":
 		if h.request.ContentLength >= 0 {
 			return pl.NewValInt(int(h.request.ContentLength)), nil
@@ -166,6 +129,13 @@ func (h *Request) Index(key pl.Val) (pl.Val, error) {
 
 	case "transferEncoding":
 		return pl.NewValBool(h.isChunked()), nil
+
+	case "referer":
+		return pl.NewValStr(h.request.Referer()), nil
+
+	case "userAgent":
+		return pl.NewValStr(h.request.UserAgent()), nil
+
 	default:
 		break
 	}
@@ -216,14 +186,44 @@ func (h *Request) ToJSON() (pl.Val, error) {
 			"requestURI": h.request.RequestURI,
 			"url":        h.request.URL.String(),
 			"proto":      h.request.Proto,
-			"tls":        h.tlsVersion(),
+			"tls":        h.request.TLS,
 			"header":     h.request.Header,
 			"remoteAddr": h.request.RemoteAddr,
 		},
 	)
 }
 
-func (h *Request) Method(name string, _ []pl.Val) (pl.Val, error) {
+var (
+	methodProtoRequestCookie    = pl.MustNewFuncProto("http.request.cookie", "%s")
+	methodProtoRequestAllCookie = pl.MustNewFuncProto("http.request.allCookie", "%0")
+)
+
+func (h *Request) Method(name string, args []pl.Val) (pl.Val, error) {
+	switch name {
+	case "cookie":
+		if _, err := methodProtoRequestCookie.Check(args); err != nil {
+			return pl.NewValNull(), err
+		}
+		if c, err := h.request.Cookie(args[0].String()); err != nil {
+			return pl.NewValNull(), nil
+		} else {
+			return NewCookieVal(c), nil
+		}
+
+	case "allCookie":
+		if _, err := methodProtoRequestAllCookie.Check(args); err != nil {
+			return pl.NewValNull(), err
+		}
+		clist := h.request.Cookies()
+		o := pl.NewValList()
+		for _, c := range clist {
+			o.AddList(NewCookieVal(c))
+		}
+		return o, nil
+
+	default:
+		break
+	}
 	return pl.NewValNull(), fmt.Errorf("method: http.request:%s is unknown", name)
 }
 
@@ -253,6 +253,7 @@ func NewRequestVal(req *http.Request) pl.Val {
 		header:  NewHeaderVal(req.Header),
 		url:     NewUrlVal(req.URL),
 		body:    NewBodyValFromStream(req.Body),
+		tls:     NewTLSConnStateVal(req.TLS),
 	}
 
 	return pl.NewValUsr(x)

@@ -1637,6 +1637,9 @@ func (e *Evaluator) unwindForExcep(
 				// currently just convert error to a string
 				e.curexcep = NewValStr(err.Error())
 
+				// pop the current exception since we already recover from it
+				e.popExcep()
+
 				// okay recover the frame
 				return pc, prog, bt, true
 			}

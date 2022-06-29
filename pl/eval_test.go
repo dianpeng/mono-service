@@ -342,7 +342,7 @@ func TestTryExpr(t *testing.T) {
 		`
 	  test{
       let reason = null;
-	    let a = try foo() else reason reason;
+	    let a = try foo() else let r r;
 	    output => a;
 	  }
 	  `, "foo unknown var"))
@@ -478,11 +478,10 @@ func TestTryStatement(t *testing.T) {
 		assert.True(testString(
 			`
     test{
-      let bar;
       try {
         foo();
         output => "bar";
-      } else bar {
+      } else let bar {
         print(bar);
         output => "hello world";
       }
@@ -492,11 +491,10 @@ func TestTryStatement(t *testing.T) {
 		assert.True(testString(
 			`
     test{
-      let bar;
       try {
         xxx = 100;
         output => "bar";
-      } else bar {
+      } else let bar {
         print(bar);
         output => "hello world";
       }

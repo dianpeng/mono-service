@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"strconv"
-	"strings"
 	"unicode"
 )
 
@@ -349,7 +348,12 @@ func (t *lexer) pos() (int, int) {
 	l := 1
 	c := 1
 
-	for i := 0; i < t.cursor; i++ {
+  clampedSize := t.cursor
+  if clampedSize >= len(t.input) {
+    clampedSize = len(t.input)
+  }
+
+	for i := 0; i < clampedSize ; i++ {
 		char := t.input[i]
 		if char == '\n' {
 			l++
@@ -558,8 +562,13 @@ func (t *lexer) scanNum() int {
 func (t *lexer) scanRId() int {
 	must(t.input[t.cursor] == '@', "must be @")
 	t.cursor++
+  if t.cursor == len(t.input) {
+    return t.err("early terminate of resource identifier")
+  }
+
 	must(t.input[t.cursor] == '\'' ||
 		t.input[t.cursor] == '"', "must be quoted string")
+
 	x := t.scanStr()
 	if x != tkStr {
 		return x
@@ -595,6 +604,10 @@ func (t *lexer) tryPrefixString(c rune) (int, bool) {
 	// Scan the rest of the string into valueText, and the scanStr will mark the
 	// token to be tkStr, which will be replaced accordingly later on
 	t.cursor++
+  if t.cursor == len(t.input) {
+    return t.err("early terminate of prefixed identifiers"), false
+  }
+
 	x := t.scanStr()
 	if x != tkStr {
 		return x, true
@@ -813,12 +826,17 @@ func (t *lexer) mulstrMarker() (string, error) {
 
 	t.cursor += 3
 	markerStart := t.cursor
+  hasLB := false
 	for ; t.cursor < len(t.input); t.cursor++ {
 		c := t.input[t.cursor]
 		if c == '\n' {
+      hasLB = true
 			break
 		}
 	}
+  if !hasLB {
+    return "", fmt.Errorf("multiple line string expect a linebreak after ```")
+  }
 
 	// now t.cursor points to the first linebreak after the ```
 	var end string
@@ -843,14 +861,40 @@ func (t *lexer) scanMStr() int {
 		return t.e(err)
 	}
 
-	// now just searching for the end
-	tagPos := strings.Index(string(t.input[t.cursor:]), endTag)
-	if tagPos == -1 {
+  // check whether we have the end tag or not
+  if t.cursor + 3 > len(t.input) {
+    return t.err("the multiple line string is not terminated properly")
+  }
+
+  // notes, you cannot search via strings.Index due to the invalid rune inside
+  // of the sequences. The fuzzer finds this bug
+  runeTag := []rune(endTag)
+  tagPos := -1
+  for i := t.cursor; i < len(t.input); i++ {
+    if i + len(runeTag) > len(t.input) {
+      break
+    }
+
+    found := true
+    for idx, x := range runeTag {
+      if t.input[i+idx] != x {
+        found = false
+        break
+      }
+    }
+    if found {
+      tagPos = (i - t.cursor)
+      break
+    }
+  }
+
+  if tagPos == -1 {
 		return t.err("the multiple line string is not closed properly")
 	}
 
 	startPos := t.cursor
 	endPos := t.cursor + tagPos
+  fmt.Printf(":: %d:%d:%d\n", t.cursor, tagPos, endPos)
 
 	t.valueText = string(t.input[startPos:endPos])
 	t.cursor = endPos + len(endTag)

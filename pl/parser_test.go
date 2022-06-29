@@ -14,6 +14,21 @@ func dumpProg(x *Module) {
 	fmt.Printf("%s\n", x.Dump())
 }
 
+func verifyP(code string) {
+  p := newParser(code)
+  prog, err := p.parse()
+  if err != nil {
+    fmt.Printf("%s", err.Error())
+    return
+  }
+  dumpProg(prog)
+}
+
+func Test(t *testing.T) {
+  verifyP("f{v=if 0{;;")
+  verifyP("```0\n\x8c\x8c\x8c000\n0```")
+}
+
 func TestExpr(t *testing.T) {
 	assert := assert.New(t)
 	{

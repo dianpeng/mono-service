@@ -63,7 +63,6 @@ PL是一个专门为Web/Http服务器可编程设计的脚本语言。通常来�
   3. 用户扩展类型 (用于支持Go的类型扩展)
 
 
-
 ### 基本执行单元
 
 PL支持如下几种执行单元
@@ -142,14 +141,14 @@ rule xx {
 ```
 global {
 	const1 = http::get("https://www.tmall.com").body:string(); // 存储tmall首页HTML到string
-    const2 = 100;
-    const3 = [];
+  const2 = 100;
+  const3 = [];
     
-    // 调用更为复杂的全局初始化函数，可以这么做，但是不推荐
-    _ = myGlobalInit(); // _表示忽略该变量，_ 可以重复定义
-    _ = (fn() {
-      return "Nothing Special";
-    })();
+  // 调用更为复杂的全局初始化函数，可以这么做，但是不推荐
+  _ = myGlobalInit(); // _表示忽略该变量，_ 可以重复定义
+  _ = (fn() {
+    return "Nothing Special";
+  })();
 }
 
 func myGlobalInit() {
@@ -206,7 +205,7 @@ PL支持4种变量
 ```
 
 global {
- const1 = http::do("GET", "http://www.example.com"); // will just be initialized once
+  const1 = http::do("GET", "http://www.example.com"); // will just be initialized once
 }
 
 fn foo() {
@@ -260,7 +259,7 @@ rule a {
 rule a {
   let xx = 1000;
   {
-	let xx = 100;
+    let xx = 100;
     {
       let xx = 10;
       assert::eq(xx, 10);
@@ -317,7 +316,7 @@ rule test {
   };  // map常量
 
   let j = fn(a, b, c) {
-	return a+b+c;
+    return a+b+c;
   }; // 匿名函数
 
   // pair常亮表达式
@@ -510,7 +509,8 @@ rule yy {
   assert::eq(
   	(fn() {
       return value;
-    })(), "this is a rule");
+    })(), "this is a rule"
+  );
 }
 
 
