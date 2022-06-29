@@ -37,6 +37,7 @@ PL是一个专门为Web/Http服务器可编程设计的脚本语言。通常来�
 		3. 异常
 		4. 函数
 		5. 事件规则
+	5. 模块支持
 
 
 ## 语言
@@ -143,7 +144,7 @@ global {
 	const1 = http::get("https://www.tmall.com").body:string(); // 存储tmall首页HTML到string
   const2 = 100;
   const3 = [];
-    
+
   // 调用更为复杂的全局初始化函数，可以这么做，但是不推荐
   _ = myGlobalInit(); // _表示忽略该变量，_ 可以重复定义
   _ = (fn() {
@@ -181,7 +182,7 @@ session {
 config service {
   // 配置块内可以使用代码语句
   let mydata = http::get("https://www.example.com").body.json();
-  
+
   // 以下用于配置service配置块内部的属性
   .name = mydata["name"]; // 配置属性必须使用.开头
   ["router"] = mydata["router"]; // 配置属性名称同样可以动态生成，使用[表达式]表示
@@ -286,10 +287,10 @@ PL中，任何一个符号，编译器会使用如下的查找优先级
 rule test {
   // 强制要求a按照session变量查询
   let x = session::a;
-  
+
   // 强制要求a按照全局变量查询
   let y = global::a;
-  
+
   // 强制要求a按照动态变量查询
   let z = dynamic::a;
 }
@@ -337,7 +338,7 @@ rule test {
 
   // 正则表达式常量
   let regex = r"This is a regex string";
-  
+
   // 正则表达式可以用符号 ~或者!~来进行匹配/不匹配求值
   let matched = "A string" ~ regex; // returns true or false
 
@@ -364,7 +365,7 @@ rule test {
   obj.a = fn() {
     return "this is a closure";
   };
-  
+
   obj.length = fn() {
     return -1;
   };
@@ -374,7 +375,7 @@ rule test {
 
   // 调用map对象的成员函数length
   let bb = obj:length(); // 返回map的长度，这个例子是2
-  
+
   // 查找map对象，找到一个叫length的元素，将length当成函数调用
   let cc = obj.length(); // 返回-1
 ```
@@ -421,6 +422,63 @@ let v3 = if false == false {
 
 
 ```
+
+* 高阶函数
+
+PL的函数位高阶（First Order）函数。PL内部的函数包含4种不同类型，如下：
+
+1. 脚本函数
+2. 内置函数（Intrinsic Function）
+3. Go定义的扩展的Native Function
+4. 成员方法
+
+这4种函数的调用方式各不相同
+
+```
+
+fn foo() {
+}
+
+// 调用foo函数，定义为脚本的foo函数
+let a = foo();
+
+// 假设go运行时导出了bar函数，bar函数为go定义的native function
+let _ = bar();
+
+// PL运行时内置了若干特殊的内置函数。内置函数默认有高优先级，用户的定义函数如果和内置函数重名，内置函数
+// 的符号被选择
+println("Hello World");
+
+// PL同样支持面向对象代码，每个PL对象允许定义成员方法
+
+let v = {};
+v:set("a", "b"); // 调用map对象的成员方法set
+assert::yes(v::has("a"));
+
+```
+
+由于PL支持高阶函数，因此，每个函数的本身可以被保存为变量。
+
+```
+
+fn foo() {}
+
+let a_foo = foo; // a_foo 变量现在表示foo函数了，用户可以调用a_foo()来调用foo
+
+// 假设运行时暴露动态变量bar为native function
+let a_bar = bar; // a_bar表示go定义的native function了
+
+// PL内置的intrinsic函数同样可以被捕获
+
+let a_println = println; // 现在a_println表示println函数了
+
+// 成员函数同样可以被捕获
+let a_member = {}:set; // 捕获一个匿名对象map的成员函数set
+
+```
+
+PL的高阶函数能力结合PL的pipe语法，可以很容易写出流畅的面向数据的查询代码
+
 
 * PL支持表达式异常处理
 
@@ -707,3 +765,97 @@ fn not_valid() {
 
 ```
 
+### 模块
+
+
+PL支持模块编写。每个PL的程序由若干个模块和一个入口代码组成。PL的模块内部不能编写规则，只能编写session，global变量块和定义函数。
+
+
+#### 模块声明
+
+PL的模块的开头必须要包含模块声明语法，如下
+
+```
+// 这个语法定义了该代码表示模块，PL的编译器会自动按照模块的语法解析该代码
+module a::cool::module
+
+
+```
+
+模块声明表示模块的使用命名空间。如上述例子中标明为```a::cool::module```，任何引用该模块的代码调用任何模块内部的符号，都需要加上```a::cool::module```为限定词。
+
+```
+
+// 假设该模块定义的命名空间为a::b
+import "a/path/to/module"
+
+let _ = a::b::foo(); // 调用import模块的函数foo需要加上限定词a::b
+
+
+```
+
+#### 模块内容
+
+PL模块内部只能编写全局变量，session变量和函数。规则不允许在模块中编写。模块内部也可以import其他模块
+
+```
+module mymod
+
+// import其他模块是允许的
+import "another/module"
+
+global {
+  a_global = 1;
+  b_global = 2;
+}
+
+session {
+  a_session = 1;
+  b_session = http::do("https://www.tmall.com");
+}
+
+fn foo() {}
+fn bar() {}
+
+// 这个会造成语法错误，模块内部不允许定义规则
+rule xxx {
+}
+
+```
+
+### 入口
+
+
+每个程序都允许有若干模块和一个入口程序。入口程序即没有模块声明的代码（文件）
+
+
+```
+
+// 注意开头没有module关键字
+
+// 多行import
+import (
+  "a/b/c/d"
+  "a/b/d/c"
+  "a/c/b/d"
+)
+
+// 可以编写rule
+rule {
+}
+
+```
+
+### 其他
+
+1. PL会自动侦测循环import，循环import会报错。
+2. 其次，递归import不影响模块的限定名字
+	1. 比如有个模块a，b import a
+	2. c 也import 了a
+	3. 入口程序import a，b，c
+	4. 实际上a只会被import一次，并且他的模块限定名为其模块内部定义的模块限定名
+
+
+3. PL的模块实现类似C/C++，不同程序import同一个module会多次编译
+	1. PL内部的符号解析尽量使用了静态方案，导致PL必须要知道所有的代码才能编译正确
+	2. 除非符号是dynamic，否则PL的符号查询都是数组索引，不涉及map/hash查询
