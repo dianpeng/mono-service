@@ -1,11 +1,5 @@
-config service {
-  .name = "null";
-  .router = "[GET,POST]/xxx";
-
-  application event(
-    "application",
-    "this is the value"
-  );
+global {
+  x = http::get("https://www.tmall.com").body:string();
 }
 
 session {
@@ -15,47 +9,36 @@ session {
   ALOHA=0;
 }
 
+config service {
+  .name = "null";
+  .router = "[GET,POST]/xxx";
+
+  application event(
+    "application",
+    "this is the value"
+  );
+
+  response event(
+    "response"
+  );
+}
+
 fn HelloWorld() {
   return "hello world";
 }
 
 rule application {
-  println("This is application: ", $);
-  let time = benchmark(
-    fn() {
-      for let k = 0; k < 100000; k++ {
-      }
-    }
-  );
-  println("time: ", time);
 }
 
-rule xxx => {
-  response.status = 302;
-  response.body = "Hello World";
-}
-
-rule yyy => {
-  let data = response.body.stream:cacheString();
-  println("response: ", data);
-}
-
-rule response => {
-  let proxy_url = request.header["x-proxy-url"];
-  let list_of_url = str::split(proxy_url, ';');
-  body => "{{c:to_string()}}\n{{HelloWorld()}}\n\n\n";
-  status => c;
-  println("Hello World", c, a, b);
-}
-
-rule error => {
-  dprint(phase, error);
-}
-
-rule "aloha" {
-  if ALOHA < 10 {
-    println("ALOHA");
-    ALOHA++;
-    emit aloha;
+rule response {
+  let resp = http::get("https://www.tmall.com");
+  response.status = resp.status;
+  response.header:set("server", resp.header.server);
+  response.header:set("via", resp.header.via);
+  let i = 0;
+  for let _, _ = resp.header {
+    i++;
   }
+  assert::yes(i >= 10);
+  response.body = resp.body;
 }
