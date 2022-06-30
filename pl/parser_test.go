@@ -15,18 +15,18 @@ func dumpProg(x *Module) {
 }
 
 func verifyP(code string) {
-  p := newParser(code)
-  prog, err := p.parse()
-  if err != nil {
-    fmt.Printf("%s", err.Error())
-    return
-  }
-  dumpProg(prog)
+	p := newParser(code, nil)
+	prog, err := p.parse()
+	if err != nil {
+		fmt.Printf("%s", err.Error())
+		return
+	}
+	dumpProg(prog)
 }
 
 func Test(t *testing.T) {
-  verifyP("f{v=if 0{;;")
-  verifyP("```0\n\x8c\x8c\x8c000\n0```")
+	verifyP("f{v=if 0{;;")
+	verifyP("```0\n\x8c\x8c\x8c000\n0```")
 }
 
 func TestExpr(t *testing.T) {
@@ -47,7 +47,7 @@ p {
   let _10 = _9 < 3;
   let _11 = _10 <= 20;
 }
-`)
+`, nil)
 		prog, err := p.parse()
 		if err != nil {
 			fmt.Printf("%s", err.Error())
@@ -64,7 +64,7 @@ pppp {
   let b = true || 10;
   let c = (a && true) || 10;
 }
-`)
+`, nil)
 		prog, err := p.parse()
 		if err != nil {
 			fmt.Printf("%s", err.Error())
@@ -96,7 +96,7 @@ pppp {
     a ** b + c;
   };
 }
-`)
+`, nil)
 		prog, err := p.parse()
 		if err != nil {
 			fmt.Printf("%s", err.Error())
@@ -129,7 +129,7 @@ module1 {
 
 module2 {}
 
-`)
+`, nil)
 
 		prog, err := p.parse()
 		if err != nil {
@@ -148,7 +148,7 @@ module_call{
   s4 = $.a[2].a;
   s5 = $[1][2][3];
 }
-`)
+`, nil)
 
 		prog, err := p.parse()
 		if err != nil {
@@ -167,7 +167,7 @@ module_call{
   s4 = a5.a[2].a;
   s5 = a5[1][2][3];
 }
-`)
+`, nil)
 
 		prog, err := p.parse()
 		if err != nil {
@@ -187,7 +187,7 @@ module_call{
   call3 = c3(c4(), c5.a[1].c.d, $);
   call4 = c4(c10(c11(), 10)).a[1].cc;
 }
-`)
+`, nil)
 
 		prog, err := p.parse()
 		if err != nil {
@@ -211,7 +211,7 @@ module1 {
   str6 = '{{eval(a, 10)}}';
   str7 = '{{eval(a, 10)}}xxxx';
 }
-`)
+`, nil)
 
 		prog, err := p.parse()
 		if err != nil {
@@ -228,7 +228,7 @@ module1{
   str2 = '{{{';
   str3 = '{{{{';
 }
-`)
+`, nil)
 
 		prog, err := p.parse()
 		if err != nil {

@@ -3,6 +3,7 @@ package pl
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"strings"
 
 	"github.com/dianpeng/mono-service/util"
@@ -252,12 +253,16 @@ type parser struct {
 	// intermediate results
 	modModName    string
 	modImportPath string
+
+	// helpers
+	fs fs.FS
 }
 
-func newParser(input string) *parser {
+func newParser(input string, fs fs.FS) *parser {
 	return &parser{
 		l:      newLexer(input),
 		module: newModule(),
+		fs:     fs,
 	}
 }
 
@@ -746,6 +751,19 @@ func (p *parser) importLoop() error {
 	return nil
 }
 
+func (p *parser) readFile(path string) (string, error) {
+	if p.fs != nil {
+		x, err := fs.ReadFile(p.fs, p.modImportPath)
+		if err != nil {
+			return "", err
+		} else {
+			return string(x), nil
+		}
+	} else {
+		return util.LoadFile(path)
+	}
+}
+
 func (p *parser) doImport() error {
 	// try to check whether we have a cycle
 	if err := p.importLoop(); err != nil {
@@ -759,7 +777,7 @@ func (p *parser) doImport() error {
 	}
 
 	// now start to perform the import operation
-	data, err := util.LoadFile(p.modImportPath)
+	data, err := p.readFile(p.modImportPath)
 	if err != nil {
 		return p.errf("cannot load import file from path %s: %s", p.modImportPath, err.Error())
 	}
@@ -3312,11 +3330,11 @@ func (p *parser) patchAllCall() {
 }
 
 const (
-  suffixUnknown = iota
+	suffixUnknown = iota
 	suffixDot
 	suffixIndex
 	suffixCall
-  suffixMethod
+	suffixMethod
 )
 
 func (p *parser) parseSuffixImpl(prog *program, lastType *int) error {
@@ -3738,7 +3756,7 @@ const (
 func (p *parser) parseStrInterpolationExpr(strV string, offset int, prog *program) (int, error) {
 	// we create a new parser here just to parse the interpolation part in the
 	// string
-	pp := newParser(strV[offset:])
+	pp := newParser(strV[offset:], p.fs)
 
 	// duplicate parent parser's states, FIXME(dpeng): make the following function
 	// into a separate function to allow derived parser from parent parser

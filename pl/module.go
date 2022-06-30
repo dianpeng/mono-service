@@ -3,6 +3,7 @@ package pl
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"strings"
 	"sync"
 )
@@ -205,8 +206,8 @@ func (p *Module) Dump() string {
 }
 
 // Compile the input string into a Module object
-func CompileModule(module string) (*Module, error) {
-	p := newParser(module)
+func CompileModule(module string, fs fs.FS) (*Module, error) {
+	p := newParser(module, fs)
 	po, err := p.parse()
 	if err != nil {
 		return nil, err
@@ -214,8 +215,8 @@ func CompileModule(module string) (*Module, error) {
 	return po, nil
 }
 
-func CompileModuleAsExpression(expr string) (*Module, error) {
-	p := newParser(expr)
+func CompileModuleAsExpression(expr string, fs fs.FS) (*Module, error) {
+	p := newParser(expr, fs)
 	po, err := p.parseExpression()
 	if err != nil {
 		return nil, err

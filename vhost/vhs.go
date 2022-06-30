@@ -1,4 +1,4 @@
-package server
+package vhost
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ type vHS struct {
 	factory     *framework.ServiceFactory
 	module      *pl.Module
 	config      *vHSConfig
-	vhost       *vhost
+	vhost       *VHost
 	servicePool servicePool
 }
 
@@ -28,7 +28,7 @@ func (s *vHS) getServiceHandler() (*serviceHandler, error) {
 	}
 }
 
-func newvHS(vhost *vhost,
+func newvHS(vhost *VHost,
 	factory *framework.ServiceFactory,
 	config *vHSConfig,
 	p *pl.Module,

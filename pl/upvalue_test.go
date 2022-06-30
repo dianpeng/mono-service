@@ -30,7 +30,7 @@ func runWithResult(code string) (Val, bool, *Module) {
 			return nil
 		})
 
-	module, err := CompileModule(code)
+	module, err := CompileModule(code, nil)
 
 	// fmt.Printf(":code\n%s", module.Dump())
 

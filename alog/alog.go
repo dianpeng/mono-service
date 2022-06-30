@@ -63,7 +63,7 @@ type HttpResponseSummary interface {
 
 type VHostInformation interface {
 	VHostName() string
-	VHostEndpoint() string
+	Listener() string
 }
 
 type SessionInfo interface {

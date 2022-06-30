@@ -1,4 +1,4 @@
-package server
+package vhost
 
 import (
 	"fmt"
@@ -250,8 +250,8 @@ func (s *serviceHandler) VHostName() string {
 	return s.vhs.vhost.Config.Name
 }
 
-func (s *serviceHandler) VHostEndpoint() string {
-	return s.vhs.vhost.HttpServer.Addr
+func (s *serviceHandler) Listener() string {
+	return s.vhs.vhost.Config.Listener
 }
 
 // interface for alog.ServiceInfo

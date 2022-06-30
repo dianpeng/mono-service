@@ -35,7 +35,7 @@ func test(code string) (Val, bool) {
 			return nil
 		})
 
-	module, err := CompileModule(code)
+	module, err := CompileModule(code, nil)
 
 	// fmt.Printf(":code\n%s", module.Dump())
 
@@ -688,7 +688,7 @@ mm => {
 
   act_map1 => {'a': a};
   act_list1 => [1, true, 3.0, a, false, null, []];
-}`)
+}`, nil)
 
 		if err != nil {
 			fmt.Printf(":module %s", err.Error())
@@ -816,7 +816,7 @@ mm {
       }
     }
   };
-}`)
+}`, nil)
 
 		if err != nil {
 			fmt.Printf(":module %s", err.Error())
@@ -950,7 +950,8 @@ func TestStrInterpo(t *testing.T) {
 
   v1 => "aa{{var1}}bb";
   v2 => "aa{{var2}},{{a}},{{abs(-100)}}";
-}`)
+}`, nil)
+
 		if err != nil {
 			fmt.Printf(":module %s", err.Error())
 		}
@@ -1009,7 +1010,7 @@ func TestLocal(t *testing.T) {
   v4 => var4[2].a[1];
   v5 => var5;
   v6 => var6;
-}`)
+}`, nil)
 
 		if err != nil {
 			fmt.Printf(":module %s", err.Error())
@@ -1831,7 +1832,7 @@ test {
 }
 `
 
-	module, err := CompileModule(code)
+	module, err := CompileModule(code, nil)
 
 	// fmt.Printf(":code\n%s", module.Dump())
 

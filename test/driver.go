@@ -121,7 +121,7 @@ func runAllTestFile(path string) (testResult, error) {
 		}
 		t.total++
 
-		p, err := pl.CompileModule(string(data))
+		p, err := pl.CompileModule(string(data), nil)
 		if err != nil {
 			fmt.Printf(">> Compile: %s\n", err.Error())
 			t.compileFail++

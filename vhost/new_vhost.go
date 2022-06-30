@@ -1,13 +1,12 @@
-package server
+package vhost
 
 import (
 	"fmt"
 	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/hrouter"
 	"github.com/dianpeng/mono-service/pl"
+	"io/fs"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -21,15 +20,14 @@ func (c *constHttpClientFactory) GetHttpClient(url string) (hpl.HttpClient, erro
 	}, nil
 }
 
-func initmodule(x string, config pl.EvalConfig) (*pl.Module, error) {
-	p, err := pl.CompileModule(x)
+func initmodule(x string, config pl.EvalConfig, fs fs.FS) (*pl.Module, error) {
+	p, err := pl.CompileModule(x, fs)
 	if err != nil {
 		return nil, err
 	}
 
 	session := &constHttpClientFactory{}
 	hpl := hpl.NewHpl()
-
 	hpl.SetModule(p)
 
 	if err := hpl.OnGlobal(session); err != nil {
@@ -43,7 +41,7 @@ func initmodule(x string, config pl.EvalConfig) (*pl.Module, error) {
 	return p, nil
 }
 
-func wrapE(
+func wrapErr(
 	context string,
 	phase string,
 	path string,
@@ -61,21 +59,22 @@ func wrapE(
 
 func initVHost(
 	path string,
-) (*vhost, error) {
+	fsp fs.FS,
+) (*VHost, error) {
 
-	vhostSource, err := os.ReadFile(path)
+	vhostSource, err := fs.ReadFile(fsp, path)
 	if err != nil {
 		return nil, err
 	}
 
-	vhostConfig := &vhostConfig{}
-	vhostConfigBuilder := &vhostConfigBuilder{
+	vhostConfig := &VHostConfig{}
+	vhostConfigBuilder := &VHostConfigBuilder{
 		config: vhostConfig,
 	}
 
-	p, err := initmodule(string(vhostSource), vhostConfigBuilder)
+	p, err := initmodule(string(vhostSource), vhostConfigBuilder, fsp)
 	if err != nil {
-		return nil, wrapE(
+		return nil, wrapErr(
 			"virtual_host",
 			"initialization",
 			path,
@@ -88,9 +87,11 @@ func initVHost(
 
 func initVHostSVC(
 	path string,
-	vhost *vhost,
+	vhost *VHost,
+	fsp fs.FS,
 ) (*vHS, error) {
-	src, err := os.ReadFile(path)
+
+	src, err := fs.ReadFile(fsp, path)
 	if err != nil {
 		return nil, err
 	}
@@ -103,9 +104,10 @@ func initVHostSVC(
 	p, err := initmodule(
 		string(src),
 		builder,
+		fsp,
 	)
 	if err != nil {
-		return nil, wrapE(
+		return nil, wrapErr(
 			"service",
 			"initialization",
 			path,
@@ -115,7 +117,7 @@ func initVHostSVC(
 
 	fac, err := cfg.Compose()
 	if err != nil {
-		return nil, wrapE(
+		return nil, wrapErr(
 			"service",
 			"middleware composition",
 			path,
@@ -147,45 +149,24 @@ func doRoute(
 	)
 }
 
-func createVHost(
-	vhostPath string, // main vhost file path
-) (*vhost, error) {
-	vhost, err := initVHost(vhostPath)
+// Create the full VHOST object from the manifest object
+func CreateVHost(
+	manifest *Manifest,
+) (*VHost, error) {
+
+	vhost, err := initVHost(manifest.Main, manifest.FS)
 	if err != nil {
 		return nil, err
 	}
 
-	dir := filepath.Dir(vhostPath)
-
-	// now start to walk the directory to find out all the service code definition
-	err = filepath.Walk(dir,
-		func(path string, info os.FileInfo, e error) error {
-			if e != nil {
-				return e
-			}
-
-			if path == vhostPath {
-				return nil
-			}
-
-			if info.IsDir() {
-				return nil
-			}
-
-			// only try file with extension of .pl
-			if filepath.Ext(path) != ".pl" {
-				return nil
-			}
-
-			svc, err := initVHostSVC(
-				path,
-				vhost,
-			)
-			if err != nil {
-				return err
-			}
-
-			// now, populate the router part of the vhs
+	for _, cfg := range manifest.ServiceFile {
+		if svc, err := initVHostSVC(
+			cfg,
+			vhost,
+			manifest.FS,
+		); err != nil {
+			return nil, err
+		} else {
 			_, err = newRouter(
 				svc.config.Router,
 				vhost.Router,
@@ -194,17 +175,10 @@ func createVHost(
 				},
 			)
 			if err != nil {
-				return err
+				return nil, err
 			}
-
-			// finally insert the service into the active service list
 			vhost.ServiceList = append(vhost.ServiceList, svc)
-			return nil
-		},
-	)
-
-	if err != nil {
-		return nil, err
+		}
 	}
 
 	return vhost, nil

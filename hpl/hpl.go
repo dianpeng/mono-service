@@ -2,6 +2,7 @@ package hpl
 
 import (
 	"fmt"
+	"io/fs"
 	"net/http"
 	"time"
 
@@ -76,8 +77,8 @@ func NewHplWithModule(module *pl.Module) *Hpl {
 	return p
 }
 
-func (h *Hpl) CompileModule(input string) error {
-	p, err := pl.CompileModule(input)
+func (h *Hpl) CompileModule(input string, fs fs.FS) error {
+	p, err := pl.CompileModule(input, fs)
 	if err != nil {
 		return err
 	}
