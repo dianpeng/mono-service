@@ -16,6 +16,10 @@ func newStrIter(s string) Iter {
 	}
 }
 
+func (s *striter) SetUp(*Evaluator, []Val) error {
+	return nil
+}
+
 func (s *striter) Has() bool {
 	return s.cnt < len(s.r)
 }

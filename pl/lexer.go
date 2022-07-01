@@ -115,6 +115,10 @@ const (
 	tkRule
 	tkEmit
 
+	// generator
+	tkIterator
+	tkYield
+
 	// intrinsic keywords, used for special builtin functionalities
 	tkTemplate
 
@@ -309,6 +313,12 @@ func getTokenName(tk int) string {
 		return "fn"
 	case tkRule:
 		return "rule"
+
+	case tkIterator:
+		return "iter"
+	case tkYield:
+		return "yield"
+
 	case tkEmit:
 		return "emit"
 	case tkReturn:
@@ -652,9 +662,13 @@ var lexerkeyword = map[string]int{
 	"return": tkReturn,
 
 	/* reserve 2 keywords for function definition, this may not be a good idea though */
-	"fn":       tkFunction,
-	"function": tkFunction,
+	"fn": tkFunction,
 
+	/* generator */
+	"iter":  tkIterator,
+	"yield": tkYield,
+
+	/* rule */
 	"rule": tkRule,
 	"emit": tkEmit,
 

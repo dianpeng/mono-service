@@ -25,6 +25,7 @@ const (
 
 const (
 	entryFunc = iota
+	entryIter
 	entryRule
 	entryVar
 	entryExpr
@@ -203,6 +204,12 @@ func (s *lexicalScope) findConst(x string) int {
 	return s.find(x)
 }
 
+const (
+	unboundCallNormal = iota
+	unboundCallPipe
+	unboundCallIterSetUp
+)
+
 // simulate linker to resolve call types after all the code has been parsed
 type callentry struct {
 	entryPos int
@@ -211,6 +218,7 @@ type callentry struct {
 	prog     *program
 	arg      int
 	symbol   string
+	ctype    int
 }
 
 type modParser struct {
@@ -365,6 +373,10 @@ func (p *parser) isNormal() bool {
 
 func (p *parser) isEntryFunc() bool {
 	return p.stbl.eType == entryFunc
+}
+
+func (p *parser) isEntryIter() bool {
+	return p.stbl.eType == entryIter
 }
 
 func (p *parser) isEntryRule() bool {
@@ -549,7 +561,7 @@ func (p *parser) resolveSymbol(xx string, forWrite bool) (int, int) {
 
 	if !forWrite {
 		// finding out the global function with matching symbol name
-		funcIdx := p.module.getFunctionIndex(xx)
+		funcIdx := p.module.getFnIndex(xx)
 		if funcIdx != -1 {
 			return symFunc, funcIdx
 		}
@@ -936,6 +948,13 @@ LOOP:
 			}
 			break
 
+		case tkIterator:
+			p.l.next()
+			if _, err := p.parseIterator(false); err != nil {
+				return err
+			}
+			break
+
 		case tkError:
 			return p.l.toError()
 
@@ -1002,6 +1021,13 @@ LOOP:
 			// eat the fn token, parseFunction expect after the fn keyword
 			p.l.next()
 			if _, err := p.parseFunction(false); err != nil {
+				return err
+			}
+			break
+
+		case tkIterator:
+			p.l.next()
+			if _, err := p.parseIterator(false); err != nil {
 				return err
 			}
 			break
@@ -1142,23 +1168,7 @@ func (p *parser) parseVarScope(rulename string,
 	return prog, nlist, nil
 }
 
-// checking function name collision
-func (p *parser) functionExists(
-	fname string,
-) bool {
-	offset := 0
-	if p.parsingMod() {
-		offset = p.curMod().fIndex
-	}
-	for i := offset; i < len(p.module.fn); i++ {
-		if p.module.fn[i].name == fname {
-			return true
-		}
-	}
-	return false
-}
-
-func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
+func (p *parser) getCallName(anony bool) (string, error) {
 	funcName := ""
 
 	// if it is not an anonymous function
@@ -1172,8 +1182,23 @@ func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 		funcName = p.module.nextAnonymousFuncName()
 	}
 
-	if p.functionExists(funcName) {
-		return "", p.errf("function %s is already existed", funcName)
+	return funcName, nil
+}
+
+func (p *parser) fnExists(
+	fname string,
+) bool {
+	return p.module.getFn(fname) != nil
+}
+
+func (p *parser) parseFunction(anony bool) (string, error) {
+	funcName, err := p.getCallName(anony)
+	if err != nil {
+		return "", err
+	}
+
+	if p.fnExists(funcName) {
+		return "", p.errf("iterator/function %s is already existed", funcName)
 	}
 
 	prog := newProgram(p.module, funcName, progFunc)
@@ -1182,19 +1207,21 @@ func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 		p.leaveScope()
 	}()
 
-	localR := prog.patch(p.l)
 	p.module.fn = append(p.module.fn, prog)
-	defer func() {
-		if the_error != nil {
-			sz := len(p.module.fn)
-			p.module.fn = p.module.fn[:sz-1]
-		}
-	}()
+
+	if err := p.parseFunctionRest(prog); err != nil {
+		return "", err
+	}
+
+	return funcName, err
+}
+
+func (p *parser) parseFunctionRest(prog *program) error {
+	localR := prog.patch(p.l)
 
 	// (0) Parsing function's argument list section
-
 	if !p.l.expectCurrent(tkLPar) {
-		return "", p.l.toError()
+		return p.l.toError()
 	}
 
 	// parsing the function's argument and just treat them as
@@ -1202,15 +1229,15 @@ func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 		argcnt := 0
 		for {
 			if !p.l.expectCurrent(tkId) {
-				return "", p.l.toError()
+				return p.l.toError()
 			}
 			if p.l.valueText == varPlaceholder {
-				return "", p.err("argument name cannot be defined as placeholder")
+				return p.err("argument name cannot be defined as placeholder")
 			}
 
 			idx := p.defLocalVar(p.l.valueText)
 			if idx == symError {
-				return "", p.err("argument name duplicated")
+				return p.err("argument name duplicated")
 			}
 			p.l.next()
 			argcnt++
@@ -1220,7 +1247,7 @@ func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 			} else if p.l.token == tkRPar {
 				break
 			} else {
-				return "", p.err("expect a ')' or ',' inside of function argument list")
+				return p.err("expect a ')' or ',' inside of function argument list")
 			}
 		}
 
@@ -1241,13 +1268,13 @@ func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 		p.l.next()
 		// one liner function will have to return an expression
 		if err := p.parseExpr(prog); err != nil {
-			return "", err
+			return err
 		}
 		prog.emit0(p.l, bcReturn)
 	} else {
 		// now parsing the function body
 		if err := p.parseBody(prog); err != nil {
-			return "", err
+			return err
 		}
 		// always generate a return nil at the end of the function
 		prog.emit0(p.l, bcLoadNull)
@@ -1258,7 +1285,58 @@ func (p *parser) parseFunction(anony bool) (_ string, the_error error) {
 	prog.localSize = p.stbl.topMaxLocal() - 1
 	prog.emit1At(p.l, localR, bcReserveLocal, p.stbl.topMaxLocal()-1)
 
-	return funcName, nil
+	return nil
+}
+
+// Iterator -------------------------------------------------------------------
+// The parser will generate a generator, ie stackless coroutine, when user
+// specify the call as generator. Inside of the generator, user is capable of
+// using one more construct to return value, ie the yield keyword. The yield
+// will suspend the execution of current generator until the next call. Return
+// is still available which simply terminates the execution of the call.
+// The generator will be adapted as a iterator protocol as well. Notes, the
+// generator's representation in our framework is really just yet another
+// iterator.
+// Notes, the generator is essentially yet another function stored inside of the
+// module's fn field. But it does not impact how function works
+func (p *parser) parseIterator(anony bool) (string, error) {
+	iterName, err := p.getCallName(anony)
+	if err != nil {
+		return "", err
+	}
+
+	if p.fnExists(iterName) {
+		return "", p.errf("iterator/function %s is already existed", iterName)
+	}
+
+	prog := newProgram(p.module, iterName, progIter)
+	p.enterScopeTop(entryIter, prog)
+	defer func() {
+		p.leaveScope()
+	}()
+
+	p.module.fn = append(p.module.fn, prog)
+
+	if err := p.parseFunctionRest(prog); err != nil {
+		return "", err
+	}
+	return iterName, err
+}
+
+// parsing iterator setup expression, ie iter a::b::c::iter, 100
+func (p *parser) parseIteratorSetUp(prog *program) error {
+	if !p.l.expectCurrent(tkId) {
+		return p.l.toError()
+	}
+
+	name := p.l.valueText
+	p.l.next()
+
+	if mname, err := p.parseModSymbol(name); err != nil {
+		return err
+	} else {
+		return p.parseUnboundCall(prog, mname, 0, unboundCallIterSetUp)
+	}
 }
 
 func (p *parser) parseRule() error {
@@ -1343,19 +1421,32 @@ func (p *parser) parseRule() error {
 // 6) a session variable suffix expression
 
 type lexeme struct {
-	token int
-	ival  int64
-	rval  float64
-	sval  string
+	cursor int
+	token  int
+	ival   int64
+	rval   float64
+	sval   string
+	dflag  bool
 }
 
 func (p *parser) lexeme() lexeme {
 	return lexeme{
-		token: p.l.token,
-		ival:  p.l.valueInt,
-		rval:  p.l.valueReal,
-		sval:  p.l.valueText,
+		cursor: p.l.cursor,
+		token:  p.l.token,
+		ival:   p.l.valueInt,
+		rval:   p.l.valueReal,
+		sval:   p.l.valueText,
+		dflag:  p.l.allowDRBra,
 	}
+}
+
+func (p *parser) restore(l lexeme) {
+	p.l.cursor = l.cursor
+	p.l.token = l.token
+	p.l.valueInt = l.ival
+	p.l.valueReal = l.rval
+	p.l.valueText = l.sval
+	p.l.allowDRBra = l.dflag
 }
 
 func (p *parser) parseSymbolAssign(prog *program,
@@ -1974,9 +2065,21 @@ func (p *parser) parseVarDecl(prog *program, symt int) error {
 	return nil
 }
 
+func (p *parser) parseYield(prog *program) error {
+	if !p.isEntryIter() {
+		return p.err("yield is only allowed inside of iterator body")
+	}
+	p.l.next()
+	if err := p.parseExpr(prog); err != nil {
+		return err
+	}
+	prog.emit0(p.l, bcYield)
+	return nil
+}
+
 func (p *parser) parseReturn(prog *program) error {
-	if !p.isEntryFunc() {
-		return p.err("return is only allowed inside of function body")
+	if !p.isEntryFunc() && !p.isEntryIter() {
+		return p.err("return is only allowed inside of function or iterator body")
 	}
 	p.l.next()
 	if err := p.parseExpr(prog); err != nil {
@@ -2024,21 +2127,40 @@ func (p *parser) parseIteratorLoop(prog *program, key string, bodyGen func(*prog
 		return p.l.toError()
 	}
 	val := p.l.valueText
-
-	// 2. parsing the iterator expression
-	if !p.l.expect(tkAssign) {
-		return p.l.toError()
-	}
 	p.l.next()
 
-	if err := p.parseExpr(prog); err != nil {
-		return err
+	// 2. parsing iterator expression
+	if p.l.token == tkAssign {
+		p.l.next()
+
+		// we need to hack the lexer here to lookahead to find out whether we have
+		// a special iterator pattern ie iter symbol, if so we know that we have
+		// a special iterator setup, otherwise no
+
+		if p.l.token == tkIterator {
+			save := p.lexeme()
+			ntk := p.l.next()
+			if ntk == tkId {
+				if err := p.parseIteratorSetUp(prog); err != nil {
+					return err
+				}
+
+				goto BODY
+			} else {
+				p.restore(save)
+			}
+		}
+		if err := p.parseExpr(prog); err != nil {
+			return err
+		}
+		prog.emit0(p.l, bcNewIterator)
+	} else {
+		return p.err("expect an '=' or '=>' for iterator expression")
 	}
 
-	// 3. Convert the TOS into iterator value
-	prog.emit0(p.l, bcNewIterator)
+BODY:
 
-	// 4. Enter into the loop body, the key value local variable will be swapped
+	// 3. Enter into the loop body, the key value local variable will be swapped
 	//    into the loop body and the iterator protocol will be materialized inside
 	//    of the loop body
 	p.enterLoopScope()
@@ -2050,7 +2172,7 @@ func (p *parser) parseIteratorLoop(prog *program, key string, bodyGen func(*prog
 		return p.err("duplicate local variable name in iterator style loop")
 	}
 
-	// 4.1 Perform the iterator testing, whether we should done for the loop or
+	// 3.1 Perform the iterator testing, whether we should done for the loop or
 	//     not
 	prog.emit0(p.l, bcHasIterator)
 
@@ -2068,7 +2190,7 @@ func (p *parser) parseIteratorLoop(prog *program, key string, bodyGen func(*prog
 	prog.emit1(p.l, bcStoreLocal, valIdx)
 	prog.emit1(p.l, bcStoreLocal, keyIdx)
 
-	// 4.2 loop body parsing
+	// 3.2 loop body parsing
 	if err := bodyGen(prog); err != nil {
 		return err
 	}
@@ -2076,7 +2198,7 @@ func (p *parser) parseIteratorLoop(prog *program, key string, bodyGen func(*prog
 	// patch continue to jump at the end of the loop
 	p.patchContinue(prog)
 
-	// 4.3 loop tail check, if the iterator can move forward, then just move forwad
+	// 3.3 loop tail check, if the iterator can move forward, then just move forwad
 	//     and return true, otherwise return false
 	prog.emit0(p.l, bcNextIterator)
 	prog.emit1(p.l, bcJtrue, headerPos)
@@ -2088,7 +2210,7 @@ func (p *parser) parseIteratorLoop(prog *program, key string, bodyGen func(*prog
 	// patch all the break to jump here which cleans up the loop stack
 	p.patchBreak(prog)
 
-	// 4.4 now we are out of the loop body, pop the iterator left on the stack
+	// 3.4 now we are out of the loop body, pop the iterator left on the stack
 	prog.emit0(p.l, bcPop)
 
 	// pop the lexical scope out of the stack
@@ -2462,6 +2584,12 @@ func (p *parser) parseBodyStmt(prog *program) (bool, error) {
 
 	case tkReturn:
 		if err := p.parseReturn(prog); err != nil {
+			return false, err
+		}
+		break
+
+	case tkYield:
+		if err := p.parseYield(prog); err != nil {
 			return false, err
 		}
 		break
@@ -2989,6 +3117,24 @@ func (p *parser) parsePrimary(prog *program, l lexeme) error {
 		prog.emit1(p.l, bcNewClosure, scallIdx)
 		break
 
+	case tkIterator:
+		/**
+		 * iterator keyword has multiple meaning here
+		 * grammerly wise, it can
+		 *
+		 * 1) initialize a anonymouse iterator
+		 * 2) initialize a iterator creation operation, ie new an iterator
+		 *
+		 */
+		iterName, err := p.parseIterator(true)
+		if err != nil {
+			return err
+		}
+		siterIdx := p.module.getIteratorIndex(iterName)
+		must(siterIdx != -1, "the iterator(anonymous) must be existed")
+		prog.emit1(p.l, bcLoadIterator, siterIdx)
+		break
+
 	case tkRegex:
 		idx, err := prog.addRegexp(l.sval)
 		if err != nil {
@@ -3216,7 +3362,7 @@ func (p *parser) parseModSymbol(
 func (p *parser) parseUnboundCall(prog *program,
 	modName modSymbol,
 	argAdd int,
-	isPipe bool,
+	ctype int,
 ) error {
 	name := modName.fullname()
 
@@ -3224,14 +3370,14 @@ func (p *parser) parseUnboundCall(prog *program,
 	swapPos := -1
 
 	// if it is a pipecall, then we should swap the entry and its previous args
-	if isPipe {
+	if ctype == unboundCallPipe {
 		swapPos = prog.patch(p.l)
 	}
 
 	// function call argument
 	pcnt := 0
 
-	if !isPipe || (isPipe && p.l.token == tkLPar) {
+	if ctype != unboundCallPipe || (ctype == unboundCallPipe && p.l.token == tkLPar) {
 		pc, err := p.parseCallArgs(prog)
 		if err != nil {
 			return err
@@ -3245,6 +3391,8 @@ func (p *parser) parseUnboundCall(prog *program,
 		false,
 	)
 
+	useSetUpIter := false
+
 	switch symtype {
 	case symSession:
 		prog.emit1At(p.l, entryIndex, bcLoadSession, symindex)
@@ -3255,7 +3403,12 @@ func (p *parser) parseUnboundCall(prog *program,
 		break
 
 	case symFunc:
-		prog.emit1At(p.l, entryIndex, bcNewClosure, symindex)
+		if ctype == unboundCallIterSetUp {
+			useSetUpIter = true
+			prog.emit1At(p.l, entryIndex, bcLoadIterator, symindex)
+		} else {
+			prog.emit1At(p.l, entryIndex, bcNewClosure, symindex)
+		}
 		break
 
 	case symUpval:
@@ -3276,6 +3429,7 @@ func (p *parser) parseUnboundCall(prog *program,
 			prog:     prog,
 			arg:      pcnt + argAdd,
 			symbol:   name,
+			ctype:    ctype,
 		})
 		return nil
 	}
@@ -3284,8 +3438,11 @@ func (p *parser) parseUnboundCall(prog *program,
 		prog.emit0At(p.l, swapPos, bcSwap)
 	}
 
-	// emit the final vcall
-	prog.emit1(p.l, bcVCall, pcnt+argAdd)
+	if useSetUpIter {
+		prog.emit1(p.l, bcSetUpIterator, pcnt+argAdd)
+	} else {
+		prog.emit1(p.l, bcVCall, pcnt+argAdd)
+	}
 	return nil
 }
 
@@ -3313,11 +3470,18 @@ func (p *parser) patchAllCall() {
 
 			e.prog.emit1At(p.l, e.callPos, bcICall, e.arg)
 		} else {
-			scallIdx := p.module.getFunctionIndex(e.symbol)
+			// Since iterator and function share the same namespace, so if user tries
+			// to invoke an iterator, it should cause an error
+			scallIdx := p.module.getFnIndex(e.symbol)
 			if scallIdx != -1 {
-				idx := e.prog.addInt(int64(scallIdx))
-				e.prog.emit1At(p.l, e.entryPos, bcLoadInt, idx)
-				e.prog.emit1At(p.l, e.callPos, bcSCall, e.arg)
+				if e.ctype == unboundCallIterSetUp {
+					e.prog.emit1At(p.l, e.entryPos, bcLoadIterator, scallIdx)
+					e.prog.emit1At(p.l, e.callPos, bcSetUpIterator, e.arg)
+				} else {
+					idx := e.prog.addInt(int64(scallIdx))
+					e.prog.emit1At(p.l, e.entryPos, bcLoadInt, idx)
+					e.prog.emit1At(p.l, e.callPos, bcSCall, e.arg)
+				}
 			} else {
 				// okay, the variable here is unknow to us, now let's just issue it
 				// as dynamic variable loading and then call on this dynamic variable
@@ -3408,7 +3572,7 @@ SUFFIX:
 			if err != nil {
 				return err
 			}
-			if err := p.parseUnboundCall(prog, mname, 1, true); err != nil {
+			if err := p.parseUnboundCall(prog, mname, 1, unboundCallPipe); err != nil {
 				return err
 			}
 			break
@@ -3423,6 +3587,46 @@ SUFFIX:
 func (p *parser) parseSuffix(prog *program) error {
 	var t int
 	return p.parseSuffixImpl(prog, &t)
+}
+
+func (p *parser) parseLoadSymbol(
+	prog *program,
+	name string,
+) error {
+	// Resolve the identifier here, notes the symbol can be following types
+	// 1. session variable
+	// 2. local variable
+	// 3. dynmaic variable
+	symT, symIdx := p.resolveSymbol(name, false)
+	must(symIdx != symInvalidConst, "should never return invalid constant")
+
+	switch symT {
+	case symSession:
+		prog.emit1(p.l, bcLoadSession, symIdx)
+		break
+
+	case symFunc:
+		prog.emit1(p.l, bcNewClosure, symIdx)
+		break
+
+	case symLocal:
+		prog.emit1(p.l, bcLoadLocal, symIdx)
+		break
+
+	case symUpval:
+		prog.emit1(p.l, bcLoadUpvalue, symIdx)
+		break
+
+	case symGlobal:
+		prog.emit1(p.l, bcLoadGlobal, symIdx)
+		break
+
+	default:
+		prog.emit1(p.l, bcLoadVar, prog.addStr(name))
+		break
+	}
+
+	return nil
 }
 
 // any types of expression which is prefixed with an "ID" token
@@ -3443,7 +3647,7 @@ func (p *parser) parsePrefixExpr(prog *program, tk int, name string) error {
 		// identifier leading types
 		switch p.l.token {
 		case tkLPar:
-			if err := p.parseUnboundCall(prog, mname, 0, false); err != nil {
+			if err := p.parseUnboundCall(prog, mname, 0, unboundCallNormal); err != nil {
 				return err
 			}
 			break
@@ -3453,32 +3657,8 @@ func (p *parser) parsePrefixExpr(prog *program, tk int, name string) error {
 			// 1. session variable
 			// 2. local variable
 			// 3. dynmaic variable
-			symT, symIdx := p.resolveSymbol(name, false)
-			must(symIdx != symInvalidConst, "should never return invalid constant")
-
-			switch symT {
-			case symSession:
-				prog.emit1(p.l, bcLoadSession, symIdx)
-				break
-
-			case symFunc:
-				prog.emit1(p.l, bcNewClosure, symIdx)
-				break
-
-			case symLocal:
-				prog.emit1(p.l, bcLoadLocal, symIdx)
-				break
-
-			case symUpval:
-				prog.emit1(p.l, bcLoadUpvalue, symIdx)
-				break
-
-			case symGlobal:
-				prog.emit1(p.l, bcLoadGlobal, symIdx)
-
-			default:
-				prog.emit1(p.l, bcLoadVar, prog.addStr(name))
-				break
+			if err := p.parseLoadSymbol(prog, name); err != nil {
+				return err
 			}
 			break
 		}

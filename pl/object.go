@@ -103,6 +103,10 @@ type Closure interface {
 
 // Iterator interface, matching against the bytecode semantic
 type Iter interface {
+	// Set up the iterator, mostly is used for generator function. For native
+	// iterator the argument is almost always empty
+	SetUp(*Evaluator, []Val) error
+
 	// pure function, returns whether the current iterator is valid for deference
 	// or not.
 	Has() bool
@@ -519,6 +523,14 @@ func newValNFunc(
 	return Val{
 		Type:  ValClosure,
 		vData: nfunc,
+	}
+}
+
+func newValSIter(
+	siter *scriptIter) Val {
+	return Val{
+		Type:  ValIter,
+		vData: siter,
 	}
 }
 

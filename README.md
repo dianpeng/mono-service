@@ -1,17 +1,25 @@
 # Mono Service
 
-MonoService is a Http application server that can be used for different use cases.
-User can picture it as a busybox but for Web/Http application services.
-
-MonoService runtime tries to include as much common Web/Http business logic into
-a single binary as possible. Additionally, it exposes a highly confiurable and
-flexible way for user to customize it into any particular use cases. It can be
-used to setup a application server in minute. A quick leaner can extend its
-functionality reliably.
+MonoService is a new experimental Web/Http server which focus on providing
+opinioned programmable service. It bundles lots of builtin functions plus
+a design from scratched new programming language for gluing them together. User
+can picure MonoService as a runtime that happens to run just like web server.
 
 # Features
 
-## Modular Architecture
+## Feature Rich Web Server
+
+1. Hot reloading user's application
+2. Application pakage
+3. Rich metrics
+4. Zero Configuration
+  1. The scripting language can also be used for configuration
+5. Highly customizable
+  1. Use go to provide all middleware, plugins
+  2. Use scripting language to add new features quickly or glue the function to
+     form highly customized and flexible workflow
+
+## Highly Modular
 
 MonoService can be easily extending its functionality with its core APIs in Go.
 Although, there will be lots of builtin functions, many common use cases are
@@ -30,12 +38,46 @@ tied to the Http session and is visiable throughout one specific Http session.
 Other feature like, markdown/go template literal, regex literal, rule dispatching,
 etc ... Anyone who is familiar with C/Go/Rust style langauge can pick it up easily
 
+## Opionioned Framework
+
+MonoService categorize an web application as following way,
+
+1. Highest level is a *virtual host* object. A server name must be provided to
+   allow an http request comming in
+
+2. Each virtual host can have multiple services, each *service* is just a bunch
+   of logic, either via PL or Go, under a certain router
+
+3. Each *service* has 3 distinct phases for processing a certain HTTP request.
+
+   1. Request, which is a list of middleware forms a chain of responsibility and
+      modify/mutate the incomming requests along the road. For example, user
+      can use JWT/Oauth2 authentication middleware here.
+
+   2. Application. Once the request middleware phase is done, it enters a single
+      user selected application unit. An application is where the main logic
+      of services lies in. Typically user can just use Go to write its own
+      application if it is highly customized, or use a builtin Go application
+      if applicable.
+
+   3. After application done, a list of response middleware starts to generate
+      the http response. For example, user can use compression response
+      middleware here, or use other middleware to generate response header etc..
+
+4. The most cool feature of our service is that, during any processing stages
+   described above, user can use PL to emit an event to trigger a customized
+   scripting code to do anything. And each *Request*, *Application* or *Response*
+   can also be customize its own behavior with PL script. For example, any
+   modules configuration parameter can become dynamic function call of PL
+   script and evaluated for every http transaction. This is nearly impossible
+   to achieve in any existed Http/Web server. Basically due to PL and its
+   designed for HTTP transaction semantic, user can use PL it create any
+   static or dynamic workflow for every HTTP transaction.
+
 ## Multi Tenancy Awareness
 
-The MonoService runtime is desigened with multi tenancy in mind. The service
-exposed by each HTTP endpoint can be configured flexibly by configuration file.
-Additionally, each group of services been exposed can be groupped together to
-form a virtual host. A vhost is been used as an representation of tenancy.
+The MonoService runtime is desigened with multi tenancy in mind. Each virtual
+host object is entirely contained.
 
 # Configuration
 
@@ -44,43 +86,14 @@ form a virtual host. A vhost is been used as an representation of tenancy.
 See document for DSL features:
 
 [Policy Language](doc/pl.md)
-
-## Yaml
-
-In general the configuration is written as Yaml which is a standard way in
-Cloud Native environment. To address some limitation of yaml file, runtime extends
-the yaml with some customized tag. Notes, all customized tag should be written
-as 
-
-```
-!inc "./my-file.yaml"
-!inc_string "./my-string.txt"
-!env "PATH"
-!eval "http::do('http://www.cdn.com/example.yaml', 'GET')"
-```
-
-### inc path
-
-Includes a path specified yaml file and parsed as if the content is pasted at
-the exact position
-
-### inc_string path
-
-Includes a path specified file's content as string into the original yaml
-
-### env name
-
-Return environment variable with *name* specified
-
-### eval expression
-
-Evaluate a PL expression and return its result as string into the yaml
+[PL编程语言](doc/pl-cn.md)
 
 
-## Sample
+## Listeners
 
-User can check sample configuration located at sample/sample.yaml to start. 
+Runtime can be used to specify listener to be used by each application. The
+runtime is almost zero config. 
 
-## Status
+# Status
 
 The project is still in very early stage of development. Stay tunned :)

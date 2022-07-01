@@ -14,6 +14,10 @@ type PairIter struct {
 	cnt int
 }
 
+func (p *PairIter) SetUp(*Evaluator, []Val) error {
+	return nil
+}
+
 func (p *PairIter) Has() bool {
 	return p.cnt < 2
 }

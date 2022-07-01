@@ -161,6 +161,8 @@ const (
 
 	// native function, created by embedder or runtime
 	ftypeNFunc
+
+	ftypeSIter
 )
 
 func ftypename(x int) string {
@@ -273,7 +275,7 @@ func (ff *funcframe) isTop() bool {
 }
 
 func (ff *funcframe) isScript() bool {
-	return ff.prog != nil
+	return ff.prog != nil && ff.ftype != ftypeSIter
 }
 
 func (ff *funcframe) frameInfo() string {
@@ -832,6 +834,7 @@ type runresult struct {
 	prog *program
 	pc   int
 	e    error
+	y    bool
 }
 
 func rrErr(p *program, pc int, e error) runresult {
@@ -846,12 +849,30 @@ func rrErrf(p *program, pc int, format string, a ...interface{}) runresult {
 	return rrErr(p, pc, fmt.Errorf(format, a...))
 }
 
-func rrDone() runresult {
-	return runresult{}
+func rrDone(pc int) runresult {
+	return runresult{
+		pc: pc,
+		y:  false,
+	}
+}
+
+func rrYield(pc int) runresult {
+	return runresult{
+		pc: pc,
+		y:  true,
+	}
 }
 
 func (rr *runresult) isDone() bool {
-	return rr.e == nil
+	return !rr.y && rr.e == nil
+}
+
+func (rr *runresult) isYield() bool {
+	return rr.y && rr.e == nil
+}
+
+func (rr *runresult) isError() bool {
+	return rr.e != nil
 }
 
 func (e *Evaluator) runP(
@@ -1218,17 +1239,23 @@ FUNC:
 			unreachable("bcXCall")
 
 		case bcReturn:
+			ftype := e.curframe.ftype
+
 			rv := e.top0()
 			pc, prog = e.epilogue(rv, false)
 
-			if prog == nil {
-				return rrDone()
+			if prog == nil || ftype == ftypeSIter {
+				return rrDone(pc)
 			}
 
 			break
 
 		case bcNewClosure:
 			fn := prog.module.fn[bc.argument]
+			if fn.progtype != progFunc {
+				return rrErrf(prog, pc, "value must be function instead of iterator")
+			}
+
 			sfunc := newScriptFunc(fn)
 			upsfunc := e.curframe.sfunc()
 
@@ -1553,6 +1580,47 @@ FUNC:
 			e.push(NewValIter(itr))
 			break
 
+		case bcLoadIterator:
+			fn := module.fn[bc.argument]
+			if fn.progtype != progIter {
+				return rrErrf(prog, pc, "function cannot be loaded as iterator")
+			}
+
+			siter := newScriptIter(fn)
+			upsfunc := e.curframe.sfunc()
+
+			for _, uv := range fn.upvalue {
+				if uv.onStack {
+					siter.upvalue = append(siter.upvalue, e.Stack[e.localslot(uv.index)])
+				} else {
+					must(upsfunc != nil, "upvalue capture function not existed?")
+					siter.upvalue = append(siter.upvalue, upsfunc.upvalue[uv.index])
+				}
+			}
+
+			e.push(newValSIter(siter))
+			break
+
+		case bcSetUpIterator:
+			tos := e.topN(bc.argument)
+			if !tos.IsIter() {
+				return rrErrf(prog, pc, "value is not iterator, cannot use iter setup expression")
+			}
+
+			argStart := len(e.Stack) - bc.argument
+			argEnd := len(e.Stack)
+			arg := e.Stack[argStart:argEnd]
+
+			if err := tos.Iter().SetUp(e, arg); err != nil {
+				return rrErr(prog, pc, err)
+			}
+
+			// just pop the argument for iterator setup. Notes inside of iterator setup
+			// user is not allowed call back into the VM again
+			e.popN(bc.argument)
+
+			break
+
 		case bcHasIterator:
 			tos := e.top0()
 			must(tos.IsIter(), "must be iterator(has_iterator)")
@@ -1579,7 +1647,10 @@ FUNC:
 			break
 
 		case bcHalt:
-			return rrDone()
+			return rrDone(pc)
+
+		case bcYield:
+			return rrYield(pc + 1)
 
 		case bcEmit:
 			context := e.top0()
@@ -1707,11 +1778,12 @@ func (e *Evaluator) epilogue(v Val, isMethod bool) (int, *program) {
 	return pc, prog
 }
 
-func (e *Evaluator) closureProlog(fn Val, args []Val) {
+func (e *Evaluator) closurePrologue(fn Val, args []Val) {
 	var ftype int
 	var prog *program
+	var closure Closure
 
-	closure := fn.Closure()
+	closure = fn.Closure()
 	switch closure.Type() {
 	case ClosureScript:
 		x, _ := closure.(*scriptFunc)
@@ -1738,6 +1810,22 @@ func (e *Evaluator) closureProlog(fn Val, args []Val) {
 	}
 
 	e.prologue(ftype, len(args), prog, closure)
+}
+
+func (e *Evaluator) iterPrologue(siter *scriptIter, args []Val) {
+	prog := siter.prog
+	ftype := ftypeSIter
+
+	// performing arguments shuffling here, ie move user provided function
+	// arguments into our own stack and create a valid frame for script function
+	e.push(newValSIter(siter))
+
+	// push all the arguments onto the stack
+	for _, a := range args {
+		e.push(a)
+	}
+
+	e.prologue(ftype, len(args), prog, nil)
 }
 
 func (e *Evaluator) runRule(event Val, prog *program) error {
@@ -1805,6 +1893,102 @@ func (e *Evaluator) runRule(event Val, prog *program) error {
 	return nil
 }
 
+// scriptable iterator protocol
+// the scriptable iterator is executing on its internal stack and we use a special
+// marker on the iterator stack to execute the code. When the evaluator starts
+// to unwind the stack, it will learn this and stop here. The key take away is
+// the scriptable iterator will always enter via native function instead of
+// script code, therefore the error/exception throwned inside will be like
+// script iterator -> native Iter api -> caller script
+
+func (e *Evaluator) runSIter(siter *scriptIter, args []Val) (int, error) {
+	oldStack := e.Stack
+	e.Stack = siter.stack
+	defer func() {
+		siter.stack = e.Stack
+		e.Stack = oldStack
+	}()
+
+	e.iterPrologue(siter, args)
+
+	return e.runSIterRest(siter)
+}
+
+func (e *Evaluator) resumeSIter(siter *scriptIter) (int, error) {
+	oldStack := e.Stack
+	e.Stack = siter.stack
+	defer func() {
+		siter.stack = e.Stack
+		e.Stack = oldStack
+	}()
+
+	// resume the function frame
+	tempF := e.curframe
+	e.curframe = siter.frame
+	*e.prevfuncframe() = tempF
+
+	return e.runSIterRest(siter)
+}
+
+func (e *Evaluator) runSIterRest(siter *scriptIter) (int, error) {
+	done := false
+	isDone := &done
+
+	defer func() {
+		if !*isDone {
+			siter.frame = e.curframe
+			e.curframe = *e.prevfuncframe()
+		}
+	}()
+
+	pc := siter.pc
+	prog := e.curframe.prog
+
+	{
+	RECOVER:
+		rr := e.runP(prog, pc)
+
+		// finish execution
+		if rr.isDone() {
+			done = true
+			ret := e.top0()
+			e.pop()
+			siter.onReturn(ret)
+			return rr.pc, nil
+		}
+
+		if rr.isYield() {
+			ret := e.top0()
+			e.pop()
+			siter.onYield(ret)
+			return rr.pc, nil
+		}
+
+		var bt btlist
+
+		{
+			// unwind until we hit a native frame and then just report the error
+			a, b, c, d := e.unwindForExcep(
+				func() bool {
+					return e.curframe.ftype == ftypeSIter
+				},
+				rr.e,
+			)
+			if d {
+				prog = b
+				pc = a
+				goto RECOVER
+			} else {
+				bt = c
+			}
+		}
+
+		// notes the current frame is still our script frame and we should pop
+		// it up
+		return rr.pc, e.doErr(bt, rr.prog, rr.pc, rr.e)
+	}
+}
+
 // used by callback function, ie re-enter into the VM while a native call calls
 // back into the VM.
 // Due to the interleaved frame limitation, we cannot propagate the exception
@@ -1823,7 +2007,7 @@ func (e *Evaluator) runSFunc(
 
 	// performing arguments shuffling here, ie move user provided function
 	// arguments into our own stack and create a valid frame for script function
-	e.closureProlog(newValSFunc(sfunc), args)
+	e.closurePrologue(newValSFunc(sfunc), args)
 
 	pc := 0
 	prog := e.curframe.prog
@@ -1873,7 +2057,7 @@ func (e *Evaluator) runNFunc(
 	args []Val,
 ) (Val, error) {
 
-	e.closureProlog(
+	e.closurePrologue(
 		newValNFunc(nfunc),
 		args,
 	)

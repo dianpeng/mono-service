@@ -38,6 +38,10 @@ type MapIter struct {
 	size  int
 }
 
+func (m *MapIter) SetUp(*Evaluator, []Val) error {
+	return nil
+}
+
 func (m *MapIter) init() {
 	l := m.m.Length()
 

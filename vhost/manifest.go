@@ -22,7 +22,7 @@ func NewManifestFromLocalDir(
 	manifest := &Manifest{}
 	dir := filepath.Dir(mainPath)
 
-  relativeOffset := len(dir) + 1
+	relativeOffset := len(dir) + 1
 
 	manifest.Main = mainPath[relativeOffset:]
 	manifest.FS = os.DirFS(dir)

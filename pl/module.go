@@ -128,12 +128,51 @@ func (p *Module) getProgram(name string) *program {
 	return r
 }
 
-func (p *Module) getFunction(name string) *program {
+// ignore the type of the program
+func (p *Module) getFn(name string) *program {
 	r, _ := p.getfromlist(name, p.fn)
 	return r
 }
 
+func (p *Module) getFunction(name string) *program {
+	r, _ := p.getfromlist(name, p.fn)
+	if r.progtype == progFunc {
+		return r
+	} else {
+		return nil
+	}
+}
+
+func (p *Module) getIterator(name string) *program {
+	r, _ := p.getfromlist(name, p.fn)
+	if r.progtype == progIter {
+		return r
+	} else {
+		return nil
+	}
+}
+
 func (p *Module) getFunctionIndex(name string) int {
+	f, i := p.getfromlist(name, p.fn)
+	if f != nil {
+		if f.progtype == progFunc {
+			return i
+		}
+	}
+	return -1
+}
+
+func (p *Module) getIteratorIndex(name string) int {
+	f, i := p.getfromlist(name, p.fn)
+	if f != nil {
+		if f.progtype == progIter {
+			return i
+		}
+	}
+	return -1
+}
+
+func (p *Module) getFnIndex(name string) int {
 	_, i := p.getfromlist(name, p.fn)
 	return i
 }

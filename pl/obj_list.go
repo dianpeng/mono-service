@@ -27,6 +27,10 @@ type ListIter struct {
 	cur int
 }
 
+func (li *ListIter) SetUp(_ *Evaluator, _ []Val) error {
+	return nil
+}
+
 func (li *ListIter) Has() bool {
 	return li.cur < li.l.Length()
 }

@@ -88,6 +88,10 @@ func newrouterpariter(
 	}
 }
 
+func (h *routerpariter) SetUp(_ *pl.Evaluator, _ []pl.Val) error {
+	return nil
+}
+
 func (h *routerpariter) Deref() (pl.Val, pl.Val, error) {
 	if !h.Has() {
 		return pl.NewValNull(), pl.NewValNull(), fmt.Errorf("iterator out of bound")

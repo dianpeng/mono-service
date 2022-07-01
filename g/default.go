@@ -9,7 +9,7 @@ const (
 	VHostErrorBody   = "Service Error"
 
 	VHostHttpClientPoolMaxSize      = 256
-	VHostHttpClientPoolTimeout      = 20
+	VHostHttpClientPoolTimeout      = 30
 	VHostHttpClientPoolMaxDrainSize = 4096
 
 	VHostLogFormat = "{{ServiceName}}" +

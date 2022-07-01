@@ -190,6 +190,41 @@ config service {
 
 ```
 
+6. 迭代器
+
+PL支持携程类型的迭代器，再有的语言中又叫generator。迭代器是带状态，可中断，可重入的特殊函数，类型则为迭代器。用户可以使用PL脚本编写自己觉得合适的迭代器。迭代器必须使用for循环访问。
+
+```
+
+// 定义一个迭代器，迭代器的定义需要使用关键字iter，迭代器内部可以使用yield关键字中断返回。使用yield返回的部分，下次进入迭代器会
+// 从该位置恢复执行流程。目前yield必须返回一个Pair对象，否则运行时出错。
+iter aIterator() {
+  for let i = 0; i < 10; i++ {
+    yield (i, "value");
+  }
+}
+
+// 迭代器可以接受参数，第一次调用的时候传入
+iter mapIterator(map) {
+  for let k, v = map {
+    yield (k, v);
+  }
+}
+
+// 使用迭代器必须使用 for let i, v = iter iterator 执行
+fn useIterator() {
+  for let i, v = iter aIterator() {
+    println(i, " => ", v);
+  }
+  
+  // 使用带参数的迭代器
+  for let i, v = iter mapIterator({"a": 1, "b": 2}) {
+    println(i, " => ", v);
+  }
+}
+
+```
+
 
 #### 变量生命周期
 

@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"os"
+
 	"github.com/dianpeng/mono-service/server"
 	"github.com/dianpeng/mono-service/vhost"
-	"os"
 )
 
 func printHelp() {
@@ -14,6 +15,11 @@ func printHelp() {
 }
 
 type strList []string
+
+func isjson(x string) bool {
+	var js json.RawMessage
+	return json.Unmarshal([]byte(x), &js) == nil
+}
 
 func (c *strList) String() string {
 	return "a list of string"
@@ -27,9 +33,19 @@ func (c *strList) Set(v string) error {
 func parseListenerConfig(x strList) ([]server.ListenerConfig, error) {
 	o := []server.ListenerConfig{}
 	for _, cfg := range x {
-		l := server.NewDefaultListenerConfig()
-		if err := json.Unmarshal([]byte(cfg), &l); err != nil {
-			return nil, err
+		l := server.ListenerConfig{}
+		if isjson(cfg) {
+			lc, err := server.ParseListenerConfigFromJSON(cfg)
+			if err != nil {
+				return nil, err
+			}
+			l = lc
+		} else {
+			lc, err := server.ParseListenerConfigFromCompact(cfg)
+			if err != nil {
+				return nil, err
+			}
+			l = lc
 		}
 		o = append(o, l)
 	}
@@ -42,28 +58,7 @@ func main() {
 
 	flag.Var(&listenerConf, "listener", "list of listener config, in JSON")
 	flag.Var(&projPath, "path", "list of path to local fs project's main file")
-
-	httpListener := flag.Bool("http", false, "default listener, ie :80")
-	testListener := flag.Bool("test", false, "default testing listener, ie :18080")
-
 	flag.Parse()
-
-	if *httpListener {
-		listenerConf = append(listenerConf, `
-    {
-      "name" : "http",
-      "endpoint" : ":80"
-    }
-    `)
-	}
-	if *testListener {
-		listenerConf = append(listenerConf, `
-    {
-      "name" : "test",
-      "endpoint" : ":18080"
-    }
-    `)
-	}
 
 	lconf, err := parseListenerConfig(listenerConf)
 	if err != nil {

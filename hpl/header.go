@@ -73,7 +73,13 @@ func (h *Header) Add(key string, d string) {
 }
 
 func (h *Header) Length() int {
-	return len(h.header)
+	cnt := 0
+	for _, x := range h.header {
+		for _, _ = range x {
+			cnt++
+		}
+	}
+	return cnt
 }
 
 func (h *Header) Index(key pl.Val) (pl.Val, error) {
@@ -241,6 +247,10 @@ func (h *headeriter) Has() bool {
 func (h *headeriter) Next() bool {
 	h.cursor++
 	return h.Has()
+}
+
+func (h *headeriter) SetUp(_ *pl.Evaluator, _ []pl.Val) error {
+	return nil
 }
 
 func (h *headeriter) Deref() (pl.Val, pl.Val, error) {

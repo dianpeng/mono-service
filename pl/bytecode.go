@@ -103,22 +103,26 @@ const (
 	bcICall = 83
 	bcSCall = 84
 	bcVCall = 85 // variable call, ie calling a function that is loaded into
+
 	// a dynamic variable which cannot be resolved
 	bcReturn = 87
+	bcYield  = 88
 
 	// emit an event to trigger a rule
 	bcEmit = 89
 
 	// iterator
 	bcNewIterator   = 90
-	bcHasIterator   = 91
-	bcDerefIterator = 92
-	bcNextIterator  = 93
+	bcSetUpIterator = 91
+	bcHasIterator   = 92
+	bcDerefIterator = 93
+	bcNextIterator  = 94
+	bcLoadIterator  = 95
 
 	// uvpalue/closure
-	bcNewClosure   = 95
-	bcLoadUpvalue  = 96
-	bcStoreUpvalue = 97
+	bcNewClosure   = 97
+	bcLoadUpvalue  = 98
+	bcStoreUpvalue = 99
 
 	// exception
 	bcPushException = 101
@@ -188,6 +192,7 @@ const (
 	progSession
 	progExpression
 	progConfig
+	progIter
 )
 
 type upvalue struct {
@@ -448,6 +453,7 @@ func (x *bytecode) dump(resolver func(int, int) string) string {
 		bcICall,
 		bcSCall,
 		bcReturn,
+		bcYield,
 		bcConStr,
 
 		bcLoadLocal,
@@ -509,8 +515,14 @@ func getBytecodeName(bc int) string {
 		return "scall"
 	case bcReturn:
 		return "return"
+	case bcYield:
+		return "yield"
 	case bcNewIterator:
 		return "new-iterator"
+	case bcLoadIterator:
+		return "load-iterator"
+	case bcSetUpIterator:
+		return "setup-iterator"
 	case bcHasIterator:
 		return "has-iterator"
 	case bcDerefIterator:

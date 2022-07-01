@@ -21,6 +21,10 @@ type urlsearchiter struct {
 	cursor int
 }
 
+func (i *urlsearchiter) SetUp(_ *pl.Evaluator, _ []pl.Val) error {
+	return nil
+}
+
 func (i *urlsearchiter) Has() bool {
 	return i.cursor < len(i.search)
 }
