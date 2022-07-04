@@ -73,7 +73,9 @@ PL是MonoServcice重新设计的专门为HTTP/Web的脚本语言，他支持多�
     * 用户可以用go轻松扩展类型系统
 
 
-[PL语言详情](doc/pl-zn.md)
+### PL详细
+
+[文档](pl-zn.md)
 
 
 ## 功能
