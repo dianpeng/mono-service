@@ -244,9 +244,9 @@ func (h *headeriter) Has() bool {
 	return h.cursor < len(h.kv)
 }
 
-func (h *headeriter) Next() bool {
+func (h *headeriter) Next() (bool, error) {
 	h.cursor++
-	return h.Has()
+	return h.Has(), nil
 }
 
 func (h *headeriter) SetUp(_ *pl.Evaluator, _ []pl.Val) error {

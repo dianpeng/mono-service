@@ -35,9 +35,9 @@ func (li *ListIter) Has() bool {
 	return li.cur < li.l.Length()
 }
 
-func (li *ListIter) Next() bool {
+func (li *ListIter) Next() (bool, error) {
 	li.cur++
-	return li.Has()
+	return li.Has(), nil
 }
 
 func (li *ListIter) Deref() (Val, Val, error) {

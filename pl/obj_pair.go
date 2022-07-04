@@ -22,9 +22,9 @@ func (p *PairIter) Has() bool {
 	return p.cnt < 2
 }
 
-func (p *PairIter) Next() bool {
+func (p *PairIter) Next() (bool, error) {
 	p.cnt++
-	return p.Has()
+	return p.Has(), nil
 }
 
 func (p *PairIter) Deref() (Val, Val, error) {

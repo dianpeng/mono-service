@@ -24,9 +24,9 @@ func (s *striter) Has() bool {
 	return s.cnt < len(s.r)
 }
 
-func (s *striter) Next() bool {
+func (s *striter) Next() (bool, error) {
 	s.cnt++
-	return s.Has()
+	return s.Has(), nil
 }
 
 func (s *striter) Deref() (Val, Val, error) {

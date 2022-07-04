@@ -75,9 +75,9 @@ func (h *routerpariter) Has() bool {
 	return h.cursor < len(h.kv)
 }
 
-func (h *routerpariter) Next() bool {
+func (h *routerpariter) Next() (bool, error) {
 	h.cursor++
-	return h.Has()
+	return h.Has(), nil
 }
 
 func newrouterpariter(

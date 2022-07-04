@@ -1643,7 +1643,12 @@ FUNC:
 		case bcNextIterator:
 			tos := e.top0()
 			must(tos.IsIter(), "must be iterator(next_iterator)")
-			e.push(NewValBool(tos.Iter().Next()))
+			hasNext, err := tos.Iter().Next()
+			if err != nil {
+				return rrErr(prog, pc, err)
+			}
+
+			e.push(NewValBool(hasNext))
 			break
 
 		case bcHalt:

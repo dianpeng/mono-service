@@ -58,7 +58,7 @@ func (m *MapIter) Has() bool {
 	return m.index < m.m.Length()
 }
 
-func (m *MapIter) Next() bool {
+func (m *MapIter) Next() (bool, error) {
 	l := m.m.Length()
 	m.index++
 
@@ -70,7 +70,7 @@ func (m *MapIter) Next() bool {
 		m.index++
 	}
 
-	return m.Has()
+	return m.Has(), nil
 }
 
 func (m *MapIter) iterandmod() (Val, Val, error) {

@@ -36,9 +36,9 @@ func (i *urlsearchiter) Deref() (pl.Val, pl.Val, error) {
 	return pl.NewValStr(i.search[i.cursor].Key), pl.NewValStr(i.search[i.cursor].Value), nil
 }
 
-func (i *urlsearchiter) Next() bool {
+func (i *urlsearchiter) Next() (bool, error) {
 	i.cursor++
-	return i.Has()
+	return i.Has(), nil
 }
 
 func newurlsearchiter(search *UrlSearch) *urlsearchiter {

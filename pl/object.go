@@ -113,7 +113,7 @@ type Iter interface {
 
 	// if applicable move the iterator to next position and returns whether the
 	// status of iterator is valid *AFTER* the next
-	Next() bool
+	Next() (bool, error)
 
 	// get the value of the iterator, the first is index and second is the value
 	Deref() (Val, Val, error)

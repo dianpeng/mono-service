@@ -36,18 +36,20 @@ func (s *scriptIter) onReturn(_ Val) error {
 }
 
 func (s *scriptIter) resume() {
+	s.err = nil
+	s.next = false
+
 	pc, err := s.eval.resumeSIter(
 		s,
 	)
 	s.pc = pc
 	s.err = err
-	if s.err != nil {
-		s.next = true
-	}
 }
 
 func (s *scriptIter) SetUp(e *Evaluator, args []Val) error {
 	s.eval = e
+	s.err = nil
+	s.next = false
 
 	pc, err := e.runSIter(
 		s,
@@ -56,9 +58,6 @@ func (s *scriptIter) SetUp(e *Evaluator, args []Val) error {
 
 	s.pc = pc
 	s.err = err
-	if s.err != nil {
-		s.next = true
-	}
 	return err
 }
 
@@ -66,9 +65,9 @@ func (s *scriptIter) Has() bool {
 	return s.next
 }
 
-func (s *scriptIter) Next() bool {
+func (s *scriptIter) Next() (bool, error) {
 	s.resume()
-	return s.next
+	return s.next, s.err
 }
 
 func (s *scriptIter) Deref() (Val, Val, error) {
