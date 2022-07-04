@@ -75,7 +75,7 @@ PL是MonoServcice重新设计的专门为HTTP/Web的脚本语言，他支持多�
 
 ### PL详细
 
-[文档](pl-zn.md)
+[文档](pl-cn.md)
 
 
 ## 功能
