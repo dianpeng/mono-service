@@ -126,10 +126,67 @@ const (
 	tkError
 )
 
+const (
+	minLexerDCursorOffset = 64
+)
+
+type dcursorqueue struct {
+	q [minLexerDCursorOffset]int
+	c int
+}
+
+func (d *dcursorqueue) index(x int) int {
+	return x % minLexerDCursorOffset
+}
+
+func (d *dcursorqueue) add(o int) {
+	d.q[d.index(d.c)] = o
+	d.c++
+}
+
+func (d *dcursorqueue) frontIndex(off int) int {
+	if d.c <= minLexerDCursorOffset {
+		return d.index(0 + off)
+	} else {
+		return d.index(d.c - minLexerDCursorOffset + off)
+	}
+}
+
+func (d *dcursorqueue) backIndex(off int) int {
+	if d.c <= off {
+		return -1
+	}
+	return d.index(d.c - off)
+}
+
+func (d *dcursorqueue) front(off int) int {
+	return d.q[d.frontIndex(off)]
+}
+
+func (d *dcursorqueue) back(off int) int {
+	idx := d.backIndex(1 + off)
+	if idx == -1 {
+		return -1
+	}
+	return d.q[idx]
+}
+
+func (d *dcursorqueue) allowedOffset(off int) bool {
+	if off <= d.c {
+		return true
+	} else {
+		return off < minLexerDCursorOffset
+	}
+}
+
 type lexer struct {
 	input  []rune
 	cursor int
 	token  int
+
+	// for error reporting
+	dCursor int
+	dq      dcursorqueue
 
 	// lexeme
 	valueInt  int64
@@ -138,6 +195,9 @@ type lexer struct {
 
 	// option
 	allowDRBra bool
+
+	// internal shit
+	cursorStart int
 }
 
 func isaggassign(tk int) bool {
@@ -337,6 +397,31 @@ func getTokenName(tk int) string {
 	}
 }
 
+// this function just does one thing, it tries to update dCursor field. The
+// dCursor field is a token boundary that offset from current cursor around
+// a predefined value. The reason for this is when we start to report an
+// diagnostic error, what we do is we start the substring from the dcursor
+// which is a valid reporting boundary. This is better than the current way
+// for reporting anyway
+func (t *lexer) saveDCursor(start int) {
+	if t.token != tkError {
+		t.dq.add(start)
+		offset := 0
+		ncursor := t.dCursor
+
+		for ncursor+minLexerDCursorOffset < t.cursor {
+			if !t.dq.allowedOffset(offset) {
+				break
+			}
+			bump := t.dq.front(offset)
+			ncursor = bump
+			offset++
+		}
+
+		t.dCursor = ncursor
+	}
+}
+
 func (t *lexer) yield(tk int, offset int) int {
 	t.cursor += offset
 	t.token = tk
@@ -382,23 +467,90 @@ func (t *lexer) err(msg string) int {
 	return tkError
 }
 
-func (t *lexer) position() string {
-	line, col := t.pos()
-	// get a string piece around the cursor
-	var start, end int
-	if t.cursor >= 32 {
-		start = t.cursor - 32
-	} else {
-		start = 0
+func (t *lexer) nextLineBreak(where int) int {
+	for i := where; i < len(t.input); i++ {
+		if t.input[i] == '\n' {
+			return i
+		}
+	}
+	return len(t.input) - 1
+}
+
+func (t *lexer) paddingSize(where int) int {
+	i := where - 1
+	for ; i >= 0; i-- {
+		if t.input[i] == '\n' {
+			return where - i - 1
+		}
 	}
 
-	if t.cursor+32 < len(t.input) {
-		end = t.cursor + 32
+	return where
+}
+
+func (t *lexer) position() string {
+	line, col := t.pos()
+
+	// get a string piece around the cursor
+	var start, end int
+	start = t.dCursor
+
+	if t.cursor+minLexerDCursorOffset < len(t.input) {
+		end = t.cursor + minLexerDCursorOffset
 	} else {
 		end = len(t.input)
 	}
 
-	return fmt.Sprintf("around (%d, %d)@(```%s```)", line, col, string(t.input[start:end]))
+	t1 := t.dq.back(0)
+	if t1 == -1 {
+		t1 = 0
+	}
+
+	lb := t.nextLineBreak(t1)
+
+	if end < lb {
+		end = lb
+	}
+
+	prefix := string(t.input[start:lb])
+	after := string(t.input[lb+1 : end])
+
+	p0 := fmt.Sprintf(
+		"around line %d and column %d, near source code:\n%s",
+		line,
+		col,
+		prefix,
+	)
+
+	// generate padding before the highlighter
+	var padding string
+	{
+		b := new(bytes.Buffer)
+		off := t.paddingSize(t1)
+		for i := 0; i < off; i++ {
+			b.WriteRune(' ')
+		}
+		padding = b.String()
+	}
+
+	// generate highlighter in the output
+	var highlight string
+	{
+		hsize := t.cursor - t1
+		b := new(bytes.Buffer)
+		for i := 0; i < hsize; i++ {
+			b.WriteRune('^')
+		}
+		highlight = b.String()
+	}
+
+	// assemble everything together to formulate the final output
+	return fmt.Sprintf(
+		"%s\n%s%s\n%s\n",
+		p0,
+		padding,
+		highlight,
+		after,
+	)
 }
 
 func (t *lexer) tokenName() string {
@@ -917,11 +1069,18 @@ func (t *lexer) scanMStr() int {
 }
 
 func (t *lexer) next() int {
+	startDCursor := t.cursor
+	pDCursor := &startDCursor
+	defer func() {
+		t.saveDCursor(*pDCursor)
+	}()
+
 	for t.cursor < len(t.input) {
 		c := t.input[t.cursor]
 		switch c {
 		case ' ', '\t', '\r', '\n', '\v':
 			t.cursor++
+			startDCursor = t.cursor
 			continue
 		case '+':
 			return t.pp2(tkAdd, tkAddAssign, tkInc, '=', '+')
@@ -958,6 +1117,7 @@ func (t *lexer) next() int {
 				case '/':
 					t.cursor += 2
 					t.scanComment()
+					startDCursor = t.cursor
 					continue
 
 				case '*':
@@ -965,6 +1125,7 @@ func (t *lexer) next() int {
 					if !t.scanCommentBlock() {
 						return t.token
 					} else {
+						startDCursor = t.cursor
 						continue
 					}
 					break

@@ -33,14 +33,18 @@ type ConstSessionWrapper interface {
 	HttpClientFactory
 }
 
-// Interface used by VHost to bridge SessionWrapper/Service object into the HPL
-// world. HPL knows nothing about the service/session and also hservice. HPL is
-// just a wrapper around PL but with all the http/networking utilities
-type SessionWrapper interface {
+type HplContext interface {
 	// HPL/PL scriptting callback
 	OnLoadVar(*pl.Evaluator, string) (pl.Val, error)
 	OnStoreVar(*pl.Evaluator, string, pl.Val) error
 	OnAction(*pl.Evaluator, string, pl.Val) error
+}
+
+// Interface used by VHost to bridge SessionWrapper/Service object into the HPL
+// world. HPL knows nothing about the service/session and also hservice. HPL is
+// just a wrapper around PL but with all the http/networking utilities
+type SessionWrapper interface {
+	HplContext
 
 	// special function used for exposing other utilities
 	HttpClientFactory

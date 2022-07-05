@@ -141,7 +141,7 @@ rule xx {
 
 ```
 global {
-	const1 = http::get("https://www.tmall.com").body:string(); // 存储tmall首页HTML到string
+  const1 = http::get("https://www.tmall.com").body:string(); // 存储tmall首页HTML到string
   const2 = 100;
   const3 = [];
 
@@ -738,9 +738,9 @@ for a != 100 {
 
 for {
   if xxx {
-    break
+    break;
   } else {
-    continue
+    continue;
   }
 }
 
