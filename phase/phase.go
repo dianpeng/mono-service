@@ -9,6 +9,7 @@ const (
 	// application related phases
 	PhaseApplicationPrepare
 	PhaseApplicationAccept
+	PhaseApplicationEvent
 	PhaseApplicationDone
 
 	PhaseHttpResponse
@@ -24,13 +25,15 @@ const (
 func GetPhaseName(p int) string {
 	switch p {
 	case PhaseCreateService:
-		return ".create_service"
+		return "create_service"
 	case PhaseInit:
-		return ".init"
+		return "init"
 	case PhaseApplicationPrepare:
 		return "application.prepare"
 	case PhaseApplicationAccept:
 		return "application.accept"
+	case PhaseApplicationEvent:
+		return "application.event"
 	case PhaseApplicationDone:
 		return "application.done"
 	case PhaseHttpResponse:
@@ -38,9 +41,9 @@ func GetPhaseName(p int) string {
 	case PhaseHttpResponseFinalize:
 		return "http.response_finalize"
 	case PhaseAccessLog:
-		return ".access_log"
+		return "access_log"
 	case PhaseBackground:
-		return ".backgronud"
+		return "backgronud"
 	default:
 		return "<unknown>"
 	}

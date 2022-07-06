@@ -39,7 +39,11 @@ type HttpResponseWriter interface {
 	)
 
 	// Categorized response APIs, which should be preferred
-	ReplyErrorHPL(error)
+	ReplyError(
+		string,
+		int,
+		error,
+	)
 }
 
 type Middleware interface {
@@ -87,7 +91,6 @@ func (m *middlewareCompose) Accept(
 	ctx ServiceContext,
 ) bool {
 
-	// TODO(dpeng): Add interceptor for better customizations
 	for _, x := range m.l {
 		if !x.Accept(
 			h,
@@ -95,6 +98,11 @@ func (m *middlewareCompose) Accept(
 			resp,
 			ctx,
 		) {
+			return false
+		}
+
+		// the response has been generated, so break out the middleware chain
+		if resp.IsFlushed() {
 			return false
 		}
 	}

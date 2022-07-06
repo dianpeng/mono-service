@@ -150,6 +150,12 @@ func (s *serviceHandler) main(
 			respWrapper.ReplyErrorHPL(err)
 			return
 		}
+
+		// extream cases, that the initialization phase of session will just
+		// terminate the execution of the response
+		if respWrapper.IsFlushed() {
+			return
+		}
 	}
 
 	if prevError != nil {
@@ -158,76 +164,75 @@ func (s *serviceHandler) main(
 			prevError,
 		)
 		return
+	}
 
-	} else {
-		// (1) run the request middleware phase
-		s.setPhase(phase.PhaseHttpRequest, "http.request")
-		if !s.service.Request.Accept(
+	// (1) run the request middleware phase
+	s.setPhase(phase.PhaseHttpRequest, "http.request")
+	if !s.service.Request.Accept(
+		req,
+		p,
+		respWrapper,
+		s,
+	) {
+		return
+	}
+
+	// (2) run the application
+	{
+		app := s.service.App
+
+		s.setPhase(phase.PhaseApplicationPrepare, "application.prepare")
+		context, err := app.Prepare(
+			req,
+			p,
+		)
+		if err != nil {
+			respWrapper.ReplyErrorAppPrepare(
+				err,
+			)
+			return
+		}
+
+		applicationContext = context
+		s.setPhase(phase.PhaseApplicationAccept, "application.accept")
+		r, err := app.Accept(
+			context,
+			s,
+		)
+
+		if err != nil {
+			respWrapper.ReplyErrorAppAccept(
+				err,
+			)
+			return
+		}
+
+		s.serviceResult = r
+		// before enter into user's response middleware, run application generated
+		// event if applicable
+		if s.serviceResult.Event != "" {
+			s.setPhase(phase.PhaseApplicationEvent, "application.event")
+			if err := s.hpl.RunWithContext(s.serviceResult.Event,
+				s.serviceResult.Context); err != nil {
+				respWrapper.ReplyErrorHPL(err)
+				return
+			}
+		}
+	}
+
+	// (3) run the middleware response phase, notes the response middleware
+	//     execution is different from running request middleware
+	{
+		s.setPhase(phase.PhaseHttpResponse, "http.response")
+
+		// start to run response middleware chain
+		if !s.service.Response.Accept(
 			req,
 			p,
 			respWrapper,
 			s,
 		) {
 			return
-		}
-
-		// (2) run the application
-		{
-			app := s.service.App
-
-			s.setPhase(phase.PhaseApplicationPrepare, "application.prepare")
-			context, err := app.Prepare(
-				req,
-				p,
-			)
-			if err != nil {
-				respWrapper.ReplyErrorAppPrepare(
-					err,
-				)
-				return
-			}
-
-			applicationContext = context
-			s.setPhase(phase.PhaseApplicationAccept, "application.accept")
-			r, err := app.Accept(
-				context,
-				s,
-			)
-
-			if err != nil {
-				respWrapper.ReplyErrorApp(
-					err,
-				)
-				return
-			}
-
-			s.serviceResult = r
-		}
-
-		// (3) run the middleware response phase, notes the response middleware
-		//     execution is different from running request middleware
-		{
-			s.setPhase(phase.PhaseHttpResponse, "http.response")
-
-			// before enter into user's response middleware, run application generated
-			// event if applicable
-			if s.serviceResult.Event != "" {
-				if err := s.hpl.RunWithContext(s.serviceResult.Event,
-					s.serviceResult.Context); err != nil {
-					respWrapper.ReplyErrorHPL(err)
-					return
-				}
-			}
-
-			// start to run response middleware chain
-			if !s.service.Response.Accept(
-				req,
-				p,
-				respWrapper,
-				s,
-			) {
-				return
-			}
 		}
 	}
 }

@@ -1,29 +1,95 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/dianpeng/mono-service/vhost"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 )
 
-// A listener is a endpoint which wait for http traffic and run bunch of
-// servername oriented services on top of it. A listener does not know
-// which server name should be used.
-type vhostentry struct {
-	h *vhost.VHost
-}
-
-// TOOD(dpeng): support atomic pointer to allow concurrent updating
-func (v *vhostentry) vhost() *vhost.VHost {
-	return v.h
-}
-
 type listener struct {
 	name   string
-	list   []vhostentry
-	sn     map[string]int // TODO(dpeng): allowing better servername matching
-	server *http.Server   // the server
+	server *http.Server // the server
+	vlist  vhostlist
+}
+
+type ListenerConfig struct {
+	Name              string `json:"name"`
+	Endpoint          string `json:"endpoint"`
+	ReadTimeout       int64  `json:"read_timeout"`
+	WriteTimeout      int64  `json:"write_timeout"`
+	IdleTimeout       int64  `json:"idle_timeout"`
+	ReadHeaderTimeout int64  `json:"read_header_timeout"`
+	MaxHeaderSize     int64  `json:"max_header_size"`
+}
+
+func ParseListenerConfigFromJSON(input string) (ListenerConfig, error) {
+	o := ListenerConfig{
+		Name:              "",
+		Endpoint:          "",
+		ReadTimeout:       20,
+		WriteTimeout:      20,
+		IdleTimeout:       90,
+		ReadHeaderTimeout: 10,
+		MaxHeaderSize:     1024 * 64,
+	}
+	if err := json.Unmarshal([]byte(input), &o); err != nil {
+		return o, err
+	}
+
+	if o.Name == "" {
+		return o, fmt.Errorf("must specify Name for listener config")
+	}
+
+	if o.Endpoint == "" {
+		return o, fmt.Errorf("must specify Endpoint for listener config")
+	}
+
+	return o, nil
+}
+
+func ParseListenerConfigFromCompact(input string) (ListenerConfig, error) {
+	conf := ListenerConfig{}
+	x := strings.Split(input, ",")
+	if len(x) < 2 {
+		return conf, fmt.Errorf("invalid listener config: %s, at least 2 elements are needed", input)
+	}
+
+	conf.Name = x[0]
+	conf.Endpoint = x[1]
+
+	parseInt := func(field string, index int, out *int64) error {
+		if len(x) > index {
+			ival, err := strconv.ParseInt(x[index], 10, 64)
+			if err != nil {
+				return fmt.Errorf("invalid listener config field %s, must be valid "+
+					"integer, but has error: %s", field, err.Error())
+			}
+			*out = ival
+		}
+		return nil
+	}
+
+	if err := parseInt("ReadTimeout", 2, &conf.ReadTimeout); err != nil {
+		return conf, err
+	}
+	if err := parseInt("WriteTimeout", 3, &conf.WriteTimeout); err != nil {
+		return conf, err
+	}
+	if err := parseInt("IdleTimeout", 4, &conf.IdleTimeout); err != nil {
+		return conf, err
+	}
+	if err := parseInt("ReadHeaderTimeout", 5, &conf.ReadHeaderTimeout); err != nil {
+		return conf, err
+	}
+	if err := parseInt("MaxHeaderSize", 6, &conf.MaxHeaderSize); err != nil {
+		return conf, err
+	}
+
+	return conf, nil
 }
 
 func (l *listener) ServeHTTP(
@@ -42,8 +108,8 @@ func newListener(
 	opt ListenerConfig,
 ) *listener {
 	l := &listener{
-		name: opt.Name,
-		sn:   make(map[string]int),
+		name:  opt.Name,
+		vlist: newvhostlist(),
 	}
 
 	l.server = &http.Server{
@@ -59,31 +125,37 @@ func newListener(
 	return l
 }
 
-func (l *listener) addVHost(
-	v *vhost.VHost,
-) error {
-	serverName := v.Config.ServerName
-
-	_, ok := l.sn[serverName]
-	if ok {
-		return fmt.Errorf("server name %s already existed", serverName)
-	}
-
-	idx := len(l.list)
-	l.list = append(l.list, vhostentry{h: v})
-	l.sn[serverName] = idx
-	return nil
-}
-
 func (l *listener) resolveVHost(serverName string) *vhost.VHost {
-	idx, ok := l.sn[serverName]
-	if ok {
-		return l.list[idx].vhost()
-	} else {
-		return nil
-	}
+	return l.vlist.resolve(serverName)
 }
 
 func (l *listener) run() error {
 	return l.server.ListenAndServe()
+}
+
+// the follwing function are thread safe, so can be used to add, update, remove
+// virtual host when the listener is executing/running
+func (l *listener) addVHost(
+	v *vhost.VHost,
+) error {
+	return l.vlist.add(v)
+}
+
+// try to update a VHost in the current listener
+func (l *listener) updateVHost(
+	v *vhost.VHost,
+) {
+	l.vlist.update(v)
+}
+
+func (l *listener) removeVHost(
+	serverName string,
+) {
+	l.vlist.remove(serverName)
+}
+
+func (l *listener) getVHost(
+	serverName string,
+) *vhost.VHost {
+	return l.vlist.get(serverName)
 }

@@ -1,6 +1,7 @@
 package framework
 
 import (
+	"fmt"
 	"github.com/dianpeng/mono-service/hrouter"
 	"github.com/dianpeng/mono-service/pl"
 	"net/http"
@@ -26,14 +27,22 @@ func (e *event) Accept(
 	context := pl.NewValNull()
 
 	if err := cfg.GetStr(0, &eventName); err != nil {
-		w.ReplyErrorHPL(err)
+		w.ReplyError(
+			"event.hpl",
+			500,
+			err,
+		)
 		return false
 	}
 	cfg.TryGet(1, &context, pl.NewValNull())
 
 	// run the event
 	if err := ctx.Hpl().RunWithContext(eventName, context); err != nil {
-		w.ReplyErrorHPL(err)
+		w.ReplyError(
+			fmt.Sprintf("event.%s", eventName),
+			500,
+			err,
+		)
 		return false
 	}
 

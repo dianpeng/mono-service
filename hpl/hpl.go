@@ -40,14 +40,17 @@ type HplContext interface {
 	OnAction(*pl.Evaluator, string, pl.Val) error
 }
 
+type HplRuntime interface {
+	// special function used for exposing other utilities
+	HttpClientFactory
+}
+
 // Interface used by VHost to bridge SessionWrapper/Service object into the HPL
 // world. HPL knows nothing about the service/session and also hservice. HPL is
 // just a wrapper around PL but with all the http/networking utilities
 type SessionWrapper interface {
 	HplContext
-
-	// special function used for exposing other utilities
-	HttpClientFactory
+	HplRuntime
 }
 
 // ----------------------------------------------------------------------------
@@ -55,17 +58,14 @@ type Hpl struct {
 	Eval   *pl.Evaluator
 	Module *pl.Module
 
-	isRunning bool
-
 	// Session related internal state, each HTTP transaction should set it to
 	// the corresponding HTTP context when invoke OnInit call
 	request    pl.Val
 	params     pl.Val
 	respWriter pl.Val
-
-	session      SessionWrapper
-	constSession ConstSessionWrapper
-	log          *alog.SessionLog
+	hplCtx     HplContext
+	hplRt      HplRuntime
+	log        *alog.SessionLog
 }
 
 func NewHpl() *Hpl {
@@ -117,18 +117,12 @@ func (p *Hpl) loadVarBasic(x *pl.Evaluator, n string) (pl.Val, error) {
 	case "response":
 		return p.respWriter, nil
 	default:
-		return p.session.OnLoadVar(x, n)
+		return p.hplCtx.OnLoadVar(x, n)
 	}
 }
 
 func (h *Hpl) getHttpClientFactory() HttpClientFactory {
-	if h.session != nil {
-		return h.session
-	}
-	if h.constSession != nil {
-		return h.constSession
-	}
-	return nil
+	return h.hplRt
 }
 
 func (h *Hpl) fnHttp(args []pl.Val,
@@ -180,27 +174,27 @@ func (h *Hpl) customizeLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
 	if v, ok := h.loadFnVar(x, n); ok {
 		return v, nil
 	}
-	return h.session.OnLoadVar(x, n)
+	return h.hplCtx.OnLoadVar(x, n)
 }
 
 func (p *Hpl) customizeStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
-	return p.session.OnStoreVar(x, n, v)
+	return p.hplCtx.OnStoreVar(x, n, v)
 }
 
 func (h *Hpl) customizeAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
-	return h.session.OnAction(x, actionName, arg)
+	return h.hplCtx.OnAction(x, actionName, arg)
 }
 
 func (h *Hpl) OnCustomize(selector string, session SessionWrapper) error {
 	if h.Module == nil {
 		return fmt.Errorf("the Hpl engine does not have any module binded")
 	}
-	if h.isRunning {
-		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
-	}
 
-	h.isRunning = true
-	h.session = session
+	oldCtx := h.hplCtx
+	oldRt := h.hplRt
+
+	h.hplCtx = session
+	h.hplRt = session
 
 	h.Eval.Context = pl.NewCbEvalContext(
 		h.customizeLoadVar,
@@ -209,9 +203,9 @@ func (h *Hpl) OnCustomize(selector string, session SessionWrapper) error {
 	)
 
 	defer func() {
-		h.isRunning = false
 		h.respWriter = pl.NewValNull()
-		h.session = nil
+		h.hplCtx = oldCtx
+		h.hplRt = oldRt
 	}()
 
 	return h.Eval.Eval(selector, h.Module)
@@ -238,12 +232,8 @@ func (h *Hpl) OnGlobal(session ConstSessionWrapper) error {
 	if h.Module == nil {
 		return fmt.Errorf("the Hpl engine does not have any module binded")
 	}
-	if h.isRunning {
-		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
-	}
 
-	h.isRunning = true
-	h.constSession = session
+	h.hplRt = session
 
 	h.Eval.Context = pl.NewCbEvalContext(
 		h.globalLoadVar,
@@ -252,8 +242,8 @@ func (h *Hpl) OnGlobal(session ConstSessionWrapper) error {
 	)
 
 	defer func() {
-		h.isRunning = false
-		h.constSession = nil
+		h.hplRt = nil
+		h.hplCtx = nil
 	}()
 
 	return h.Eval.EvalGlobal(h.Module)
@@ -280,12 +270,7 @@ func (h *Hpl) OnConfig(context pl.EvalConfig, session ConstSessionWrapper) error
 	if h.Module == nil {
 		return fmt.Errorf("the Hpl engine does not have any module binded")
 	}
-	if h.isRunning {
-		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
-	}
-
-	h.isRunning = true
-	h.constSession = session
+	h.hplRt = session
 
 	h.Eval.Context = pl.NewCbEvalContext(
 		h.configLoadVar,
@@ -295,8 +280,8 @@ func (h *Hpl) OnConfig(context pl.EvalConfig, session ConstSessionWrapper) error
 	h.Eval.Config = context
 
 	defer func() {
-		h.isRunning = false
-		h.constSession = nil
+		h.hplRt = nil
+		h.hplCtx = nil
 	}()
 
 	return h.Eval.EvalConfig(h.Module)
@@ -309,11 +294,11 @@ func (h *Hpl) initLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
 }
 
 func (p *Hpl) initStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
-	return p.session.OnStoreVar(x, n, v)
+	return p.hplCtx.OnStoreVar(x, n, v)
 }
 
 func (h *Hpl) initAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
-	return h.session.OnAction(x, actionName, arg)
+	return h.hplCtx.OnAction(x, actionName, arg)
 }
 
 // invoked every HTTP transaction/session
@@ -327,15 +312,13 @@ func (h *Hpl) OnInit(
 	if h.Module == nil {
 		return fmt.Errorf("the Hpl engine does not have any module binded")
 	}
-	if h.isRunning {
-		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
-	}
-
-	h.isRunning = true
 	h.request = request
 	h.params = hrouter
 	h.respWriter = respWriter
-	h.session = session
+
+	h.hplCtx = session
+	h.hplRt = session
+
 	h.log = log
 
 	h.Eval.Context = pl.NewCbEvalContext(
@@ -345,7 +328,6 @@ func (h *Hpl) OnInit(
 	)
 
 	defer func() {
-		h.isRunning = false
 	}()
 
 	return h.Eval.EvalSession(h.Module)
@@ -356,14 +338,6 @@ func (h *Hpl) RunWithContext(name string, context pl.Val) error {
 	if h.Module == nil {
 		return fmt.Errorf("the Hpl engine does not have any module binded")
 	}
-	if h.isRunning {
-		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
-	}
-
-	h.isRunning = true
-	defer func() {
-		h.isRunning = false
-	}()
 
 	return h.Eval.EvalWithContext(name, context, h.Module)
 }
@@ -385,41 +359,33 @@ func (h *Hpl) testLoadVar(x *pl.Evaluator, n string) (pl.Val, error) {
 	if v, ok := h.loadFnVar(x, n); ok {
 		return v, nil
 	} else {
-		return h.session.OnLoadVar(x, n)
+		return h.hplCtx.OnLoadVar(x, n)
 	}
 }
 
 func (h *Hpl) testStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
-	return h.session.OnStoreVar(x, n, v)
+	return h.hplCtx.OnStoreVar(x, n, v)
 }
 
 func (h *Hpl) testAction(x *pl.Evaluator, n string, v pl.Val) error {
-	return h.session.OnAction(x, n, v)
+	return h.hplCtx.OnAction(x, n, v)
 }
 
 func (h *Hpl) OnTestSession(session SessionWrapper) error {
 	if h.Module == nil {
 		return fmt.Errorf("the Hpl engine does not have any module binded")
 	}
-	if h.isRunning {
-		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
-	}
-
-	h.isRunning = true
 	h.request = pl.NewValNull()
 	h.params = pl.NewValNull()
 	h.respWriter = pl.NewValNull()
 	h.log = nil
-	h.session = session
+	h.hplCtx = session
+	h.hplRt = session
 	h.Eval.Context = pl.NewCbEvalContext(
 		h.testLoadVar,
 		h.testStoreVar,
 		h.testAction,
 	)
-
-	defer func() {
-		h.isRunning = false
-	}()
 
 	return h.Eval.EvalSession(h.Module)
 }
@@ -428,11 +394,6 @@ func (h *Hpl) OnTest(selector string, context pl.Val) error {
 	if h.Module == nil {
 		return fmt.Errorf("the Hpl engine does not have any module binded")
 	}
-	if h.isRunning {
-		return fmt.Errorf("the Hpl engine is running, it does not support re-enter")
-	}
-
-	h.isRunning = true
 	h.request = pl.NewValNull()
 	h.params = pl.NewValNull()
 	h.respWriter = pl.NewValNull()
@@ -442,10 +403,6 @@ func (h *Hpl) OnTest(selector string, context pl.Val) error {
 		h.testStoreVar,
 		h.testAction,
 	)
-
-	defer func() {
-		h.isRunning = false
-	}()
 
 	return h.Eval.EvalWithContext(selector, context, h.Module)
 }

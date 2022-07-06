@@ -60,6 +60,18 @@ func newResponseWriterWrapper(
 	return x, val
 }
 
+func (r *responseWriterWrapper) SetReply(
+	status int,
+	body string,
+) bool {
+	if !r.IsHeaderFlushed() && !r.IsFlushed() {
+		r.status = status
+		r.body = hpl.NewReadCloserFromString(body)
+		return true
+	}
+	return false
+}
+
 // -----------------------------------------------------------------------------
 // Interface for pl.Usr
 func (r *responseWriterWrapper) Index(
@@ -154,8 +166,10 @@ func (r *responseWriterWrapper) DotSet(
 }
 
 var (
-	rwMethodFlushHeader = pl.MustNewFuncProto("http.response_writer.flushHeader", "%0")
-	rwMethodFlush       = pl.MustNewFuncProto("http.response_writer.flush", "%0")
+	rwMethodFlushHeader     = pl.MustNewFuncProto("http.response_writer.flushHeader", "%0")
+	rwMethodFlush           = pl.MustNewFuncProto("http.response_writer.flush", "%0")
+	rwMethodIsHeaderFlushed = pl.MustNewFuncProto("http.response_writer.isHeaderFlushed", "%0")
+	rwMethodIsFlushed       = pl.MustNewFuncProto("http.response_writer.isFlushed", "%0")
 )
 
 func (r *responseWriterWrapper) Method(
@@ -175,6 +189,19 @@ func (r *responseWriterWrapper) Method(
 			return pl.NewValNull(), err
 		}
 		return pl.NewValBool(r.Flush()), nil
+
+	case "isFlushed":
+		if _, err := rwMethodIsFlushed.Check(arg); err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValBool(r.IsFlushed()), nil
+
+	case "isHeaderFlushed":
+		if _, err := rwMethodIsHeaderFlushed.Check(arg); err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValBool(r.IsHeaderFlushed()), nil
+
 	default:
 		break
 	}
@@ -242,12 +269,6 @@ func (r *responseWriterWrapper) FlushHeader() bool {
 	}
 	r.headerDone = true
 
-	// fire a interceptor event
-	_ = r.handler.hpl.RunWithContext(
-		EventNameResponseHookStatus,
-		pl.NewValNull(),
-	)
-
 	// write the header and status field out
 	for k, v := range r.header {
 		r.w.Header()[k] = v
@@ -271,11 +292,6 @@ func (r *responseWriterWrapper) Flush() bool {
 	if r.bodyDone {
 		return false
 	}
-
-	_ = r.handler.hpl.RunWithContext(
-		EventNameResponseHookBody,
-		pl.NewValNull(),
-	)
 
 	r.FlushHeader()
 
@@ -317,29 +333,59 @@ func (r *responseWriterWrapper) ReplyNow(
 	r.Flush()
 }
 
+func (r *responseWriterWrapper) replyErr(
+	reason string,
+	status int,
+	body string,
+) {
+
+	r.SetReply(status, body)
+
+	if r.handler.hpl.Module.HasEvent(EventNameError) {
+		_ = r.handler.hpl.RunWithContext(
+			EventNameError,
+			pl.NewValStr(reason),
+		)
+	}
+
+	r.Flush()
+}
+
+func (r *responseWriterWrapper) ReplyError(
+	reason string,
+	status int,
+	err error,
+) {
+	r.replyErr(reason, status, err.Error())
+}
+
 func (r *responseWriterWrapper) ReplyErrorHPL(err error) {
-	r.ReplyNow(
+	r.replyErr(
+		"hpl",
 		500,
 		err.Error(),
 	)
 }
 
-func (r *responseWriterWrapper) ReplyErrorApp(err error) {
-	r.ReplyNow(
+func (r *responseWriterWrapper) ReplyErrorAppAccept(err error) {
+	r.replyErr(
+		"application.accept",
 		500,
 		err.Error(),
 	)
 }
 
 func (r *responseWriterWrapper) ReplyErrorAppPrepare(err error) {
-	r.ReplyNow(
+	r.replyErr(
+		"application.prepare",
 		500,
 		err.Error(),
 	)
 }
 
 func (r *responseWriterWrapper) ReplyErrorCreateService(err error) {
-	r.ReplyNow(
+	r.replyErr(
+		"create_service",
 		500,
 		err.Error(),
 	)
