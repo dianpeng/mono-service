@@ -19,6 +19,7 @@ type vhostlist struct {
 func newvhostlist() vhostlist {
 	return vhostlist{
 		index: make(map[string]*vhost.VHost),
+		name:  make(map[string]*vhost.VHost),
 	}
 }
 
