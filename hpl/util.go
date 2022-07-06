@@ -2,6 +2,7 @@ package hpl
 
 import (
 	"github.com/dianpeng/mono-service/pl"
+	"github.com/dianpeng/mono-service/util"
 	"net/http"
 	"strings"
 )
@@ -17,30 +18,12 @@ import (
 //      which will be used to perform Match operation against header key to filter
 //      out what we need
 
-type matcher func(string, string) bool
-
-func metaType(key string) matcher {
-	prefixWildcard := strings.HasPrefix(key, "*")
-	suffixWildcard := strings.HasSuffix(key, "*")
-	if prefixWildcard && suffixWildcard {
-		return strings.Contains
-	} else if prefixWildcard {
-		return strings.HasPrefix
-	} else if suffixWildcard {
-		return strings.HasSuffix
-	} else {
-		return func(_, _ string) bool {
-			return true
-		}
-	}
-}
-
 type httpHeaderFilterFunc = func(string, []string, http.Header) bool
 
 func httpHeaderFilter(hdr http.Header, key_pattern pl.Val, filter httpHeaderFilterFunc) int {
 	if key_pattern.Type == pl.ValStr {
 		k := key_pattern.String()
-		m := metaType(k)
+		m := util.ToMatcher(k)
 		cnt := 0
 
 		for key, val := range hdr {

@@ -60,7 +60,7 @@ func (_ *eventfactory) Name() string {
 }
 
 func (_ *eventfactory) Comment() string {
-	return "event a specific event and run corresponding PL entry synchronously"
+	return "emit a specific event and run corresponding PL entry synchronously"
 }
 
 // builtin application

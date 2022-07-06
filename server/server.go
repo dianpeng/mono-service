@@ -4,8 +4,13 @@ import (
 	"fmt"
 	"sync"
 
-	_ "github.com/dianpeng/mono-service/application"
 	"github.com/dianpeng/mono-service/vhost"
+
+	// for side effect
+	_ "github.com/dianpeng/mono-service/application"
+	_ "github.com/dianpeng/mono-service/ext/application"
+	_ "github.com/dianpeng/mono-service/ext/request"
+	_ "github.com/dianpeng/mono-service/ext/response"
 )
 
 type Server struct {

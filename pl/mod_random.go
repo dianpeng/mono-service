@@ -1,13 +1,10 @@
 package pl
 
 import (
-	"bytes"
-	"math/rand"
-
+	"github.com/dianpeng/mono-service/util"
 	"github.com/google/uuid"
+	"math/rand"
 )
-
-var randomstringlettertable = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_")
 
 func init() {
 	addrefMF(
@@ -31,15 +28,7 @@ func init() {
 		"str",
 		"",
 		"%d",
-		func(n int) string {
-			sz := len(randomstringlettertable)
-			b := new(bytes.Buffer)
-			for i := 0; i < n; i++ {
-				idx := rand.Intn(sz)
-				b.WriteRune(randomstringlettertable[idx])
-			}
-			return b.String()
-		},
+		util.RandomString,
 	)
 
 	addrefMF(
