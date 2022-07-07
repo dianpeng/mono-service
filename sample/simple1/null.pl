@@ -35,7 +35,7 @@ config service {
     "this is the value"
   );
 
-  response echo(200, true);
+  response random(200);
 }
 
 fn HelloWorld() {
