@@ -28,7 +28,7 @@ type VHostConfig struct {
 type VHost struct {
 	ServiceList []*vHS
 	Router      *mux.Router
-	LogFormat   *alog.SessionLogFormat
+	LogFormat   *alog.Format
 	Config      *VHostConfig
 	Module      *pl.Module
 	clientPool  *hclient.HClientPool
@@ -48,7 +48,7 @@ func (config *VHostConfig) Compose(p *pl.Module) (*VHost, error) {
 			g.VHostLogFormat,
 		)
 
-		logf, err := alog.NewSessionLogFormat(logFormat)
+		logf, err := alog.CompileFormat(logFormat)
 		if err != nil {
 			return nil, err
 		}
@@ -180,6 +180,6 @@ func (x *VHostConfigBuilder) ConfigCommand(
 	return fmt.Errorf("virtual_host: unknown command %s", key)
 }
 
-func (v *VHost) uploadLog(_ *alog.SessionLog) {
+func (v *VHost) uploadLog(_ *alog.Log, _ alog.Provider) {
 	// TODO(dpeng): Add log sinking services
 }

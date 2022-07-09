@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/dianpeng/mono-service/alog"
 	"github.com/dianpeng/mono-service/framework"
@@ -32,6 +33,129 @@ type serviceHandler struct {
 	serviceResult framework.ApplicationResult
 	phase         string
 	phaseIndex    int
+}
+
+type logProvider struct {
+	s       *serviceHandler
+	startTs time.Time
+	hreq    *http.Request
+	hresp   responseWriterWrapper
+
+	duration            int64
+	requestDuration     int64
+	responseDuration    int64
+	applicationDuration int64
+}
+
+// implementation of various log provider related functions -------------------
+func (l *logProvider) FormatStartTime(
+	fmt string,
+) string {
+	return l.startTs.Format(fmt)
+}
+
+func (l *logProvider) ReqHeaderBytes() (int64, bool) {
+	return 0, false
+}
+
+func (l *logProvider) BytesReceived() (int64, bool) {
+	return 0, false
+}
+
+func (l *logProvider) ResponseHeadersBytes() (int64, bool) {
+	return 0, false
+}
+
+func (l *logProvider) ResponseTrailersBytes() (int64, bool) {
+	return 0, false
+}
+
+func (l *logProvider) BytesSent() (int64, bool) {
+	return 0, false
+}
+
+func (l *logProvider) Duration() (int64, bool) {
+	return l.duration, true
+}
+
+func (l *logProvider) RequestDuration() (int64, bool) {
+	return l.requestDuration, true
+}
+
+func (l *logProvider) ResponseDuration() (int64, bool) {
+	return l.responseDuration, true
+}
+
+func (l *logProvider) ConnectionTerminationDetails() (string, bool) {
+	return "", false
+}
+
+func (l *logProvider) ConnectionId() (string, bool) {
+	return "", false
+}
+
+func (l *logProvider) VirtualHost() (string, bool) {
+	return "", false
+}
+
+func (l *logProvider) RouterInfo(_ alog.FormatParam) (string, bool) {
+	return "", false
+}
+
+func (l *logProvider) Req(_ alog.FormatParam) (string, bool) {
+	return "", false
+}
+
+func (l *logProvider) Resp(_ alog.FormatParam) (string, bool) {
+	return "", false
+}
+
+func (l *logProvider) URI(_ alog.FormatParam) (string, bool) {
+	return "", false
+}
+
+func (l *logProvider) Trailer(_ alog.FormatParam) (string, bool) {
+	return "", false
+}
+
+func (l *logProvider) ResponseCode() (int64, bool) {
+	return 0, false
+}
+
+func (l *logProvider) ResponseCodeDetail() (string, bool) {
+	return "", false
+}
+
+func (l *logProvider) RequestMiddleware(_ alog.FormatParam) (string, bool) {
+	return "", false
+}
+
+func (l *logProvider) ResponseMiddleware(_ alog.FormatParam) (string, bool) {
+	return "", false
+}
+
+func (l *logProvider) ApplicationMiddleware(_ alog.FormatParam) (string, bool) {
+	return "", false
+}
+
+func (l *logProvider) Host() (string, bool) {
+	return "", false
+}
+
+func (l *logProvider) ServiceName() (string, bool) {
+	return "", false
+}
+
+func (l *logProvider) ClientIp() (string, bool) {
+	return "", false
+}
+
+func (l *logProvider) Protocol() (string, bool) {
+	return "", false
+}
+
+func (l *logProvider) Scheme() (string, bool) {
+	return "", false
 }
 
 func newServicePool(cacheSize int) servicePool {
@@ -105,13 +229,9 @@ func (s *serviceHandler) main(
 		resp,
 	)
 
-	log := &alog.SessionLog{
-		Format:              s.vhs.vhost.LogFormat,
-		HttpRequest:         req,
-		RouterParams:        p,
-		HttpResponseSummary: respWrapper,
-		VHost:               s,
-		Session:             s,
+	log := alog.NewLog(s.vhs.vhost.LogFormat)
+	logP := &logProvider{
+		s: s,
 	}
 
 	defer func() {
@@ -132,12 +252,13 @@ func (s *serviceHandler) main(
 		// (6) finally, generate the access log
 		{
 			s.setPhase(phase.PhaseAccessLog, ".access_log")
-			s.Log(log)
+			s.Log(&log)
 		}
 
 		// cleanup work
 		s.vhs.vhost.uploadLog(
-			log,
+			&log,
+			logP,
 		)
 		s.finish()
 		s.vhs.servicePool.put(s)
@@ -146,7 +267,7 @@ func (s *serviceHandler) main(
 	// (0) run the HPL session init
 	{
 		s.setPhase(phase.PhaseInit, ".init")
-		if err := s.init(reqVal, routerVal, respVal, log); err != nil {
+		if err := s.init(reqVal, routerVal, respVal, &log); err != nil {
 			respWrapper.ReplyErrorHPL(err)
 			return
 		}
@@ -237,7 +358,7 @@ func (s *serviceHandler) main(
 	}
 }
 
-func (s *serviceHandler) Log(log *alog.SessionLog) error {
+func (s *serviceHandler) Log(log *alog.Log) error {
 	return s.hpl.RunWithContext(EventNameLog, pl.NewValNull())
 }
 
@@ -248,15 +369,6 @@ func (s *serviceHandler) Hpl() *hpl.Hpl {
 
 func (s *serviceHandler) HplSessionWrapper() hpl.SessionWrapper {
 	return s
-}
-
-// interface for alog.VHostInformation
-func (s *serviceHandler) VHostName() string {
-	return s.vhs.vhost.Config.Name
-}
-
-func (s *serviceHandler) Listener() string {
-	return s.vhs.vhost.Config.Listener
 }
 
 // interface for alog.ServiceInfo
@@ -272,7 +384,7 @@ func (s *serviceHandler) init(
 	request pl.Val,
 	hrouter pl.Val,
 	response pl.Val,
-	log *alog.SessionLog,
+	log *alog.Log,
 ) error {
 
 	return s.hpl.OnInit(

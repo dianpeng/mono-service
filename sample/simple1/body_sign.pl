@@ -16,7 +16,7 @@ rule "body_sign.sign" => {
 rule "body_sign.reject" => {
   response.status = 404;
   response.header:set("x-body-sign-result", $.sign);
-  response.header.set("x-body-sign-expect", $.signExpect);
+  response.header:set("x-body-sign-expect", $.signExpect);
   response.body = $.signBody;
 }
 

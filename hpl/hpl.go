@@ -65,7 +65,7 @@ type Hpl struct {
 	respWriter pl.Val
 	hplCtx     HplContext
 	hplRt      HplRuntime
-	log        *alog.SessionLog
+	log        *alog.Log
 }
 
 func NewHpl() *Hpl {
@@ -307,7 +307,7 @@ func (h *Hpl) OnInit(
 	hrouter pl.Val,
 	respWriter pl.Val,
 	session SessionWrapper,
-	log *alog.SessionLog,
+	log *alog.Log,
 ) error {
 	if h.Module == nil {
 		return fmt.Errorf("the Hpl engine does not have any module binded")
