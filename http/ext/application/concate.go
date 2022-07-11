@@ -30,6 +30,7 @@ import (
 	"github.com/dianpeng/mono-service/hrouter"
 	"github.com/dianpeng/mono-service/http/framework"
 	"github.com/dianpeng/mono-service/http/phase"
+	"github.com/dianpeng/mono-service/http/runtime"
 	"github.com/dianpeng/mono-service/pl"
 )
 
@@ -80,7 +81,7 @@ type concateApplication struct {
 
 	// internal HPL used by the background go routine to evaluate |request| event
 	// which cannot be the one used in the foreground go routine
-	hpl *hpl.Hpl
+	runtime *runtime.Runtime
 
 	// context variable
 	reqList []*concateRequest
@@ -90,7 +91,7 @@ type concateApplication struct {
 	writer *io.PipeWriter
 	reader *io.PipeReader
 
-	bgWrapper hpl.SessionWrapper
+	bgWrapper runtime.SessionWrapper
 	args      []pl.Val
 }
 
@@ -234,7 +235,7 @@ LOOP:
 		// trigger only happened when original request comming from http request
 		if req.kind == concateRequestUrl || req.kind == concateRequestRequest {
 			req.fetchResponse = httpresp
-			if err := s.hpl.OnCustomize("concate.background.check", s.bgWrapper); err != nil {
+			if err := s.runtime.OnCustomize("concate.background.check", s.bgWrapper); err != nil {
 				s.bgError = err
 				break LOOP
 			}
@@ -446,7 +447,7 @@ func (c *concateApplication) Accept(
 	)
 
 	// run hpl
-	err := context.Hpl().RunWithContext(
+	err := context.Runtime().RunWithContext(
 		"concate.generate",
 		pl.NewValNull(),
 	)
@@ -456,7 +457,7 @@ func (c *concateApplication) Accept(
 	}
 
 	// derive from foreground hpl engine if we can
-	c.hpl.Derive(context.Hpl())
+	c.runtime.Derive(context.Runtime())
 
 	if c.hasPending() {
 		c.wg.Add(1)
@@ -488,8 +489,8 @@ Typically used for combining assets load from upstream
 
 func (c *concateApplicationFactory) Create(args []pl.Val) (framework.Application, error) {
 	return &concateApplication{
-		hpl:  hpl.NewHpl(),
-		args: args,
+		runtime: runtime.NewRuntime(),
+		args:    args,
 	}, nil
 }
 

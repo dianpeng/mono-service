@@ -21,7 +21,7 @@ func NewPLConfig(c ServiceContext, a []pl.Val) PLConfig {
 func (p *PLConfig) tryeval(v pl.Val) (pl.Val, error) {
 	if v.IsClosure() {
 		cls, _ := v.Usr().(pl.Closure)
-		return cls.Call(p.context.Hpl().Eval, []pl.Val{})
+		return cls.Call(p.context.Runtime().Eval, []pl.Val{})
 	}
 	return v, nil
 }

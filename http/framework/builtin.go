@@ -37,7 +37,7 @@ func (e *event) Accept(
 	cfg.TryGet(1, &context, pl.NewValNull())
 
 	// run the event
-	if err := ctx.Hpl().RunWithContext(eventName, context); err != nil {
+	if err := ctx.Runtime().RunWithContext(eventName, context); err != nil {
 		w.ReplyError(
 			fmt.Sprintf("event.%s", eventName),
 			500,

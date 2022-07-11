@@ -32,7 +32,7 @@ var (
 	)
 )
 
-func fnHttpGet(factory HttpClientFactory, argument []pl.Val) (pl.Val, error) {
+func FnHttpGet(factory HttpClientFactory, argument []pl.Val) (pl.Val, error) {
 	asize, err := fnProtoHttpGet.Check(argument)
 	if err != nil {
 		return pl.NewValNull(), err
@@ -70,7 +70,7 @@ func fnHttpGet(factory HttpClientFactory, argument []pl.Val) (pl.Val, error) {
 	return NewResponseVal(resp), nil
 }
 
-func fnHttpPost(factory HttpClientFactory, argument []pl.Val) (pl.Val, error) {
+func FnHttpPost(factory HttpClientFactory, argument []pl.Val) (pl.Val, error) {
 	asize, err := fnProtoHttpPost.Check(argument)
 	if err != nil {
 		return pl.NewValNull(), err
@@ -129,7 +129,7 @@ func fnHttpPost(factory HttpClientFactory, argument []pl.Val) (pl.Val, error) {
 	return NewResponseVal(resp), nil
 }
 
-func fnHttpDo(factory HttpClientFactory, argument []pl.Val) (pl.Val, error) {
+func FnHttpDo(factory HttpClientFactory, argument []pl.Val) (pl.Val, error) {
 	asize, err := fnProtoHttpDo.Check(argument)
 	if err != nil {
 		return pl.NewValNull(), err

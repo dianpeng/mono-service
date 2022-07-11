@@ -13,6 +13,7 @@ import (
 	"github.com/dianpeng/mono-service/hrouter"
 	"github.com/dianpeng/mono-service/http/framework"
 	"github.com/dianpeng/mono-service/http/phase"
+	"github.com/dianpeng/mono-service/http/runtime"
 	"github.com/dianpeng/mono-service/pl"
 )
 
@@ -24,7 +25,7 @@ type servicePool struct {
 
 type serviceHandler struct {
 	service          *framework.Service
-	hpl              *hpl.Hpl
+	runtime          *runtime.Runtime
 	vhs              *vHS
 	activeHttpClient []*hclient.HClient
 
@@ -199,7 +200,7 @@ func (s *servicePool) put(h *serviceHandler) bool {
 func newServiceHandler(s *framework.Service, vhs *vHS) *serviceHandler {
 	h := &serviceHandler{
 		service: s,
-		hpl:     hpl.NewHplWithModule(vhs.module),
+		runtime: runtime.NewRuntimeWithModule(vhs.module),
 		vhs:     vhs,
 	}
 	return h
@@ -333,7 +334,7 @@ func (s *serviceHandler) main(
 		// event if applicable
 		if s.serviceResult.Event != "" {
 			s.setPhase(phase.PhaseApplicationEvent, "application.event")
-			if err := s.hpl.RunWithContext(s.serviceResult.Event,
+			if err := s.runtime.RunWithContext(s.serviceResult.Event,
 				s.serviceResult.Context); err != nil {
 				respWrapper.ReplyErrorHPL(err)
 				return
@@ -359,15 +360,15 @@ func (s *serviceHandler) main(
 }
 
 func (s *serviceHandler) Log(log *alog.Log) error {
-	return s.hpl.RunWithContext(EventNameLog, pl.NewValNull())
+	return s.runtime.RunWithContext(EventNameLog, pl.NewValNull())
 }
 
 // interface for frame.ServiceContext
-func (s *serviceHandler) Hpl() *hpl.Hpl {
-	return s.hpl
+func (s *serviceHandler) Runtime() *runtime.Runtime {
+	return s.runtime
 }
 
-func (s *serviceHandler) HplSessionWrapper() hpl.SessionWrapper {
+func (s *serviceHandler) HplSessionWrapper() runtime.SessionWrapper {
 	return s
 }
 
@@ -387,7 +388,7 @@ func (s *serviceHandler) init(
 	log *alog.Log,
 ) error {
 
-	return s.hpl.OnInit(
+	return s.runtime.OnInit(
 		request,
 		hrouter,
 		response,

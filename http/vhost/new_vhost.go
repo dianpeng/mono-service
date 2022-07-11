@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/hrouter"
+	"github.com/dianpeng/mono-service/http/runtime"
 	"github.com/dianpeng/mono-service/manifest"
 	"github.com/dianpeng/mono-service/pl"
 	"io/fs"
@@ -28,8 +29,7 @@ func initmodule(x string, config pl.EvalConfig, fs fs.FS) (*pl.Module, error) {
 	}
 
 	session := &constHttpClientFactory{}
-	hpl := hpl.NewHpl()
-	hpl.SetModule(p)
+	hpl := runtime.NewRuntimeWithModule(p)
 
 	if err := hpl.OnGlobal(session); err != nil {
 		return nil, err

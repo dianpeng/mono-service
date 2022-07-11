@@ -341,8 +341,8 @@ func (r *responseWriterWrapper) replyErr(
 
 	r.SetReply(status, body)
 
-	if r.handler.hpl.Module.HasEvent(EventNameError) {
-		_ = r.handler.hpl.RunWithContext(
+	if r.handler.runtime.Module.HasEvent(EventNameError) {
+		_ = r.handler.runtime.RunWithContext(
 			EventNameError,
 			pl.NewValStr(reason),
 		)

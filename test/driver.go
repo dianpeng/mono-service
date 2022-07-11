@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/dianpeng/mono-service/hpl"
+	"github.com/dianpeng/mono-service/http/runtime"
 	"github.com/dianpeng/mono-service/pl"
 	"net/http"
 	"os"
@@ -126,7 +127,7 @@ func runAllTestFile(path string) (testResult, error) {
 			fmt.Printf(">> Compile: %s\n", err.Error())
 			t.compileFail++
 		} else {
-			hpl := hpl.NewHpl()
+			hpl := runtime.NewRuntime()
 			hpl.SetModule(p)
 
 			ctx := &testcontext{}

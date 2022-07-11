@@ -1,10 +1,10 @@
 package framework
 
 import (
-	"github.com/dianpeng/mono-service/hpl"
+	"github.com/dianpeng/mono-service/http/runtime"
 )
 
 type ServiceContext interface {
-	Hpl() *hpl.Hpl
-	HplSessionWrapper() hpl.SessionWrapper
+	Runtime() *runtime.Runtime
+	HplSessionWrapper() runtime.SessionWrapper
 }

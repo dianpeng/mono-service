@@ -3,11 +3,12 @@ package application
 import (
 	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/http/framework"
+	"github.com/dianpeng/mono-service/http/runtime"
 	"github.com/dianpeng/mono-service/pl"
 )
 
 type bgApplicationWrapper struct {
-	parent      hpl.SessionWrapper
+	parent      runtime.SessionWrapper
 	application framework.Application
 }
 
@@ -29,7 +30,7 @@ func (b *bgApplicationWrapper) GetHttpClient(url string) (hpl.HttpClient, error)
 }
 
 func newBgApplicationWrapper(
-	parent hpl.SessionWrapper,
+	parent runtime.SessionWrapper,
 	application framework.Application,
 ) *bgApplicationWrapper {
 	return &bgApplicationWrapper{
