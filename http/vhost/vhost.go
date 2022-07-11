@@ -8,7 +8,9 @@ import (
 	"github.com/dianpeng/mono-service/alog"
 	"github.com/dianpeng/mono-service/g"
 	"github.com/dianpeng/mono-service/hclient"
+	"github.com/dianpeng/mono-service/manifest"
 	"github.com/dianpeng/mono-service/pl"
+	"github.com/dianpeng/mono-service/server"
 	"github.com/dianpeng/mono-service/util"
 )
 
@@ -79,10 +81,10 @@ func (x *VHostConfigBuilder) PushConfig(
 	_ pl.Val,
 ) error {
 	if x.configPush {
-		return fmt.Errorf("virtual_host config: nested config scope is not allowed")
+		return fmt.Errorf("http_vhost config: nested config scope is not allowed")
 	}
-	if name != "virtual_host" {
-		return fmt.Errorf("virtual_host config: unknown config type, expect virtual_host")
+	if name != "http_vhost" {
+		return fmt.Errorf("http_vhost config: unknown config type, expect http_vhost")
 	}
 
 	x.configPush = true
@@ -104,7 +106,7 @@ func (s *VHostConfigBuilder) ConfigProperty(
 ) error {
 
 	if !s.configPush {
-		return fmt.Errorf("config property must be set inside of virtual_host scope")
+		return fmt.Errorf("config property must be set inside of http_vhost scope")
 	}
 
 	switch key {
@@ -112,63 +114,63 @@ func (s *VHostConfigBuilder) ConfigProperty(
 		return propSetString(
 			value,
 			&s.config.Name,
-			"virtual_host.name",
+			"http_vhost.name",
 		)
 
 	case "comment":
 		return propSetString(
 			value,
 			&s.config.Comment,
-			"virtual_host.comment",
+			"http_vhost.comment",
 		)
 
 	case "server_name":
 		return propSetString(
 			value,
 			&s.config.ServerName,
-			"virtual_host.server_name",
+			"http_vhost.server_name",
 		)
 
 	case "listener":
 		return propSetString(
 			value,
 			&s.config.Listener,
-			"virtual_host.listener",
+			"http_vhost.listener",
 		)
 
 	case "log_format":
 		return propSetString(
 			value,
 			&s.config.LogFormat,
-			"virtual_host.log_format",
+			"http_vhost.log_format",
 		)
 
 	case "http_client_pool_max_size":
 		return propSetInt64(
 			value,
 			&s.config.HttpClientPoolMaxSize,
-			"virtual_host.http_client_pool_max_size",
+			"http_vhost.http_client_pool_max_size",
 		)
 
 	case "http_client_pool_timeout":
 		return propSetInt64(
 			value,
 			&s.config.HttpClientPoolTimeout,
-			"virtual_host.http_client_pool_timeout",
+			"http_vhost.http_client_pool_timeout",
 		)
 
 	case "http_client_pool_max_drain_size":
 		return propSetInt64(
 			value,
 			&s.config.HttpClientPoolMaxDrainSize,
-			"virtual_host.http_client_pool_max_drain_size",
+			"http_vhost.http_client_pool_max_drain_size",
 		)
 
 	default:
 		break
 	}
 
-	return fmt.Errorf("virtual_host: unknown property: %s", key)
+	return fmt.Errorf("http_vhost: unknown property: %s", key)
 }
 
 func (x *VHostConfigBuilder) ConfigCommand(
@@ -177,9 +179,37 @@ func (x *VHostConfigBuilder) ConfigCommand(
 	_ []pl.Val,
 	_ pl.Val,
 ) error {
-	return fmt.Errorf("virtual_host: unknown command %s", key)
+	return fmt.Errorf("http_vhost: unknown command %s", key)
 }
 
 func (v *VHost) uploadLog(_ *alog.Log, _ alog.Provider) {
 	// TODO(dpeng): Add log sinking services
+}
+
+// ----------------------------------------------------------------------------
+// server.vhost
+func (v *VHost) Name() string {
+	return v.Config.Name
+}
+
+func (v *VHost) ListenerName() string {
+	return v.Config.Listener
+}
+
+func (v *VHost) ListenerType() string {
+	return "http"
+}
+
+type vhostfac struct {
+}
+
+func (v *vhostfac) New(x *manifest.Manifest) (server.VHost, error) {
+	return CreateVHost(x)
+}
+
+func init() {
+	server.AddVHostFactory(
+		"http",
+		&vhostfac{},
+	)
 }

@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/dianpeng/mono-service/http/vhost"
+	"github.com/dianpeng/mono-service/manifest"
 
 	// for side effect
-	_ "github.com/dianpeng/mono-service/http/ext/application"
-	_ "github.com/dianpeng/mono-service/http/ext/request"
-	_ "github.com/dianpeng/mono-service/http/ext/response"
+	_ "github.com/dianpeng/mono-service/http/prelude"
 )
 
 type Server struct {
@@ -44,17 +42,28 @@ func (s *Server) getListener(x string) Listener {
 }
 
 func (s *Server) AddVirtualHost(
-	config *vhost.Manifest,
+	config *manifest.Manifest,
 ) error {
-	vhost, err := vhost.CreateVHost(config)
+	fac := GetVHostFactory(config.Type)
+	if fac == nil {
+		return fmt.Errorf("listener: unknown manifest type %s", config.Type)
+	}
+	vhost, err := fac.New(config)
 	if err != nil {
 		return err
 	}
-	listener := s.getListener(vhost.Config.Listener)
-	if listener == nil {
-		return fmt.Errorf("listener: %s is not existed", vhost.Config.Listener)
+	if vhost.ListenerType() != config.Type {
+		return fmt.Errorf("listener: mismatched listener type %s and vhost type %s",
+			vhost.ListenerType(),
+			config.Type,
+		)
 	}
-	return listener.AddVHost(vhost)
+
+	if listener := s.getListener(vhost.ListenerName()); listener == nil {
+		return fmt.Errorf("listener: %s is not existed", vhost.ListenerName())
+	} else {
+		return listener.AddVHost(vhost)
+	}
 }
 
 // run all the listener
@@ -76,13 +85,13 @@ func (s *Server) Run() {
 }
 
 func (s *Server) AddVHost(
-	vhost *vhost.VHost,
+	vhost VHost,
 ) error {
 	lis := s.getListener(
-		vhost.Config.Listener,
+		vhost.ListenerName(),
 	)
 	if lis == nil {
-		return fmt.Errorf("listener %s is not existed", vhost.Config.Listener)
+		return fmt.Errorf("listener %s is not existed", vhost.ListenerName())
 	}
 
 	return lis.AddVHost(vhost)
@@ -107,9 +116,9 @@ func (s *Server) RemoveVHost(
 }
 
 func (s *Server) UpdateVHost(
-	vhost *vhost.VHost,
+	vhost VHost,
 ) {
-	l := s.getListener(vhost.Config.Listener)
+	l := s.getListener(vhost.ListenerName())
 	if l != nil {
 		l.UpdateVHost(vhost)
 	}

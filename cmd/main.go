@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/dianpeng/mono-service/manifest"
 	"github.com/dianpeng/mono-service/server"
 
 	// for side effect
 	_ "github.com/dianpeng/mono-service/http"
-	"github.com/dianpeng/mono-service/http/vhost"
 )
 
 func printHelp() {
@@ -57,10 +57,11 @@ func parseListenerConfig(x strList) ([]server.ListenerConfig, error) {
 
 func main() {
 	var listenerConf strList
-	var projPath strList
+	var httpdir strList
 
 	flag.Var(&listenerConf, "listener", "list of listener config, in JSON")
-	flag.Var(&projPath, "path", "list of path to local fs project's main file")
+	flag.Var(&httpdir, "http_dir", "list of path to local fs http virtual host")
+
 	flag.Parse()
 
 	lconf, err := parseListenerConfig(listenerConf)
@@ -75,9 +76,10 @@ func main() {
 		return
 	}
 
-	for _, m := range projPath {
-		manifest, err := vhost.NewManifestFromLocalDir(
+	for _, m := range httpdir {
+		manifest, err := manifest.NewManifestFromLocalDir(
 			m,
+			"http",
 		)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, err.Error())

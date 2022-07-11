@@ -67,16 +67,16 @@ func (l *listener) Run() error {
 // the follwing function are thread safe, so can be used to add, update, remove
 // virtual host when the listener is executing/running
 func (l *listener) AddVHost(
-	v *vhost.VHost,
+	v server.VHost,
 ) error {
-	return l.vlist.add(v)
+	return l.vlist.add(v.(*vhost.VHost))
 }
 
 // try to update a VHost in the current listener
 func (l *listener) UpdateVHost(
-	v *vhost.VHost,
+	v server.VHost,
 ) {
-	l.vlist.update(v)
+	l.vlist.update(v.(*vhost.VHost))
 }
 
 func (l *listener) RemoveVHost(
@@ -87,7 +87,7 @@ func (l *listener) RemoveVHost(
 
 func (l *listener) GetVHost(
 	serverName string,
-) *vhost.VHost {
+) server.VHost {
 	return l.vlist.get(serverName)
 }
 

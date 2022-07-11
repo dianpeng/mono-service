@@ -1,4 +1,4 @@
-package vhost
+package manifest
 
 import (
 	"io/fs"
@@ -11,4 +11,5 @@ type Manifest struct {
 	FS          fs.FS
 	Main        string
 	ServiceFile []string
+	Type        string
 }

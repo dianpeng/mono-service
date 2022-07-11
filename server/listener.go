@@ -1,17 +1,12 @@
 package server
 
-import (
-	"github.com/dianpeng/mono-service/http/vhost"
-)
-
 type Listener interface {
 	Name() string
 	Type() string
 
-	AddVHost(*vhost.VHost) error
-	UpdateVHost(*vhost.VHost)
+	AddVHost(VHost) error
+	UpdateVHost(VHost)
 	RemoveVHost(string)
-	GetVHost(string) *vhost.VHost
-
+	GetVHost(string) VHost
 	Run() error
 }

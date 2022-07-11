@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/hrouter"
+	"github.com/dianpeng/mono-service/manifest"
 	"github.com/dianpeng/mono-service/pl"
 	"io/fs"
 	"net/http"
@@ -75,7 +76,7 @@ func initVHost(
 	p, err := initmodule(string(vhostSource), vhostConfigBuilder, fsp)
 	if err != nil {
 		return nil, wrapErr(
-			"virtual_host",
+			"http_vhost",
 			"initialization",
 			path,
 			err,
@@ -151,7 +152,7 @@ func doRoute(
 
 // Create the full VHOST object from the manifest object
 func CreateVHost(
-	manifest *Manifest,
+	manifest *manifest.Manifest,
 ) (*VHost, error) {
 
 	vhost, err := initVHost(manifest.Main, manifest.FS)

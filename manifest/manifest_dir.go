@@ -1,4 +1,4 @@
-package vhost
+package manifest
 
 import (
 	"os"
@@ -8,8 +8,11 @@ import (
 // Create a manifest from local director
 func NewManifestFromLocalDir(
 	mainPath string,
+	t string,
 ) (*Manifest, error) {
-	manifest := &Manifest{}
+	manifest := &Manifest{
+		Type: t,
+	}
 	dir := filepath.Dir(mainPath)
 
 	relativeOffset := len(dir) + 1

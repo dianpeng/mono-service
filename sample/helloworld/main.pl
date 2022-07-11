@@ -1,7 +1,7 @@
 // 如下为PL语言的配置代码。PL语言内置配置功能。
 // 注意的每个配置项的名字前面有个“."，这个是因为每个config也是个代码块，用户可以编写常规代码。常规代码的符号名字是不能由'.'开头的。
 
-config virtual_host {
+config http_vhost {
   println("start to configure virtual_host.name");
   .name = "first_service"; // service名字
   
