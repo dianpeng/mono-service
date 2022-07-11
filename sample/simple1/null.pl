@@ -46,6 +46,18 @@ rule show {
   for let k, v = request.header {
     println("req: ", k, " => ", v);
   }
+  println("access log: ", log.format);
+
+  println("================= appendix");
+  for let k, v = log.appendix {
+    println(k, " => ", v);
+  }
+
+  println("================= appendix");
+  log.appendix:push_back("a");
+  for let k, v = log.appendix {
+    println(k, " => ", v);
+  }
 }
 
 rule application {

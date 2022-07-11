@@ -12,13 +12,12 @@ const (
 	VHostHttpClientPoolTimeout      = 30
 	VHostHttpClientPoolMaxDrainSize = 4096
 
-	VHostLogFormat = "{{ServiceName}}" +
-		"{{ClientIp}}" +
-		"{{ReqScheme}}" +
-		"{{ReqURI}}" +
-		"{{ReqHeaderHost}}" +
-		"{ReqHeaderUA}}" +
-		"{{ReqHeaderVia}}" +
-		"{{ReqSummary}}" +
-		"{{RespStatus}}"
+	VHostLogFormat = "" +
+		"%START_TIME%" +
+		"%SERVICE_NAME%" +
+		"%REQ(:METHOD)%" +
+		"%REQ(:STATUS_CODE)%" +
+		"%REQ(:PATH)%" +
+		"%RESP(:STATUS_CODE)%" +
+		"%CLIENT_IP%"
 )

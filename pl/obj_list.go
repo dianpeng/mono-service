@@ -137,7 +137,11 @@ func (l *List) Method(name string, args []Val) (Val, error) {
 		num := 1
 		if alog == 1 {
 			num = int(args[0].Int())
+			if num < 0 {
+				num = 0
+			}
 		}
+
 		if num < len(l.Data) {
 			l.Data = l.Data[0 : len(l.Data)-num]
 		} else {

@@ -63,9 +63,10 @@ type Hpl struct {
 	request    pl.Val
 	params     pl.Val
 	respWriter pl.Val
-	hplCtx     HplContext
-	hplRt      HplRuntime
-	log        *alog.Log
+	log        pl.Val
+
+	hplCtx HplContext
+	hplRt  HplRuntime
 }
 
 func NewHpl() *Hpl {
@@ -116,6 +117,8 @@ func (p *Hpl) loadVarBasic(x *pl.Evaluator, n string) (pl.Val, error) {
 		return p.params, nil
 	case "response":
 		return p.respWriter, nil
+	case "log":
+		return p.log, nil
 	default:
 		return p.hplCtx.OnLoadVar(x, n)
 	}
@@ -318,8 +321,7 @@ func (h *Hpl) OnInit(
 
 	h.hplCtx = session
 	h.hplRt = session
-
-	h.log = log
+	h.log = NewAccessLogVal(log)
 
 	h.Eval.Context = pl.NewCbEvalContext(
 		h.initLoadVar,
@@ -378,7 +380,7 @@ func (h *Hpl) OnTestSession(session SessionWrapper) error {
 	h.request = pl.NewValNull()
 	h.params = pl.NewValNull()
 	h.respWriter = pl.NewValNull()
-	h.log = nil
+
 	h.hplCtx = session
 	h.hplRt = session
 	h.Eval.Context = pl.NewCbEvalContext(
@@ -397,7 +399,7 @@ func (h *Hpl) OnTest(selector string, context pl.Val) error {
 	h.request = pl.NewValNull()
 	h.params = pl.NewValNull()
 	h.respWriter = pl.NewValNull()
-	h.log = nil
+
 	h.Eval.Context = pl.NewCbEvalContext(
 		h.testLoadVar,
 		h.testStoreVar,

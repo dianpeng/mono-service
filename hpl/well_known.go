@@ -6,6 +6,7 @@ const (
 	UrlTypeId            = ".url"
 	UrlSearchTypeId      = ".urlsearch"
 	TLSConnStateTypeId   = ".tlsconnstate"
+	AccessLogTypeId      = ".accesslog"
 
 	// http type
 	HttpHeaderTypeId       = "http.header"

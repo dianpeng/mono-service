@@ -243,19 +243,22 @@ type formatParser struct {
 	prog program
 }
 
-func (p *formatParser) parse(format string) error {
+func (p *formatParser) parse(f string) error {
 	start := 0
-	for start < len(format) {
+
+	for start < len(f) {
+		format := f[start:]
+
 		// finding the %info% field inside of it. Notes %% will be used as escape for us
 		percentBeg := strings.Index(
-			format[start:],
+			format,
 			"%",
 		)
 
 		if percentBeg == -1 {
 			p.prog = append(p.prog, bytecode{
 				op:    fmtText,
-				param: format[start:],
+				param: format,
 			})
 			break
 		}
@@ -268,6 +271,8 @@ func (p *formatParser) parse(format string) error {
 		if percentEnd == -1 {
 			return fmt.Errorf("invalid %% pair, %% must be closed with another %%")
 		}
+
+		percentEnd += percentBeg + 1
 
 		field := format[percentBeg+1 : percentEnd]
 		name := field
@@ -308,40 +313,40 @@ func (p *formatParser) parse(format string) error {
 				}
 				length = l
 			}
-		}
 
-		cmd, ok := cmdMap[name]
-		if !ok {
-			return fmt.Errorf("access log format field %s is unknown", name)
-		}
-
-		opt, ok := paramMap[cmd]
-		if !ok {
-			panic(fmt.Sprintf("BUG: %s does not have parameter flags", name))
-		}
-
-		switch opt {
-		case cmdOnly:
-			if param != "" {
-				return fmt.Errorf("cmd: %s does not require parameter", name)
+			cmd, ok := cmdMap[name]
+			if !ok {
+				return fmt.Errorf("access log format field %s is unknown", name)
 			}
-			break
 
-		case cmdParamRequired:
-			if param == "" {
-				return fmt.Errorf("cmd: %s does not require parameter", name)
+			opt, ok := paramMap[cmd]
+			if !ok {
+				panic(fmt.Sprintf("BUG: %s does not have parameter flags", name))
 			}
-			break
 
-		default:
-			break
+			switch opt {
+			case cmdOnly:
+				if param != "" {
+					return fmt.Errorf("cmd: %s does not require parameter", name)
+				}
+				break
+
+			case cmdParamRequired:
+				if param == "" {
+					return fmt.Errorf("cmd: %s does not require parameter", name)
+				}
+				break
+
+			default:
+				break
+			}
+
+			if err := p.parseCommand(cmd, param, length); err != nil {
+				return err
+			}
 		}
 
-		if err := p.parseCommand(cmd, param, length); err != nil {
-			return err
-		}
-
-		start = percentEnd + 1
+		start += percentEnd + 1
 	}
 
 	return nil

@@ -14,7 +14,7 @@ const (
 
 	letterIdxBits = 7
 	letterIdxMask = 1<<letterIdxBits - 1
-	letterIdxMax  = 63 / letterIdxMask
+	letterIdxMax  = 63 / letterIdxBits
 )
 
 func RandomString(n int) string {
@@ -23,6 +23,7 @@ func RandomString(n int) string {
 		if remain == 0 {
 			cache, remain = randsrc.Int63(), letterIdxMax
 		}
+
 		if idx := int(cache & letterIdxMask); idx < len(letterBytes) {
 			b[i] = letterBytes[idx]
 			i--
