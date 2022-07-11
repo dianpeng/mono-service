@@ -4,16 +4,16 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/dianpeng/mono-service/vhost"
+	"github.com/dianpeng/mono-service/http/vhost"
 
 	// for side effect
-	_ "github.com/dianpeng/mono-service/ext/application"
-	_ "github.com/dianpeng/mono-service/ext/request"
-	_ "github.com/dianpeng/mono-service/ext/response"
+	_ "github.com/dianpeng/mono-service/http/ext/application"
+	_ "github.com/dianpeng/mono-service/http/ext/request"
+	_ "github.com/dianpeng/mono-service/http/ext/response"
 )
 
 type Server struct {
-	listener []*listener
+	listener []Listener
 	wg       sync.WaitGroup
 }
 
@@ -21,15 +21,22 @@ type Server struct {
 func NewServer(cfgList []ListenerConfig) (*Server, error) {
 	s := &Server{}
 	for _, x := range cfgList {
-		l := newListener(x)
+		f := GetListenerFactory(x.Type)
+		if f == nil {
+			return nil, fmt.Errorf("unknown listener type: %s", x.Type)
+		}
+		l, err := f.New(x)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create listener: %s", err.Error())
+		}
 		s.listener = append(s.listener, l)
 	}
 	return s, nil
 }
 
-func (s *Server) getListener(x string) *listener {
+func (s *Server) getListener(x string) Listener {
 	for _, l := range s.listener {
-		if l.name == x {
+		if l.Name() == x {
 			return l
 		}
 	}
@@ -47,7 +54,7 @@ func (s *Server) AddVirtualHost(
 	if listener == nil {
 		return fmt.Errorf("listener: %s is not existed", vhost.Config.Listener)
 	}
-	return listener.addVHost(vhost)
+	return listener.AddVHost(vhost)
 }
 
 // run all the listener
@@ -57,7 +64,7 @@ func (s *Server) Run() {
 	for _, vv := range s.listener {
 		go func() {
 			defer s.wg.Done()
-			err := vv.run()
+			err := vv.Run()
 			if err != nil {
 				fmt.Printf("error: %s", err.Error())
 			}
@@ -78,7 +85,7 @@ func (s *Server) AddVHost(
 		return fmt.Errorf("listener %s is not existed", vhost.Config.Listener)
 	}
 
-	return lis.addVHost(vhost)
+	return lis.AddVHost(vhost)
 }
 
 func (s *Server) RemoveVHostFromListener(
@@ -88,14 +95,14 @@ func (s *Server) RemoveVHostFromListener(
 	lis := s.getListener(
 		listenerName,
 	)
-	lis.removeVHost(vhostName)
+	lis.RemoveVHost(vhostName)
 }
 
 func (s *Server) RemoveVHost(
 	vhostName string,
 ) {
 	for _, lis := range s.listener {
-		lis.removeVHost(vhostName)
+		lis.RemoveVHost(vhostName)
 	}
 }
 
@@ -104,6 +111,6 @@ func (s *Server) UpdateVHost(
 ) {
 	l := s.getListener(vhost.Config.Listener)
 	if l != nil {
-		l.updateVHost(vhost)
+		l.UpdateVHost(vhost)
 	}
 }

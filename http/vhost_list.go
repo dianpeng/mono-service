@@ -1,8 +1,8 @@
-package server
+package http
 
 import (
 	"fmt"
-	"github.com/dianpeng/mono-service/vhost"
+	"github.com/dianpeng/mono-service/http/vhost"
 	"sync"
 )
 

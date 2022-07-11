@@ -26,10 +26,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/dianpeng/mono-service/framework"
 	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/hrouter"
-	"github.com/dianpeng/mono-service/phase"
+	"github.com/dianpeng/mono-service/http/framework"
+	"github.com/dianpeng/mono-service/http/phase"
 	"github.com/dianpeng/mono-service/pl"
 )
 

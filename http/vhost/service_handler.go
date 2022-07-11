@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/dianpeng/mono-service/alog"
-	"github.com/dianpeng/mono-service/framework"
 	"github.com/dianpeng/mono-service/g"
 	"github.com/dianpeng/mono-service/hclient"
 	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/hrouter"
-	"github.com/dianpeng/mono-service/phase"
+	"github.com/dianpeng/mono-service/http/framework"
+	"github.com/dianpeng/mono-service/http/phase"
 	"github.com/dianpeng/mono-service/pl"
 )
 

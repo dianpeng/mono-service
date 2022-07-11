@@ -2,7 +2,7 @@ package vhost
 
 import (
 	"fmt"
-	"github.com/dianpeng/mono-service/framework"
+	"github.com/dianpeng/mono-service/http/framework"
 	"github.com/dianpeng/mono-service/pl"
 )
 

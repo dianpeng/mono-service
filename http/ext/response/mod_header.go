@@ -1,9 +1,9 @@
-package request
+package response
 
 import (
-	"github.com/dianpeng/mono-service/ext"
-	"github.com/dianpeng/mono-service/framework"
 	"github.com/dianpeng/mono-service/hrouter"
+	"github.com/dianpeng/mono-service/http/ext"
+	"github.com/dianpeng/mono-service/http/framework"
 	"github.com/dianpeng/mono-service/pl"
 	"net/http"
 )
@@ -29,7 +29,7 @@ func (e *modheader) Accept(
 	if err := e.modFn(
 		e.name,
 		e.args,
-		r.Header,
+		w.Header(),
 		ctx,
 	); err != nil {
 		w.ReplyError(
@@ -64,26 +64,26 @@ func (e *modheaderfactory) Comment() string {
 }
 
 func init() {
-	framework.AddRequestFactory(
+	framework.AddResponseFactory(
 		"header_add",
 		&modheaderfactory{
-			name:  "request.header_add",
+			name:  "response.header_add",
 			modFn: ext.HeaderAdd,
 		},
 	)
 
-	framework.AddRequestFactory(
+	framework.AddResponseFactory(
 		"header_set",
 		&modheaderfactory{
-			name:  "request.header_set",
+			name:  "response.header_set",
 			modFn: ext.HeaderSet,
 		},
 	)
 
-	framework.AddRequestFactory(
+	framework.AddResponseFactory(
 		"header_del",
 		&modheaderfactory{
-			name:  "request.header_del",
+			name:  "response.header_del",
 			modFn: ext.HeaderDel,
 		},
 	)

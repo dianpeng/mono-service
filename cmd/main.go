@@ -7,7 +7,10 @@ import (
 	"os"
 
 	"github.com/dianpeng/mono-service/server"
-	"github.com/dianpeng/mono-service/vhost"
+
+	// for side effect
+	_ "github.com/dianpeng/mono-service/http"
+	"github.com/dianpeng/mono-service/http/vhost"
 )
 
 func printHelp() {

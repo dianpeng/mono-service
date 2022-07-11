@@ -3,8 +3,8 @@ package response
 // echoing whatever has been received back if we have a body
 
 import (
-	"github.com/dianpeng/mono-service/framework"
 	"github.com/dianpeng/mono-service/hrouter"
+	"github.com/dianpeng/mono-service/http/framework"
 	"github.com/dianpeng/mono-service/pl"
 	"net/http"
 )
