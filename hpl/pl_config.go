@@ -1,4 +1,4 @@
-package framework
+package hpl
 
 import (
 	"fmt"
@@ -7,21 +7,21 @@ import (
 
 // Config accesser wrapper
 type PLConfig struct {
-	context ServiceContext
-	args    []pl.Val
+	eval *pl.Evaluator
+	args []pl.Val
 }
 
-func NewPLConfig(c ServiceContext, a []pl.Val) PLConfig {
+func NewPLConfig(eval *pl.Evaluator, a []pl.Val) PLConfig {
 	return PLConfig{
-		context: c,
-		args:    a,
+		eval: eval,
+		args: a,
 	}
 }
 
 func (p *PLConfig) tryeval(v pl.Val) (pl.Val, error) {
 	if v.IsClosure() {
 		cls, _ := v.Usr().(pl.Closure)
-		return cls.Call(p.context.Runtime().Eval, []pl.Val{})
+		return cls.Call(p.eval, []pl.Val{})
 	}
 	return v, nil
 }

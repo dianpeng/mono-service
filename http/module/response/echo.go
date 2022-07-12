@@ -3,6 +3,7 @@ package response
 // echoing whatever has been received back if we have a body
 
 import (
+	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/hrouter"
 	"github.com/dianpeng/mono-service/http/framework"
 	"github.com/dianpeng/mono-service/pl"
@@ -23,8 +24,8 @@ func (e *echo) Accept(
 	w framework.HttpResponseWriter,
 	ctx framework.ServiceContext,
 ) bool {
-	cfg := framework.NewPLConfig(
-		ctx,
+	cfg := hpl.NewPLConfig(
+		ctx.Runtime().Eval,
 		e.args,
 	)
 

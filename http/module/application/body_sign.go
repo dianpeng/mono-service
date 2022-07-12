@@ -126,8 +126,8 @@ func (b *bodySignApplication) Done(_ interface{}) {
 func (b *bodySignApplication) prepareConfig(
 	context framework.ServiceContext,
 ) error {
-	cfg := framework.NewPLConfig(
-		context,
+	cfg := hpl.NewPLConfig(
+		context.Runtime().Eval,
 		b.args,
 	)
 

@@ -252,6 +252,14 @@ func (r *responseWriterWrapper) Header() http.Header {
 	return r.header
 }
 
+func (r *responseWriterWrapper) SetHeader(h http.Header) {
+	if r.headerDone {
+		return
+	}
+	r.header = h
+	r.headerVal = hpl.NewHeaderVal(h)
+}
+
 func (r *responseWriterWrapper) Status() int {
 	return r.status
 }

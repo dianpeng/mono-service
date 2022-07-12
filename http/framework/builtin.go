@@ -2,6 +2,7 @@ package framework
 
 import (
 	"fmt"
+	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/hrouter"
 	"github.com/dianpeng/mono-service/pl"
 	"net/http"
@@ -22,7 +23,7 @@ func (e *event) Accept(
 	w HttpResponseWriter,
 	ctx ServiceContext,
 ) bool {
-	cfg := NewPLConfig(ctx, e.args)
+	cfg := hpl.NewPLConfig(ctx.Runtime().Eval, e.args)
 	eventName := ""
 	context := pl.NewValNull()
 
@@ -73,7 +74,7 @@ func (e *eventApp) Prepare(*http.Request, hrouter.Params) (interface{}, error) {
 }
 
 func (e *eventApp) Accept(_ interface{}, ctx ServiceContext) (ApplicationResult, error) {
-	cfg := NewPLConfig(ctx, e.args)
+	cfg := hpl.NewPLConfig(ctx.Runtime().Eval, e.args)
 	eventName := ""
 	if err := cfg.GetStr(0, &eventName); err != nil {
 		return ApplicationResult{}, err

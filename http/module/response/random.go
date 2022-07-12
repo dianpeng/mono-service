@@ -23,8 +23,8 @@ func (e *random) Accept(
 	w framework.HttpResponseWriter,
 	ctx framework.ServiceContext,
 ) bool {
-	cfg := framework.NewPLConfig(
-		ctx,
+	cfg := hpl.NewPLConfig(
+		ctx.Runtime().Eval,
 		e.args,
 	)
 

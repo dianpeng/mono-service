@@ -1,6 +1,6 @@
 config service {
   .name = "concate";
-  .router = "[GET]/yyy";
+  .router = "[GET]/concate";
   application concate();
 }
 

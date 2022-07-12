@@ -19,6 +19,7 @@ type HttpResponseWriter interface {
 	// Get the current status code
 	Status() int
 	WriteStatus(int)
+	SetHeader(http.Header)
 	Header() http.Header
 
 	// If body is not set for this response, then it returns nil

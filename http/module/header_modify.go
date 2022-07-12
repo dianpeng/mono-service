@@ -1,7 +1,8 @@
-package ext
+package module
 
 import (
 	"fmt"
+	"github.com/dianpeng/mono-service/hpl"
 	"github.com/dianpeng/mono-service/http/framework"
 	"github.com/dianpeng/mono-service/pl"
 	"github.com/dianpeng/mono-service/util"
@@ -15,8 +16,8 @@ func foreachHeaderKV(
 	callback func(string, string),
 ) error {
 	size := len(args)
-	cfg := framework.NewPLConfig(
-		ctx,
+	cfg := hpl.NewPLConfig(
+		ctx.Runtime().Eval,
 		args,
 	)
 
@@ -55,8 +56,8 @@ func foreachHeaderKey(
 	callback func(string),
 ) error {
 	size := len(args)
-	cfg := framework.NewPLConfig(
-		ctx,
+	cfg := hpl.NewPLConfig(
+		ctx.Runtime().Eval,
 		args,
 	)
 
