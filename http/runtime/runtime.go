@@ -12,14 +12,17 @@ import (
 	"github.com/dianpeng/mono-service/pl"
 )
 
-type RuntimeContext interface {
+type Context interface {
 	// HPL/PL scriptting callback
 	OnLoadVar(*pl.Evaluator, string) (pl.Val, error)
 	OnStoreVar(*pl.Evaluator, string, pl.Val) error
+}
+
+type Action interface {
 	OnAction(*pl.Evaluator, string, pl.Val) error
 }
 
-type RuntimeResource interface {
+type Resource interface {
 	// special function used for exposing other utilities
 	hpl.HttpClientFactory
 }
@@ -28,12 +31,13 @@ type RuntimeResource interface {
 // world. HPL knows nothing about the service/session and also hservice. HPL is
 // just a wrapper around PL but with all the http/networking utilities
 type SessionWrapper interface {
-	RuntimeContext
-	RuntimeResource
+	Context
+	Action
+	Resource
 }
 
 type ConstSessionWrapper interface {
-	RuntimeResource
+	Resource
 }
 
 // ----------------------------------------------------------------------------
@@ -48,8 +52,9 @@ type Runtime struct {
 	respWriter pl.Val
 	log        pl.Val
 
-	hplCtx RuntimeContext
-	hplRt  RuntimeResource
+	hplCtx    Context
+	hplRt     Resource
+	hplAction Action
 }
 
 func NewRuntime() *Runtime {
@@ -168,19 +173,25 @@ func (p *Runtime) customizeStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 }
 
 func (h *Runtime) customizeAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
-	return h.hplCtx.OnAction(x, actionName, arg)
+	if h.hplAction != nil {
+		return h.hplAction.OnAction(x, actionName, arg)
+	} else {
+		return fmt.Errorf("unknown action: %s", actionName)
+	}
 }
 
 func (h *Runtime) OnCustomize(selector string, session SessionWrapper) error {
 	if h.Module == nil {
-		return fmt.Errorf("the Runtime engine does not have any module binded")
+		return fmt.Errorf("Runtime engine does not have any module binded")
 	}
 
 	oldCtx := h.hplCtx
 	oldRt := h.hplRt
+	oldAct := h.hplAction
 
 	h.hplCtx = session
 	h.hplRt = session
+	h.hplAction = session
 
 	h.Eval.Context = pl.NewCbEvalContext(
 		h.customizeLoadVar,
@@ -192,6 +203,7 @@ func (h *Runtime) OnCustomize(selector string, session SessionWrapper) error {
 		h.respWriter = pl.NewValNull()
 		h.hplCtx = oldCtx
 		h.hplRt = oldRt
+		h.hplAction = oldAct
 	}()
 
 	return h.Eval.Eval(selector, h.Module)
@@ -216,7 +228,7 @@ func (h *Runtime) globalAction(x *pl.Evaluator, actionName string, arg pl.Val) e
 
 func (h *Runtime) OnGlobal(session ConstSessionWrapper) error {
 	if h.Module == nil {
-		return fmt.Errorf("the Runtime engine does not have any module binded")
+		return fmt.Errorf("Runtime engine does not have any module binded")
 	}
 
 	h.hplRt = session
@@ -254,7 +266,7 @@ func (h *Runtime) configAction(x *pl.Evaluator, actionName string, arg pl.Val) e
 
 func (h *Runtime) OnConfig(context pl.EvalConfig, session ConstSessionWrapper) error {
 	if h.Module == nil {
-		return fmt.Errorf("the Runtime engine does not have any module binded")
+		return fmt.Errorf("Runtime engine does not have any module binded")
 	}
 	h.hplRt = session
 
@@ -284,7 +296,11 @@ func (p *Runtime) initStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 }
 
 func (h *Runtime) initAction(x *pl.Evaluator, actionName string, arg pl.Val) error {
-	return h.hplCtx.OnAction(x, actionName, arg)
+	if h.hplAction != nil {
+		return h.hplAction.OnAction(x, actionName, arg)
+	} else {
+		return fmt.Errorf("unknown action: %s", actionName)
+	}
 }
 
 // invoked every HTTP transaction/session
@@ -296,7 +312,7 @@ func (h *Runtime) OnInit(
 	log *alog.Log,
 ) error {
 	if h.Module == nil {
-		return fmt.Errorf("the Runtime engine does not have any module binded")
+		return fmt.Errorf("Runtime engine does not have any module binded")
 	}
 	h.request = request
 	h.params = hrouter
@@ -304,6 +320,8 @@ func (h *Runtime) OnInit(
 
 	h.hplCtx = session
 	h.hplRt = session
+	h.hplAction = session
+
 	h.log = hpl.NewAccessLogVal(log)
 
 	h.Eval.Context = pl.NewCbEvalContext(
@@ -312,16 +330,13 @@ func (h *Runtime) OnInit(
 		h.initAction,
 	)
 
-	defer func() {
-	}()
-
 	return h.Eval.EvalSession(h.Module)
 }
 
 // -----------------------------------------------------------------------------
-func (h *Runtime) RunWithContext(name string, context pl.Val) error {
+func (h *Runtime) Emit(name string, context pl.Val) error {
 	if h.Module == nil {
-		return fmt.Errorf("the Runtime engine does not have any module binded")
+		return fmt.Errorf("Runtime engine does not have any module binded")
 	}
 
 	return h.Eval.EvalWithContext(name, context, h.Module)
@@ -353,7 +368,11 @@ func (h *Runtime) testStoreVar(x *pl.Evaluator, n string, v pl.Val) error {
 }
 
 func (h *Runtime) testAction(x *pl.Evaluator, n string, v pl.Val) error {
-	return h.hplCtx.OnAction(x, n, v)
+	if h.hplAction != nil {
+		return h.hplAction.OnAction(x, n, v)
+	} else {
+		return fmt.Errorf("unknown action: %s", n)
+	}
 }
 
 func (h *Runtime) OnTestSession(session SessionWrapper) error {
@@ -366,6 +385,8 @@ func (h *Runtime) OnTestSession(session SessionWrapper) error {
 
 	h.hplCtx = session
 	h.hplRt = session
+	h.hplAction = session
+
 	h.Eval.Context = pl.NewCbEvalContext(
 		h.testLoadVar,
 		h.testStoreVar,

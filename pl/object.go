@@ -52,19 +52,6 @@ func IsValueType(t int) bool {
 }
 
 const (
-	MetaMethod = "__@method"
-
-	MetaIndex    = "__@index"
-	MetaIndexSet = "__@index_set"
-	MetaDot      = "__@dot"
-	MetaDotSet   = "__@dot_set"
-
-	MetaToString = "__@to_string"
-	MetaToJSON   = "__@to_json"
-	MetaToIter   = "__@to_iter"
-)
-
-const (
 	ClosureScript = iota
 	ClosureNative
 	ClosureMethod

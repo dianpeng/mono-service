@@ -447,7 +447,7 @@ func (c *concateApplication) Accept(
 	)
 
 	// run hpl
-	err := context.Runtime().RunWithContext(
+	err := context.Runtime().Emit(
 		"concate.generate",
 		pl.NewValNull(),
 	)
