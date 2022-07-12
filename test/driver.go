@@ -144,7 +144,7 @@ func runAllTestFile(path string) (testResult, error) {
 				continue
 			}
 
-			if err := hpl.OnTest("test", pl.NewValNull()); err != nil {
+			if _, err := hpl.OnTest("test", pl.NewValNull()); err != nil {
 				fmt.Printf(">> Eval: %s\n", err.Error())
 				t.execFail++
 			} else {

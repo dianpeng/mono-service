@@ -235,7 +235,7 @@ LOOP:
 		// trigger only happened when original request comming from http request
 		if req.kind == concateRequestUrl || req.kind == concateRequestRequest {
 			req.fetchResponse = httpresp
-			if err := s.runtime.OnCustomize("concate.background.check", s.bgWrapper); err != nil {
+			if _, err := s.runtime.OnCustomize("concate.background.check", s.bgWrapper); err != nil {
 				s.bgError = err
 				break LOOP
 			}
@@ -447,7 +447,7 @@ func (c *concateApplication) Accept(
 	)
 
 	// run hpl
-	err := context.Runtime().Emit(
+	_, err := context.Runtime().Emit(
 		"concate.generate",
 		pl.NewValNull(),
 	)

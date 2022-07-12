@@ -180,9 +180,9 @@ func (h *Runtime) customizeAction(x *pl.Evaluator, actionName string, arg pl.Val
 	}
 }
 
-func (h *Runtime) OnCustomize(selector string, session SessionWrapper) error {
+func (h *Runtime) OnCustomize(selector string, session SessionWrapper) (pl.Val, error) {
 	if h.Module == nil {
-		return fmt.Errorf("Runtime engine does not have any module binded")
+		return pl.NewValNull(), fmt.Errorf("Runtime engine does not have any module binded")
 	}
 
 	oldCtx := h.hplCtx
@@ -334,9 +334,9 @@ func (h *Runtime) OnInit(
 }
 
 // -----------------------------------------------------------------------------
-func (h *Runtime) Emit(name string, context pl.Val) error {
+func (h *Runtime) Emit(name string, context pl.Val) (pl.Val, error) {
 	if h.Module == nil {
-		return fmt.Errorf("Runtime engine does not have any module binded")
+		return pl.NewValNull(), fmt.Errorf("Runtime engine does not have any module binded")
 	}
 
 	return h.Eval.EvalWithContext(name, context, h.Module)
@@ -396,9 +396,9 @@ func (h *Runtime) OnTestSession(session SessionWrapper) error {
 	return h.Eval.EvalSession(h.Module)
 }
 
-func (h *Runtime) OnTest(selector string, context pl.Val) error {
+func (h *Runtime) OnTest(selector string, context pl.Val) (pl.Val, error) {
 	if h.Module == nil {
-		return fmt.Errorf("Runtime engine does not have any module binded")
+		return pl.NewValNull(), fmt.Errorf("Runtime engine does not have any module binded")
 	}
 	h.request = pl.NewValNull()
 	h.params = pl.NewValNull()

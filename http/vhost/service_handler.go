@@ -210,7 +210,7 @@ func (s *serviceHandler) main(
 		// event if applicable
 		if s.serviceResult.Event != "" {
 			s.setPhase(phase.PhaseApplicationEvent, "application.event")
-			if err := s.runtime.Emit(s.serviceResult.Event,
+			if _, err := s.runtime.Emit(s.serviceResult.Event,
 				s.serviceResult.Context); err != nil {
 				respWrapper.ReplyErrorHPL(err)
 				return
@@ -236,7 +236,8 @@ func (s *serviceHandler) main(
 }
 
 func (s *serviceHandler) Log(log *alog.Log) error {
-	return s.runtime.Emit(EventNameLog, pl.NewValNull())
+	_, err := s.runtime.Emit(EventNameLog, pl.NewValNull())
+	return err
 }
 
 // interface for frame.ServiceContext

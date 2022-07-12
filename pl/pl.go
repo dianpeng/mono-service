@@ -40,20 +40,3 @@ func Dup(x []Val) []Val {
 	}
 	return xx
 }
-
-// a all in one function for simplicity
-func EvalExpression(
-	expression string,
-	context EvalContext,
-) (Val, error) {
-	p, err := CompileModuleAsExpression(expression, nil)
-	if err != nil {
-		return NewValNull(), err
-	}
-
-	e := NewEvaluatorWithContext(
-		context,
-	)
-
-	return e.EvalExpr(p)
-}

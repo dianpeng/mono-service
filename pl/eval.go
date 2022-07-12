@@ -830,18 +830,25 @@ func (e *Evaluator) doErr(bt btlist, p *program, pc int, err error) error {
 // [2]: the pc that stops the execution
 // [3]: the error if we have
 
+const (
+	rstateInterrupt = iota
+	rstateDone
+	rstateYield
+)
+
 type runresult struct {
-	prog *program
-	pc   int
-	e    error
-	y    bool
+	prog   *program
+	pc     int
+	e      error
+	rstate int
 }
 
 func rrErr(p *program, pc int, e error) runresult {
 	return runresult{
-		prog: p,
-		pc:   pc,
-		e:    e,
+		prog:   p,
+		pc:     pc,
+		e:      e,
+		rstate: 0,
 	}
 }
 
@@ -851,24 +858,24 @@ func rrErrf(p *program, pc int, format string, a ...interface{}) runresult {
 
 func rrDone(pc int) runresult {
 	return runresult{
-		pc: pc,
-		y:  false,
+		pc:     pc,
+		rstate: rstateDone,
 	}
 }
 
 func rrYield(pc int) runresult {
 	return runresult{
-		pc: pc,
-		y:  true,
+		pc:     pc,
+		rstate: rstateYield,
 	}
 }
 
 func (rr *runresult) isDone() bool {
-	return !rr.y && rr.e == nil
+	return rr.rstate == rstateDone
 }
 
 func (rr *runresult) isYield() bool {
-	return rr.y && rr.e == nil
+	return rr.rstate == rstateYield
 }
 
 func (rr *runresult) isError() bool {
@@ -1240,10 +1247,8 @@ FUNC:
 
 		case bcReturn:
 			ftype := e.curframe.ftype
-
 			rv := e.top0()
 			pc, prog = e.epilogue(rv, false)
-
 			if prog == nil || ftype == ftypeSIter {
 				return rrDone(pc)
 			}
@@ -1652,6 +1657,7 @@ FUNC:
 			break
 
 		case bcHalt:
+			e.push(NewValNull())
 			return rrDone(pc)
 
 		case bcYield:
@@ -1833,7 +1839,7 @@ func (e *Evaluator) iterPrologue(siter *scriptIter, args []Val) {
 	e.prologue(ftype, len(args), prog, nil)
 }
 
-func (e *Evaluator) runRule(event Val, prog *program) error {
+func (e *Evaluator) runRule(event Val, prog *program) (Val, error) {
 	must(e.Context != nil, "Evaluator's context is nil!")
 
 	// just clear the stack size if needed before every run, since we need to reuse
@@ -1870,7 +1876,9 @@ func (e *Evaluator) runRule(event Val, prog *program) error {
 
 		// finish execution
 		if rr.isDone() {
-			return nil
+			ret := e.top0()
+			e.pop()
+			return ret, nil
 		}
 
 		var bt btlist
@@ -1892,10 +1900,10 @@ func (e *Evaluator) runRule(event Val, prog *program) error {
 			}
 		}
 
-		return e.doErr(bt, rr.prog, rr.pc, rr.e)
+		return NewValNull(), e.doErr(bt, rr.prog, rr.pc, rr.e)
 	}
 
-	return nil
+	return NewValNull(), nil
 }
 
 // scriptable iterator protocol
@@ -2086,7 +2094,8 @@ func (e *Evaluator) EvalConfig(p *Module) error {
 	if e.Config == nil {
 		return fmt.Errorf("evaluator's Config is not set")
 	}
-	return e.runRule(NewValNull(), p.config)
+	_, err := e.runRule(NewValNull(), p.config)
+	return err
 }
 
 func (e *Evaluator) EvalGlobal(p *Module) error {
@@ -2100,7 +2109,7 @@ func (e *Evaluator) EvalGlobal(p *Module) error {
 	p.global.globalVar = nil
 
 	for _, prog := range p.global.globalProgram {
-		if err := e.runRule(NewValNull(), prog); err != nil {
+		if _, err := e.runRule(NewValNull(), prog); err != nil {
 			return err
 		}
 	}
@@ -2118,14 +2127,14 @@ func (e *Evaluator) EvalSession(p *Module) error {
 	e.Session = nil
 
 	for _, prog := range p.session {
-		if err := e.runRule(NewValNull(), prog); err != nil {
+		if _, err := e.runRule(NewValNull(), prog); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (e *Evaluator) Eval(event string, p *Module) error {
+func (e *Evaluator) Eval(event string, p *Module) (Val, error) {
 	defer func() {
 		e.drainEventQueue(p)
 	}()
@@ -2133,11 +2142,11 @@ func (e *Evaluator) Eval(event string, p *Module) error {
 	if prog := p.findEvent(event); prog != nil {
 		return e.runRule(NewValNull(), prog)
 	} else {
-		return nil
+		return NewValNull(), nil
 	}
 }
 
-func (e *Evaluator) EvalWithContext(event string, context Val, p *Module) error {
+func (e *Evaluator) EvalWithContext(event string, context Val, p *Module) (Val, error) {
 	defer func() {
 		e.drainEventQueue(p)
 	}()
@@ -2145,7 +2154,7 @@ func (e *Evaluator) EvalWithContext(event string, context Val, p *Module) error 
 	if prog := p.findEvent(event); prog != nil {
 		return e.runRule(context, prog)
 	} else {
-		return nil
+		return NewValNull(), nil
 	}
 }
 
@@ -2156,11 +2165,11 @@ func (e *Evaluator) EvalDeferred(
 	name string,
 	context Val,
 	p *Module,
-) error {
+) (Val, error) {
 	if prog := p.findEvent(name); prog != nil {
 		return e.runRule(context, prog)
 	} else {
-		return nil
+		return NewValNull(), nil
 	}
 }
 
@@ -2169,19 +2178,4 @@ func (e *Evaluator) EmitEvent(
 	context Val,
 ) {
 	e.emitEvent(name, context)
-}
-
-// Used by the config module for !eval directive. Notes the module should just
-// contain one program inside of its .p field
-func (e *Evaluator) EvalExpr(p *Module) (Val, error) {
-	if len(p.p) == 0 {
-		return NewValNull(), nil
-	}
-	if len(p.p) != 1 {
-		return NewValNull(), fmt.Errorf("not an expression module")
-	}
-	if err := e.runRule(NewValNull(), p.p[0]); err != nil {
-		return NewValNull(), err
-	}
-	return e.top0(), nil
 }

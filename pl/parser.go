@@ -595,30 +595,6 @@ func (p *parser) errf(f string, a ...interface{}) error {
 	return p.err(fmt.Sprintf(f, a...))
 }
 
-func (p *parser) parseExpression() (*Module, error) {
-	p.l.next()
-	prog := newProgram(p.module, "$expression", progExpression)
-	p.enterScopeTop(entryExpr, prog)
-	defer func() {
-		p.leaveScope()
-	}()
-
-	// load a null on top of the stack in case the expression does nothing
-	prog.emit0(p.l, bcLoadNull)
-
-	// now parsing the expression
-	if err := p.parseExpr(prog); err != nil {
-		return nil, err
-	}
-	prog.emit0(p.l, bcHalt)
-
-	p.module.p = append(p.module.p, prog)
-
-	p.patchAllCall()
-
-	return p.module, nil
-}
-
 func (p *parser) parse() (*Module, error) {
 	p.l.next()
 	if err := p.parseEntry(); err != nil {
@@ -1162,6 +1138,7 @@ func (p *parser) parseVarScope(rulename string,
 
 	// lastly halt the whole execution
 	prog.emit0(p.l, bcHalt)
+
 	prog.emit1At(p.l, localR, bcReserveLocal, 0)
 	p.l.next()
 
@@ -1404,6 +1381,7 @@ func (p *parser) parseRule() error {
 
 	// always generate a halt at the end of the rule
 	prog.emit0(p.l, bcHalt)
+
 	prog.localSize = p.stbl.topMaxLocal() - 1
 	prog.emit1At(p.l, localR, bcReserveLocal, p.stbl.topMaxLocal()-1)
 	p.module.p = append(p.module.p, prog)
@@ -2078,8 +2056,8 @@ func (p *parser) parseYield(prog *program) error {
 }
 
 func (p *parser) parseReturn(prog *program) error {
-	if !p.isEntryFunc() && !p.isEntryIter() {
-		return p.err("return is only allowed inside of function or iterator body")
+	if !p.isEntryRule() && !p.isEntryFunc() && !p.isEntryIter() {
+		return p.err("return is only allowed inside of function, iterator or rule body")
 	}
 	p.l.next()
 	if err := p.parseExpr(prog); err != nil {

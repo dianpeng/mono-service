@@ -45,7 +45,7 @@ func runWithResult(code string) (Val, bool, *Module) {
 		return NewValNull(), false, module
 	}
 
-	err = eval.Eval("test", module)
+	_, err = eval.Eval("test", module)
 	if err != nil {
 		fmt.Printf(":eval %s", err.Error())
 		return NewValNull(), false, module

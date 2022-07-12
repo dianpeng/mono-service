@@ -50,7 +50,7 @@ func test(code string) (Val, bool) {
 		return NewValNull(), false
 	}
 
-	err = eval.Eval("test", module)
+	_, err = eval.Eval("test", module)
 	if err != nil {
 		fmt.Printf(":eval\n%s", err.Error())
 		return NewValNull(), false
@@ -695,7 +695,7 @@ mm => {
 		}
 		assert.True(err == nil)
 
-		err = eval.Eval("mm", module)
+		_, err = eval.Eval("mm", module)
 		if err != nil {
 			fmt.Printf(":eval %s", err.Error())
 		}
@@ -823,7 +823,7 @@ mm {
 		}
 		assert.True(err == nil)
 
-		err = eval.Eval("mm", module)
+		_, err = eval.Eval("mm", module)
 		if err != nil {
 			fmt.Printf(":eval %s", err.Error())
 		}
@@ -957,7 +957,7 @@ func TestStrInterpo(t *testing.T) {
 		}
 		assert.True(err == nil)
 
-		err = eval.Eval("mm", module)
+		_, err = eval.Eval("mm", module)
 		if err != nil {
 			fmt.Printf(":eval %s", err.Error())
 		}
@@ -1017,7 +1017,7 @@ func TestLocal(t *testing.T) {
 		}
 		assert.True(err == nil)
 
-		err = eval.Eval("mm", module)
+		_, err = eval.Eval("mm", module)
 		if err != nil {
 			fmt.Printf(":eval %s", err.Error())
 		}
@@ -1838,10 +1838,7 @@ test {
 
 	assert.True(err == nil)
 
-	err = eval.EvalSession(module)
-	assert.True(err == nil)
-
-	err = eval.Eval("test", module)
+	_, err = eval.Eval("test", module)
 	assert.True(err == nil)
 
 	assert.True(ret.Type == ValStr)

@@ -350,7 +350,7 @@ func (r *responseWriterWrapper) replyErr(
 	r.SetReply(status, body)
 
 	if r.handler.runtime.Module.HasEvent(EventNameError) {
-		_ = r.handler.runtime.Emit(
+		_, _ = r.handler.runtime.Emit(
 			EventNameError,
 			pl.NewValStr(reason),
 		)

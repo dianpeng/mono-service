@@ -46,9 +46,11 @@ func (d *defEventQueue) Drain(ev *Evaluator,
 		d.q = d.q[:sz-1]
 		count++
 
+		_, err := ev.EvalDeferred(last.name, last.context, p)
+
 		if !onError(
 			last.name,
-			ev.EvalDeferred(last.name, last.context, p),
+			err,
 		) {
 			break
 		}

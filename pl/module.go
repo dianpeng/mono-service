@@ -254,15 +254,6 @@ func CompileModule(module string, fs fs.FS) (*Module, error) {
 	return po, nil
 }
 
-func CompileModuleAsExpression(expr string, fs fs.FS) (*Module, error) {
-	p := newParser(expr, fs)
-	po, err := p.parseExpression()
-	if err != nil {
-		return nil, err
-	}
-	return po, nil
-}
-
 func (g *globalState) size() int {
 	g.lock.RLock()
 	defer func() {
