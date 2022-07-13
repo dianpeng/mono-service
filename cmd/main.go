@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -19,11 +18,6 @@ func printHelp() {
 
 type strList []string
 
-func isjson(x string) bool {
-	var js json.RawMessage
-	return json.Unmarshal([]byte(x), &js) == nil
-}
-
 func (c *strList) String() string {
 	return "a list of string"
 }
@@ -36,21 +30,11 @@ func (c *strList) Set(v string) error {
 func parseListenerConfig(x strList) ([]server.ListenerConfig, error) {
 	o := []server.ListenerConfig{}
 	for _, cfg := range x {
-		l := server.ListenerConfig{}
-		if isjson(cfg) {
-			lc, err := server.ParseListenerConfigFromJSON(cfg)
-			if err != nil {
-				return nil, err
-			}
-			l = lc
-		} else {
-			lc, err := server.ParseListenerConfigFromCompact(cfg)
-			if err != nil {
-				return nil, err
-			}
-			l = lc
+		c, err := server.ParseListenerConfig(cfg)
+		if err != nil {
+			return nil, err
 		}
-		o = append(o, l)
+		o = append(o, c)
 	}
 	return o, nil
 }
@@ -59,7 +43,7 @@ func main() {
 	var listenerConf strList
 	var httpdir strList
 
-	flag.Var(&listenerConf, "listener", "list of listener config, in JSON")
+	flag.Var(&listenerConf, "listener", "list of listener config, in Json")
 	flag.Var(&httpdir, "http_dir", "list of path to local fs http virtual host")
 
 	flag.Parse()

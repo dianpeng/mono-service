@@ -19,9 +19,9 @@ type Server struct {
 func NewServer(cfgList []ListenerConfig) (*Server, error) {
 	s := &Server{}
 	for _, x := range cfgList {
-		f := GetListenerFactory(x.Type)
+		f := GetListenerFactory(x.TypeName())
 		if f == nil {
-			return nil, fmt.Errorf("unknown listener type: %s", x.Type)
+			return nil, fmt.Errorf("unknown listener type: %s", x.TypeName())
 		}
 		l, err := f.New(x)
 		if err != nil {

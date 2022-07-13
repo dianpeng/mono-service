@@ -3,92 +3,17 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 )
 
-type ListenerConfig struct {
-	Name              string `json:"name"`
-	Type              string `json:"type"`
-	Endpoint          string `json:"endpoint"`
-	ReadTimeout       int64  `json:"read_timeout"`
-	WriteTimeout      int64  `json:"write_timeout"`
-	IdleTimeout       int64  `json:"idle_timeout"`
-	ReadHeaderTimeout int64  `json:"read_header_timeout"`
-	MaxHeaderSize     int64  `json:"max_header_size"`
+type ListenerConfig interface {
+	TypeName() string
 }
 
-func ParseListenerConfigFromJSON(input string) (ListenerConfig, error) {
-	o := ListenerConfig{
-		Name:              "",
-		Type:              "",
-		Endpoint:          "",
-		ReadTimeout:       20,
-		WriteTimeout:      20,
-		IdleTimeout:       90,
-		ReadHeaderTimeout: 10,
-		MaxHeaderSize:     1024 * 64,
-	}
-	if err := json.Unmarshal([]byte(input), &o); err != nil {
-		return o, err
-	}
-
-	if o.Name == "" {
-		return o, fmt.Errorf("must specify Name for listener config")
-	}
-
-	if o.Endpoint == "" {
-		return o, fmt.Errorf("must specify Endpoint for listener config")
-	}
-
-	return o, nil
-}
-
-func ParseListenerConfigFromCompact(input string) (ListenerConfig, error) {
-	conf := ListenerConfig{}
-	x := strings.Split(input, ",")
-	if len(x) < 3 {
-		return conf, fmt.Errorf("invalid listener config: %s, at least 3 elements are needed", input)
-	}
-
-	conf.Type = x[0]
-	conf.Name = x[1]
-	conf.Endpoint = x[2]
-
-	parseInt := func(field string, index int, out *int64) error {
-		if len(x) > index {
-			ival, err := strconv.ParseInt(x[index], 10, 64)
-			if err != nil {
-				return fmt.Errorf("invalid listener config field %s, must be valid "+
-					"integer, but has error: %s", field, err.Error())
-			}
-			*out = ival
-		}
-		return nil
-	}
-
-	if err := parseInt("ReadTimeout", 3, &conf.ReadTimeout); err != nil {
-		return conf, err
-	}
-	if err := parseInt("WriteTimeout", 4, &conf.WriteTimeout); err != nil {
-		return conf, err
-	}
-	if err := parseInt("IdleTimeout", 5, &conf.IdleTimeout); err != nil {
-		return conf, err
-	}
-	if err := parseInt("ReadHeaderTimeout", 6, &conf.ReadHeaderTimeout); err != nil {
-		return conf, err
-	}
-	if err := parseInt("MaxHeaderSize", 7, &conf.MaxHeaderSize); err != nil {
-		return conf, err
-	}
-
-	return conf, nil
-}
-
-// listener factory -----------------------------------------------------------
 type ListenerFactory interface {
 	New(ListenerConfig) (Listener, error)
+	ParseConfigCompact(string) (ListenerConfig, error)
+	ParseConfigJson(string) (ListenerConfig, error)
 }
 
 var lisfactory = make(map[string]ListenerFactory)
@@ -108,5 +33,51 @@ func GetListenerFactory(
 		return v
 	} else {
 		return nil
+	}
+}
+
+type jsonConfig struct {
+	Type string `json:"type"`
+}
+
+func tryJson(data string) (string, bool) {
+	x := jsonConfig{}
+	err := json.Unmarshal(
+		[]byte(data),
+		&x,
+	)
+	if err != nil {
+		return "", false
+	} else {
+		return x.Type, true
+	}
+}
+
+func tryCompact(data string) (string, bool) {
+	x := strings.Split(data, ",")
+	if len(x) == 0 {
+		return "", false
+	} else {
+		return x[0], true
+	}
+}
+
+func ParseListenerConfig(content string) (ListenerConfig, error) {
+	if t, isJson := tryJson(content); isJson {
+		factory := GetListenerFactory(t)
+		if factory == nil {
+			return nil, fmt.Errorf("unknown listener type: %s", t)
+		} else {
+			return factory.ParseConfigJson(content)
+		}
+	} else if t, isCompact := tryCompact(content); isCompact {
+		factory := GetListenerFactory(t)
+		if factory == nil {
+			return nil, fmt.Errorf("unknown listener type: %s", t)
+		} else {
+			return factory.ParseConfigCompact(content)
+		}
+	} else {
+		return nil, fmt.Errorf("invalid listener config: %s", content)
 	}
 }
