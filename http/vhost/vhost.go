@@ -7,7 +7,6 @@ import (
 
 	"github.com/dianpeng/mono-service/alog"
 	"github.com/dianpeng/mono-service/g"
-	"github.com/dianpeng/mono-service/hclient"
 	"github.com/dianpeng/mono-service/manifest"
 	"github.com/dianpeng/mono-service/pl"
 	"github.com/dianpeng/mono-service/server"
@@ -33,7 +32,7 @@ type VHost struct {
 	LogFormat   *alog.Format
 	Config      *VHostConfig
 	Module      *pl.Module
-	clientPool  *hclient.HClientPool
+	clientPool  *util.HClientPool
 }
 
 type VHostConfigBuilder struct {
@@ -65,7 +64,7 @@ func (config *VHostConfig) Compose(p *pl.Module) (*VHost, error) {
 	VHost.ServiceList = nil
 	VHost.Module = p
 
-	VHost.clientPool = hclient.NewHClientPool(
+	VHost.clientPool = util.NewHClientPool(
 		config.Name,
 		util.NotZeroInt64(config.HttpClientPoolMaxSize, g.VHostHttpClientPoolMaxSize),
 		util.NotZeroInt64(config.HttpClientPoolTimeout, g.VHostHttpClientPoolTimeout),

@@ -1,4 +1,4 @@
-package hclient
+package util
 
 import (
 	"fmt"
