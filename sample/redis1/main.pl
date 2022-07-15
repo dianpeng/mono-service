@@ -5,7 +5,14 @@ config redis_vhost {
 
 rule "redis.HGET" {
   println("command info: (", $.command, ", ", $.length, ", ", $.category, ")");
-  conn:writeString("Always HGET yeah!");
+  if $.length != 1 {
+    conn:writeString("invalid command!");
+  } else {
+    let value = $:asString(0);
+    println("command HGET ", value);
+    // write the response back
+    conn:writeString("Always HGET yeah!");
+  }
 }
 
 rule "redis.*" {
