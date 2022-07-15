@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	RV "github.com/dianpeng/mono-service/redis/vhost"
+	"github.com/dianpeng/mono-service/redis/vhost"
 	"github.com/dianpeng/mono-service/server"
 	"github.com/dianpeng/mono-service/util"
 
@@ -243,9 +243,13 @@ func (l *listener) Type() string {
 	return "redis"
 }
 
-func (l *listener) vhs() *RV.VHost {
+func (l *listener) vhs() *vhost.VHost {
 	vptr := l.vhostPtr()
-	return (*vptr).(*RV.VHost)
+	if vptr == nil {
+		return nil
+	} else {
+		return (*vptr).(*vhost.VHost)
+	}
 }
 
 func (l *listener) vhostPtr() *server.VHost {
@@ -257,9 +261,10 @@ func (l *listener) vhostPtr() *server.VHost {
 
 func (l *listener) AddVHost(x server.VHost) error {
 	y := l.vhs()
-	if y.Name() == x.Name() {
+	if y != nil && y.Name() == x.Name() {
 		return fmt.Errorf("vhost has already been added")
 	}
+
 	atomic.StorePointer(
 		(*unsafe.Pointer)(unsafe.Pointer(&l.vhost)),
 		unsafe.Pointer(&x),

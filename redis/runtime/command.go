@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/dianpeng/mono-service/pl"
+	"github.com/dianpeng/mono-service/redis/util"
 	"github.com/tidwall/redcon"
 )
 
@@ -46,6 +47,22 @@ func (c *command) StringList() []string {
 	return x
 }
 
+func (c *command) property(prop string) (pl.Val, bool) {
+	switch prop {
+	case "length":
+		return pl.NewValInt(c.ArgumentSize()), true
+	case "command":
+		return pl.NewValStr(c.Name()), true
+	case "category":
+		return pl.NewValStr(
+			util.CommandCategoryName(c.Name()),
+		), true
+	default:
+		break
+	}
+	return pl.NewValNull(), false
+}
+
 func (c *command) Index(
 	key pl.Val,
 ) (pl.Val, error) {
@@ -63,13 +80,8 @@ func (c *command) Index(
 	}
 
 	if key.IsString() {
-		switch key.String() {
-		case "length":
-			return pl.NewValInt(c.ArgumentSize()), nil
-		case "command":
-			return pl.NewValStr(c.Name()), nil
-		default:
-			break
+		if v, ok := c.property(key.String()); ok {
+			return v, nil
 		}
 	}
 
@@ -86,15 +98,9 @@ func (c *command) IndexSet(
 func (c *command) Dot(
 	name string,
 ) (pl.Val, error) {
-	switch name {
-	case "length":
-		return pl.NewValInt(c.ArgumentSize()), nil
-	case "command":
-		return pl.NewValStr(c.Name()), nil
-	default:
-		break
+	if v, ok := c.property(name); ok {
+		return v, nil
 	}
-
 	return pl.NewValNull(), fmt.Errorf("%s dot: unsupported operation", c.Id())
 }
 
@@ -121,6 +127,21 @@ var (
 	methodProtoCommandAsInt    = pl.MustNewFuncProto("redis.command.asInt", "%d")
 	methodProtoCommandAsReal   = pl.MustNewFuncProto("redis.command.asReal", "%d")
 	methodProtoCommandAsBool   = pl.MustNewFuncProto("redis.command.asBool", "%d")
+
+	methodProtoCommandIsBitmap      = pl.MustNewFuncProto("redis.command.isBitmap", "%0")
+	methodProtoCommandIsGeneric     = pl.MustNewFuncProto("redis.command.isGeneric", "%0")
+	methodProtoCommandIsGeo         = pl.MustNewFuncProto("redis.command.isGeo", "%0")
+	methodProtoCommandIsHash        = pl.MustNewFuncProto("redis.command.isHash", "%0")
+	methodProtoCommandIsHyperLogLog = pl.MustNewFuncProto("redis.command.isHyperLogLog", "%0")
+	methodProtoCommandIsList        = pl.MustNewFuncProto("redis.command.isList", "%0")
+	methodProtoCommandIsPubSub      = pl.MustNewFuncProto("redis.command.isPubSub", "%0")
+	methodProtoCommandIsScript      = pl.MustNewFuncProto("redis.command.isScript", "%0")
+	methodProtoCommandIsSet         = pl.MustNewFuncProto("redis.command.isSet", "%0")
+	methodProtoCommandIsSortedSet   = pl.MustNewFuncProto("redis.command.isSortedSet", "%0")
+	methodProtoCommandIsString      = pl.MustNewFuncProto("redis.command.isString", "%0")
+	methodProtoCommandIsStream      = pl.MustNewFuncProto("redis.command.isStream", "%0")
+	methodProtoCommandIsTransaction = pl.MustNewFuncProto("redis.command.isTransaction", "%0")
+	methodProtoCommandIsUnknown     = pl.MustNewFuncProto("redis.command.isUnknown", "%0")
 )
 
 func (c *command) toindex(name string, a pl.Val) (int, error) {
@@ -136,6 +157,118 @@ func (c *command) toindex(name string, a pl.Val) (int, error) {
 
 func (c *command) Method(name string, arg []pl.Val) (pl.Val, error) {
 	switch name {
+	case "isBitmap":
+		if _, err := methodProtoCommandIsBitmap.Check(arg); err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValBool(
+			util.CommandIsBitmap(c.Name()),
+		), nil
+
+	case "isGeneric":
+		if _, err := methodProtoCommandIsGeneric.Check(arg); err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValBool(
+			util.CommandIsGeneric(c.Name()),
+		), nil
+
+	case "isGeo":
+		if _, err := methodProtoCommandIsGeo.Check(arg); err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValBool(
+			util.CommandIsGeo(c.Name()),
+		), nil
+
+	case "isHash":
+		if _, err := methodProtoCommandIsHash.Check(arg); err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValBool(
+			util.CommandIsHash(c.Name()),
+		), nil
+
+	case "isHyperLogLog":
+		if _, err := methodProtoCommandIsHyperLogLog.Check(arg); err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValBool(
+			util.CommandIsHyperLogLog(c.Name()),
+		), nil
+
+	case "isList":
+		if _, err := methodProtoCommandIsList.Check(arg); err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValBool(
+			util.CommandIsList(c.Name()),
+		), nil
+
+	case "isPubSub":
+		if _, err := methodProtoCommandIsPubSub.Check(arg); err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValBool(
+			util.CommandIsPubSub(c.Name()),
+		), nil
+
+	case "isScript":
+		if _, err := methodProtoCommandIsScript.Check(arg); err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValBool(
+			util.CommandIsScript(c.Name()),
+		), nil
+
+	case "isSet":
+		if _, err := methodProtoCommandIsSet.Check(arg); err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValBool(
+			util.CommandIsSet(c.Name()),
+		), nil
+
+	case "isSortedSet":
+		if _, err := methodProtoCommandIsSortedSet.Check(arg); err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValBool(
+			util.CommandIsSortedSet(c.Name()),
+		), nil
+
+	case "isString":
+		if _, err := methodProtoCommandIsString.Check(arg); err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValBool(
+			util.CommandIsString(c.Name()),
+		), nil
+
+	case "isStream":
+		if _, err := methodProtoCommandIsStream.Check(arg); err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValBool(
+			util.CommandIsStream(c.Name()),
+		), nil
+
+	case "isTransaction":
+		if _, err := methodProtoCommandIsTransaction.Check(arg); err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValBool(
+			util.CommandIsTransaction(c.Name()),
+		), nil
+
+	case "isUnknown":
+		if _, err := methodProtoCommandIsUnknown.Check(arg); err != nil {
+			return pl.NewValNull(), err
+		}
+		return pl.NewValBool(
+			util.CommandIsUnknown(c.Name()),
+		), nil
+
 	case "asString":
 		if _, err := methodProtoCommandAsString.Check(arg); err != nil {
 			return pl.NewValNull(), err
@@ -251,7 +384,7 @@ func (c *command) NewIterator() (pl.Iter, error) {
 func newCommand(raw *redcon.Command) *command {
 	return &command{
 		args: raw.Args[1:],
-		name: string(raw.Args[0]),
+		name: strings.ToUpper(string(raw.Args[0])),
 	}
 }
 

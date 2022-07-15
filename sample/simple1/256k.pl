@@ -10,7 +10,6 @@ config service {
   response event("response");
 }
 
-
 rule response {
   response.status = 200;
   response.body = data;

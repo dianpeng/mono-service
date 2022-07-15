@@ -11,13 +11,14 @@ import (
 	"github.com/tidwall/redcon"
 
 	"fmt"
+	"strings"
 	"sync"
 )
 
 const (
 	eventAccept  = "redis.@accept"
 	eventClose   = "redis.@close"
-	eventCommand = "redis.@command"
+	eventCommand = "redis.*"
 )
 
 type servicePool struct {
@@ -125,7 +126,7 @@ func (s *serviceHandler) onEvent(
 		conn,
 	)
 
-	cmdName := string(cmd.Args[0])
+	cmdName := strings.ToUpper(string(cmd.Args[0]))
 	cmdEvent := fmt.Sprintf("redis.%s", cmdName)
 
 	var err error

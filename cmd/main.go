@@ -43,9 +43,11 @@ func parseListenerConfig(x strList) ([]server.ListenerConfig, error) {
 func main() {
 	var listenerConf strList
 	var httpdir strList
+	var redisdir strList
 
 	flag.Var(&listenerConf, "listener", "list of listener config, in Json")
 	flag.Var(&httpdir, "http_dir", "list of path to local fs http virtual host")
+	flag.Var(&redisdir, "redis_dir", "list of path to local fs redis virtual host")
 
 	flag.Parse()
 
@@ -71,6 +73,21 @@ func main() {
 			return
 		}
 
+		if err := srv.AddVirtualHost(manifest); err != nil {
+			fmt.Fprintf(os.Stderr, err.Error())
+			return
+		}
+	}
+
+	for _, m := range redisdir {
+		manifest, err := manifest.NewManifestFromLocalDir(
+			m,
+			"redis",
+		)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, err.Error())
+			return
+		}
 		if err := srv.AddVirtualHost(manifest); err != nil {
 			fmt.Fprintf(os.Stderr, err.Error())
 			return
