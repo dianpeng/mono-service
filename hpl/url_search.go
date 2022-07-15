@@ -63,7 +63,7 @@ func newUrlSearch(q url.Values) UrlSearch {
 	}
 }
 
-func (h *UrlSearch) IsImmutable() bool {
+func (h *UrlSearch) IsThreadSafe() bool {
 	return false
 }
 

@@ -85,7 +85,7 @@ func (l *accesslog) Id() string {
 	return AccessLogTypeId
 }
 
-func (l *accesslog) IsImmutable() bool {
+func (l *accesslog) IsThreadSafe() bool {
 	return false
 }
 

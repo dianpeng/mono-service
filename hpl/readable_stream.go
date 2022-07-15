@@ -248,7 +248,7 @@ func (h *ReadableStream) ToNative() interface{} {
 	return h.Stream
 }
 
-func (h *ReadableStream) IsImmutable() bool {
+func (h *ReadableStream) IsThreadSafe() bool {
 	return false
 }
 

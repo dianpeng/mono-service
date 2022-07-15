@@ -242,7 +242,7 @@ func (r *responseWriterWrapper) NewIterator() (pl.Iter, error) {
 	return nil, fmt.Errorf("http.response_writer does not support iterator")
 }
 
-func (r *responseWriterWrapper) IsImmutable() bool {
+func (r *responseWriterWrapper) IsThreadSafe() bool {
 	return false
 }
 

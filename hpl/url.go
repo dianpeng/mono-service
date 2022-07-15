@@ -86,7 +86,7 @@ func (h *Url) SetUserInfo(userInfo string) {
 	}
 }
 
-func (h *Url) IsImmutable() bool {
+func (h *Url) IsThreadSafe() bool {
 	return false
 }
 

@@ -65,7 +65,7 @@ func (p *placeholder) ToNative() interface{} {
 	return p
 }
 
-func (p *placeholder) IsImmutable() bool {
+func (p *placeholder) IsThreadSafe() bool {
 	return true
 }
 

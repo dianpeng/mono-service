@@ -266,7 +266,7 @@ func (g *globalState) set(
 	i int,
 	v Val,
 ) bool {
-	if !v.IsImmutable() {
+	if !v.IsThreadSafe() {
 		return false
 	}
 
@@ -298,7 +298,7 @@ func (g *globalState) get(
 func (g *globalState) add(
 	v Val,
 ) bool {
-	if !v.IsImmutable() {
+	if !v.IsThreadSafe() {
 		return false
 	}
 

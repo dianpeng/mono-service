@@ -141,7 +141,7 @@ func (g *gostrlist) Id() string {
 	return StrListTypeId
 }
 
-func (g *gostrlist) IsImmutable() bool {
+func (g *gostrlist) IsThreadSafe() bool {
 	return false
 }
 

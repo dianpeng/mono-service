@@ -211,7 +211,7 @@ func (h *Header) Id() string {
 	return HttpHeaderTypeId
 }
 
-func (h *Header) IsImmutable() bool {
+func (h *Header) IsThreadSafe() bool {
 	return false
 }
 

@@ -205,7 +205,7 @@ func (c *cookie) Id() string {
 	return HttpCookieTypeId
 }
 
-func (c *cookie) IsImmutable() bool {
+func (c *cookie) IsThreadSafe() bool {
 	return false
 }
 

@@ -70,6 +70,10 @@ func (l *List) Append(x Val) {
 	l.Data = append(l.Data, x)
 }
 
+func (l *List) At(i int) Val {
+	return l.Data[i]
+}
+
 func (l *List) ToNative() interface{} {
 	var x []interface{}
 	for _, xx := range l.Data {

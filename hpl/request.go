@@ -239,7 +239,7 @@ func (h *Request) Id() string {
 	return HttpRequestTypeId
 }
 
-func (h *Request) IsImmutable() bool {
+func (h *Request) IsThreadSafe() bool {
 	return false
 }
 

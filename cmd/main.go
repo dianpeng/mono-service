@@ -10,6 +10,7 @@ import (
 
 	// for side effect
 	_ "github.com/dianpeng/mono-service/http"
+	_ "github.com/dianpeng/mono-service/redis"
 )
 
 func printHelp() {

@@ -15,7 +15,7 @@ type UValId func(interface{}) string
 type UValInfo func(interface{}) string
 type UValToNative func(interface{}) interface{}
 type UValIter func(interface{}) (Iter, error)
-type UValIsImmutable func(interface{}) bool
+type UValIsThreadSafe func(interface{}) bool
 
 type UVal struct {
 	context     interface{}
@@ -30,7 +30,7 @@ type UVal struct {
 	infoFn      UValInfo
 	toNativeFn  UValToNative
 	iterFn      UValIter
-	immutableFn UValIsImmutable
+	immutableFn UValIsThreadSafe
 }
 
 func (u *UVal) Context() interface{} {
@@ -125,7 +125,7 @@ func (u *UVal) NewIterator() (Iter, error) {
 	}
 }
 
-func (u *UVal) IsImmutable() bool {
+func (u *UVal) IsThreadSafe() bool {
 	if u.immutableFn != nil {
 		return false
 	} else {
@@ -147,7 +147,7 @@ func NewUVal(
 	f8 UValInfo,
 	f9 UValToNative,
 	f10 UValIter,
-	f11 UValIsImmutable,
+	f11 UValIsThreadSafe,
 ) *UVal {
 	return &UVal{
 		context:     c,

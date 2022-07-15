@@ -62,7 +62,7 @@ func (h *RouterParams) Id() string {
 	return HttpRouterParamsTypeId
 }
 
-func (h *RouterParams) IsImmutable() bool {
+func (h *RouterParams) IsThreadSafe() bool {
 	return false
 }
 

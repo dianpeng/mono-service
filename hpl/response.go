@@ -132,7 +132,7 @@ func (h *Response) ToJSON() (pl.Val, error) {
 	)
 }
 
-func (h *Response) IsImmutable() bool {
+func (h *Response) IsThreadSafe() bool {
 	return false
 }
 

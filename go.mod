@@ -8,5 +8,6 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/stretchr/testify v1.7.1
+	github.com/tidwall/redcon v1.4.5
 	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e
 )

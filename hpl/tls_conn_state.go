@@ -100,7 +100,7 @@ func (c *tlsConnState) Id() string {
 	return TLSConnStateTypeId
 }
 
-func (c *tlsConnState) IsImmutable() bool {
+func (c *tlsConnState) IsThreadSafe() bool {
 	return true
 }
 

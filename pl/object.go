@@ -122,7 +122,7 @@ type Usr interface {
 	ToNative() interface{}
 
 	// Used to detect whether it is suitable for storing inside of global variable
-	IsImmutable() bool
+	IsThreadSafe() bool
 
 	// return a iterator
 	NewIterator() (Iter, error)
@@ -561,7 +561,7 @@ func NewValUVal(
 	f8 UValInfo,
 	f9 UValToNative,
 	f10 UValIter,
-	f11 UValIsImmutable,
+	f11 UValIsThreadSafe,
 ) Val {
 	return Val{
 		Type: ValUsr,
@@ -594,7 +594,7 @@ func NewValUValImmutable(
 	f8 UValInfo,
 	f9 UValToNative,
 	f10 UValIter,
-	f11 UValIsImmutable,
+	f11 UValIsThreadSafe,
 ) Val {
 	return Val{
 		Type: ValUsr,
@@ -1265,12 +1265,12 @@ func (v *Val) Info() string {
 	}
 }
 
-func (v *Val) IsImmutable() bool {
+func (v *Val) IsThreadSafe() bool {
 	switch v.Type {
 	case ValInt, ValReal, ValNull, ValStr, ValBool:
 		return true
 	case ValUsr:
-		return v.Usr().IsImmutable()
+		return v.Usr().IsThreadSafe()
 	default:
 		return false
 	}

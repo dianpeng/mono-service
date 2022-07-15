@@ -138,7 +138,7 @@ func (h *Body) Id() string {
 	return HttpBodyTypeId
 }
 
-func (h *Body) IsImmutable() bool {
+func (h *Body) IsThreadSafe() bool {
 	return false
 }
 

@@ -138,7 +138,6 @@ func (s *serviceHandler) main(
 			logP,
 		)
 		s.finish()
-		s.vhs.servicePool.put(s)
 	}()
 
 	// (0) run the HPL session init
@@ -280,6 +279,7 @@ func (s *serviceHandler) finish() {
 		for _, c := range s.activeHttpClient {
 			s.vhs.vhost.clientPool.Put(*c)
 		}
+		s.activeHttpClient = nil
 	}
 }
 
